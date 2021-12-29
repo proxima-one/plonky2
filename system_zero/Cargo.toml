@@ -1,0 +1,10 @@
+[package]
+name = "system_zero"
+description = "A VM whose execution can be verified with STARKs; designed for proving Ethereum transactions"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+plonky2 = { path = "../plonky2" }
+starky = { path = "../starky" }
+anyhow = "1.0.40"
