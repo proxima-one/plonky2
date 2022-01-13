@@ -151,6 +151,7 @@ mod tests {
 
         assert_eq!(hash_values.len(), 65);
 
+        // load up partial witness
         let mut pw = PartialWitness::new();
 
         for i in 0..64 {
