@@ -7,3 +7,4 @@ edition = "2021"
 plonky2 = { path = "../plonky2" }
 plonky2_field = { path = "../field" }
 anyhow = "1.0.40"
+rand = { version = "0.8.4", features = ["small_rng"] }
