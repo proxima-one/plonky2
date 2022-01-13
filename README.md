@@ -20,7 +20,7 @@ RUST_LOG=debug RUSTFLAGS=-Ctarget-cpu=native cargo test --release test_recursive
 
 ## Examples
 
-Check out `examples/src/lib.rs` for example usage. You can run them all with the following cargo command:
+Check out [`examples/src/lib.rs`](./examples/src/lib.rs) for example usage. You can run them all with the following cargo command:
 
 ```sh
 RUST_LOG=debug RUSTFLAGS=-Ctarget-cpu=native cargo test --release -p plonky2_examples -- --ignored
