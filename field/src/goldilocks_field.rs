@@ -53,7 +53,6 @@ impl From<u128> for GoldilocksField {
     }
 }
 
-
 impl Default for GoldilocksField {
     fn default() -> Self {
         Self::ZERO
