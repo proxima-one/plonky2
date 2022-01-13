@@ -9,6 +9,8 @@
 #![feature(generic_const_exprs)]
 #![feature(specialization)]
 #![feature(stdsimd)]
+#![feature(asm)]
+#![feature(destructuring_assignment)]
 
 pub use plonky2_field as field;
 

@@ -29,6 +29,31 @@ const EPSILON: u64 = (1 << 32) - 1;
 #[repr(transparent)]
 pub struct GoldilocksField(pub u64);
 
+/// All u32s are canonical since Goldilocks' modulus > 2^32 - 1
+/// This operation does not perform modular reduction the input
+impl From<u32> for GoldilocksField {
+    fn from(v: u32) -> Self {
+        Self::from_canonical_u32(v)
+    }
+}
+
+/// A u64 may or may not be canonical.
+/// Therefore operation performs modular reduction on the input.
+impl From<u64> for GoldilocksField {
+    fn from(v: u64) -> Self {
+        Self::from_noncanonical_u64(v)
+    }
+}
+
+/// A u128 may or may not be canonical.
+/// Therefore operation performs modular reduction on the input.
+impl From<u128> for GoldilocksField {
+    fn from(v: u128) -> Self {
+        Self::from_noncanonical_u128(v)
+    }
+}
+
+
 impl Default for GoldilocksField {
     fn default() -> Self {
         Self::ZERO

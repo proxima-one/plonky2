@@ -4,6 +4,7 @@
 #![allow(clippy::len_without_is_empty)]
 #![allow(clippy::needless_range_loop)]
 #![allow(clippy::return_self_not_must_use)]
+#![feature(asm)]
 
 use std::arch::asm;
 use std::hint::unreachable_unchecked;

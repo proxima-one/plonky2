@@ -405,7 +405,7 @@ mod tests {
         let config = CircuitConfig::standard_recursion_config();
 
         // Start with a degree 2^14 proof
-        let (proof, vd, cd) = dummy_proof::<F, C, D>(&config, 16_000)?;
+        let (proof, vd, cd) = dummy_proof::<F, C, D>(&config, 2_300)?;
         assert_eq!(cd.degree_bits, 14);
 
         // Shrink it to 2^13.
