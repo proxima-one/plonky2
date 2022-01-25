@@ -3,16 +3,18 @@ use plonky2_field::cosets::get_unique_coset_shifts;
 
 use crate::hash::hash_types::{HashOutTarget, RichField};
 use crate::iop::challenger::RecursiveChallenger;
+use crate::plonk::plonk_common::{PlonkOracle, FRI_ORACLES};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::circuit_data::{CircuitConfig, CommonCircuitData, VerifierCircuitTarget};
 use crate::plonk::config::{AlgebraicHasher, GenericConfig};
 use crate::plonk::proof::{OpeningSetTarget, ProofTarget, ProofWithPublicInputsTarget};
-use crate::plonk::vanishing_poly::eval_vanishing_poly_recursively;
+use crate::plonk::vanishing_poly::{eval_vanishing_poly_recursively, eval_vanishing_poly_recursively_inner};
 use crate::plonk::vars::EvaluationTargets;
 use crate::util::reducing::ReducingFactorTarget;
 use crate::with_context;
 
-pub(crate) struct RecursiveCiruitData<'a, F: RichField + Extendable<D>, const D: usize> {
+#[derive(Debug, Clone)]
+pub(crate) struct RecursiveCircuitData<'a, F: RichField + Extendable<D>, const D: usize> {
     degree_bits: usize,
     num_gate_constraints: usize,
     num_public_inputs: usize,
@@ -36,6 +38,69 @@ impl<'a, F: RichrField + Extendable<D>, const D: usize> RecursiveCircuitData< 'a
 
     pub(crate) fn degree(&self) -> usize {
         1 << self.degree_bits
+    }
+
+    pub(crate) fn get_fri_instance_target(
+        &self,
+        builder: &mut CircuitBuilder<F, D>,
+        zeta: ExtensionTarget<D>,
+    ) -> FriInstanceInfoTarget<D> {
+        // All polynomials are opened at zeta.
+        let zeta_batch = FriBatchInfoTarget {
+            point: zeta,
+            polynomials: self.fri_all_polys(builder.config.num_wires, builder.config.num_challenges),
+        };
+
+        // The Z polynomials are also opened at g * zeta.
+        let g = F::primitive_root_of_unity(self.degree_bits);
+        let zeta_right = builder.mul_const_extension(g, zeta);
+        let zeta_right_batch = FriBatchInfoTarget {
+            point: zeta_right,
+            polynomials: self.fri_zs_polys(builder.config.num_challenges),
+        };
+
+        let openings = vec![zeta_batch, zeta_right_batch];
+        FriInstanceInfoTarget {
+            oracles: FRI_ORACLES.to_vec(),
+            batches: openings,
+        }
+    }
+
+    fn fri_all_polys(&self, num_wires: usize, num_challenges: usize) -> Vec<FriPolynomialInfo> {
+        [
+            self.fri_preprocessed_polys(),
+            self.fri_wire_polys(num_wires),
+            self.fri_zs_partial_products_polys(num_challenges),
+            self.fri_quotient_polys(num_wires),
+        ]
+        .concat()
+    }
+
+    fn fri_preprocessed_polys(&self) -> Vec<FriPolynomialInfo> {
+        FriPolynomialInfo::from_range(
+            PlonkOracle::CONSTANTS_SIGMAS.index,
+            0..self.num_preprocessed_polys,
+        )
+    }
+
+    fn fri_wire_polys(&self, num_wires: usize) -> Vec<FriPolynomialInfo> {
+        let num_wire_polys = num_wires;
+        FriPolynomialInfo::from_range(PlonkOracle::WIRES.index, 0..num_wire_polys)
+    }
+
+    fn fri_zs_partial_products_polys(&self, num_challenges: usize) -> Vec<FriPolynomialInfo> {
+        FriPolynomialInfo::from_range(
+            PlonkOracle::ZS_PARTIAL_PRODUCTS.index,
+            0..self.num_zs_partial_products_polys(num_challenges),
+        )
+    }
+
+    fn fri_quotient_polys(&self, num_challenges: usize) -> Vec<FriPolynomialInfo> {
+        FriPolynomialInfo::from_range(PlonkOracle::QUOTIENT.index, 0..self.num_quotient_polys(num_challenges))
+    }
+
+    fn fri_zs_polys(&self, num_challenges: usize) -> Vec<FriPolynomialInfo> {
+        FriPolynomialInfo::from_range(PlonkOracle::ZS_PARTIAL_PRODUCTS.index, 0..num_challenges)
     }
 }
 
@@ -77,7 +142,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         num_partial_products: usize,
         gates: &'a Vec<PrefixedGate<F, D>>
     ) -> RecursiveCircuitData<'a, F, D> {
-        RecursiveCiruitData {
+        RecursiveCircuitData {
             degree_bits,
             num_gate_constraints,
             num_public_inputs,
@@ -102,6 +167,70 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     ) where
         C::Hasher: AlgebraicHasher<F>,
     {
+        let recursive_circuit_data = inner_common_data.extract_recursive_circuit_data();
+        let inner_circuit_digest = HashOutTarget::from_vec(
+            self.constants(&inner_common_data.circuit_digest.elements),
+        );
+    
+        self.verify_proof_inner(
+            proof,
+            public_inputs_hash,
+            inner_circuit_digest,
+            inner_config,
+            inner_verifier_data,
+            &recursive_circuit_data
+        )
+    }
+   
+    /// Tells the builder to add a verifier for its own proofs to the circuit
+    /// Since we haven't built the circuit yet, we don't know what those proofs
+    /// will look like, so the builder can't set up the circuitry for that yet.
+    /// Instead, the builder will figure it out at the end during `build_self_verifying`,
+    /// which will return a vector of targets that can be set in a witness
+    /// via `set_proof_target` after the circuit is built.
+    /// 
+    /// Calling `build` after calling this method will cause a panic.
+    /// Use `build_self_verifying` instead.
+    pub fn verify_self_proof(&mut self) {
+        self.num_self_verifiers += 1;
+    }
+
+    /// this method is called repeatedly by `build_self_verifying`
+    pub(crate) fn add_self_verifier<'a>(
+        &mut self,
+        recursive_circuit_data: &RecursiveCircuitData<'a, F, D>,
+        self_digest: HashOutTarget,
+    ) -> (ProofTarget<D>, VerifierCircuitTarget, HashOutTarget) {
+        let proof = self.add_virtual_self_proof(recursive_circuit_data);
+        let self_verifier_data = VerifierCircuitTarget {
+            constants_sigmas_cap: builder.add_virtual_cap(self.config.fri_config.cap_height),
+        };
+        let public_inputs_hash = self.add_virtual_hash();
+
+        self.verify_proof_inner(
+            proof,
+            public_inputs_hash,
+            self_digest,
+            &self.config,
+            &self_verifier_data,
+            recursive_circuit_data
+        );
+
+        (proof, self_verifier_data, public_inputs_hash)
+    }
+
+    /// Recursively verifies an inner proof.
+    pub fn verify_proof_inner<C: GenericConfig<D, F = F>>(
+        &mut self,
+        proof: ProofTarget<D>,
+        public_inputs_hash: HashOutTarget,
+        inner_circuit_digest: HashOutTarget,
+        inner_config: &CircuitConfig,
+        inner_verifier_data: &VerifierCircuitTarget,
+        recursive_circuit_data: &RecursiveCircuitData<'a, F, D>,
+    ) where
+        C::Hasher: AlgebraicHasher<F>,
+    {
         let one = self.one_extension();
 
         let num_challenges = inner_config.num_challenges;
@@ -111,10 +240,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         let (betas, gammas, alphas, zeta) =
             with_context!(self, "observe proof and generates challenges", {
                 // Observe the instance.
-                let digest = HashOutTarget::from_vec(
-                    self.constants(&inner_common_data.circuit_digest.elements),
-                );
-                challenger.observe_hash(&digest);
+                challenger.observe_hash(&inner_circuit_digest);
                 challenger.observe_hash(&public_inputs_hash);
 
                 challenger.observe_cap(&proof.wires_cap);
@@ -142,13 +268,14 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         let s_sigmas = &proof.openings.plonk_sigmas;
         let partial_products = &proof.openings.partial_products;
 
-        let zeta_pow_deg = self.exp_power_of_2_extension(zeta, inner_common_data.degree_bits);
+        let zeta_pow_deg = self.exp_power_of_2_extension(zeta, recursive_circuit_data.degree_bits);
         let vanishing_polys_zeta = with_context!(
             self,
             "evaluate the vanishing polynomial at our challenge point, zeta.",
-            eval_vanishing_poly_recursively(
+            eval_vanishing_poly_recursively_inner(
                 self,
-                inner_common_data,
+                &inner_config,
+                recursive_circuit_data,
                 zeta,
                 zeta_pow_deg,
                 vars,
@@ -167,7 +294,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             let mut scale = ReducingFactorTarget::new(zeta_pow_deg);
             let z_h_zeta = self.sub_extension(zeta_pow_deg, one);
             for (i, chunk) in quotient_polys_zeta
-                .chunks(inner_common_data.quotient_degree_factor)
+                .chunks(recursive_circuit_data.quotient_degree_factor)
                 .enumerate()
             {
                 let recombined_quotient = scale.reduce(chunk, self);
@@ -183,7 +310,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             proof.quotient_polys_cap,
         ];
 
-        let fri_instance = inner_common_data.get_fri_instance_target(self, zeta);
+        let fri_instance = recursive_circuit_data.get_fri_instance_target(self, zeta);
         with_context!(
             self,
             "verify FRI proof",
@@ -193,7 +320,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
                 merkle_caps,
                 &proof.opening_proof,
                 &mut challenger,
-                &inner_common_data.fri_params,
+                &recursive_circuit_data.fri_params,
             )
         );
     }
@@ -213,7 +340,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
 
     fn add_virtual_self_proof<'a>(
         &mut self,
-        recursive_circuit_data: RecursiveCircuitData<'a, F, D>
+        recursive_circuit_data: &RecursiveCircuitData<'a, F, D>
     ) -> ProofTarget<D> {
         let fri_params = self.fri_params(recursive_circuit_data.degree_bits);
         let cap_height = fri_params.config.cap_height;

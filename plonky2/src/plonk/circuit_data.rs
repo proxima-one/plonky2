@@ -25,7 +25,7 @@ use crate::plonk::plonk_common::{PlonkOracle, FRI_ORACLES};
 use crate::plonk::proof::{CompressedProofWithPublicInputs, ProofWithPublicInputs};
 use crate::plonk::prover::prove;
 use crate::plonk::verifier::verify;
-use crate::plonk::recursive_verifier::RecursiveCiruitData;
+use crate::plonk::recursive_verifier::RecursiveCircuitData;
 use crate::util::marking::MarkedTargets;
 use crate::util::timing::TimingTree;
 

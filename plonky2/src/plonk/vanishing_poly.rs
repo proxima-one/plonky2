@@ -12,7 +12,7 @@ use crate::plonk::config::GenericConfig;
 use crate::plonk::plonk_common;
 use crate::plonk::plonk_common::{eval_l_1_recursively, ZeroPolyOnCoset};
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBaseBatch};
-use crate::plonk::recursive_verifier::RecursiveCiruitData;
+use crate::plonk::recursive_verifier::RecursiveCircuitData;
 use crate::util::partial_products::{check_partial_products, check_partial_products_recursively};
 use crate::util::reducing::ReducingFactorTarget;
 use crate::util::strided_view::PackedStridedView;
@@ -306,7 +306,7 @@ pub(crate) fn eval_vanishing_poly_recursively<
     eval_vanishing_poly_recursively_inner(
         builder,
         &common_data.config,
-        recursive_circuit_data,
+        &recursive_circuit_data,
         x,
         x_pow_deg,
         vars,
@@ -328,7 +328,7 @@ pub(crate) fn eval_vanishing_poly_recursively_inner<
 >(
     builder: &mut CircuitBuilder<F, D>,
     inner_config: &CircuitConfig,
-    recursive_circuit_data: RecursiveCircuitData<'a, F, D>,
+    recursive_circuit_data: &RecursiveCircuitData<'a, F, D>,
     x: ExtensionTarget<D>,
     x_pow_deg: ExtensionTarget<D>,
     vars: EvaluationTargets<D>,
