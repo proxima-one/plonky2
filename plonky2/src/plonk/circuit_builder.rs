@@ -87,6 +87,9 @@ pub struct CircuitBuilder<F: RichField + Extendable<D>, const D: usize> {
     pub(crate) arithmetic_results: HashMap<ExtensionArithmeticOperation<F, D>, ExtensionTarget<D>>,
 
     batched_gates: BatchedGates<F, D>,
+
+    /// number of self-recursion instances to add
+    num_self_recursion_instances: usize
 }
 
 impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
@@ -106,6 +109,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             arithmetic_results: HashMap::new(),
             targets_to_constants: HashMap::new(),
             batched_gates: BatchedGates::new(),
+            num_self_recursion_instances: 0,
         };
         builder.check_config();
         builder
@@ -603,7 +607,18 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     }
 
     /// Builds a "full circuit", with both prover and verifier data.
+    /// Panics if the circuit verifies itself. In this case, `build_self_verifying` should be used instead.
     pub fn build<C: GenericConfig<D, F = F>>(mut self) -> CircuitData<F, C, D> {
+        if self.num_self_recursion_instances != 0 {
+            panic!("build() cannot be used for circuits that recursively verify themselves. Use build_self_verifying() instead.")
+        }
+        
+        build_inner(self)
+    }
+
+    /// Builds a "full circuit", with both prover and verifier data.
+    pub(crate) fn build_inner<C: GenericConfig<D, F = F>>(mut self) -> CircuitData<F, C, D> {
+
         let mut timing = TimingTree::new("preprocess", Level::Trace);
         let start = Instant::now();
         let rate_bits = self.config.fri_config.rate_bits;
