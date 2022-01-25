@@ -12,6 +12,7 @@ use crate::plonk::config::GenericConfig;
 use crate::plonk::plonk_common;
 use crate::plonk::plonk_common::{eval_l_1_recursively, ZeroPolyOnCoset};
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBaseBatch};
+use crate::plonk::recursive_verifier::RecursiveCiruitData;
 use crate::util::partial_products::{check_partial_products, check_partial_products_recursively};
 use crate::util::reducing::ReducingFactorTarget;
 use crate::util::strided_view::PackedStridedView;
@@ -301,16 +302,54 @@ pub(crate) fn eval_vanishing_poly_recursively<
     gammas: &[Target],
     alphas: &[Target],
 ) -> Vec<ExtensionTarget<D>> {
-    let max_degree = common_data.quotient_degree_factor;
-    let num_prods = common_data.num_partial_products;
+    let recursive_circuit_data = common_data.extract_recursive_circuit_data();
+    eval_vanishing_poly_recursively_inner(
+        builder,
+        &common_data.config,
+        recursive_circuit_data,
+        x,
+        x_pow_deg,
+        vars,
+        local_zs,
+        next_zs,
+        partial_products,
+        s_sigmas,
+        betas,
+        gammas,
+        alphas,
+    )
+}
+
+pub(crate) fn eval_vanishing_poly_recursively_inner<
+    'a,
+    F: RichField + Extendable<D>,
+    C: GenericConfig<D, F = F>,
+    const D: usize,
+>(
+    builder: &mut CircuitBuilder<F, D>,
+    inner_config: &CircuitConfig,
+    recursive_circuit_data: RecursiveCircuitData<'a, F, D>,
+    x: ExtensionTarget<D>,
+    x_pow_deg: ExtensionTarget<D>,
+    vars: EvaluationTargets<D>,
+    local_zs: &[ExtensionTarget<D>],
+    next_zs: &[ExtensionTarget<D>],
+    partial_products: &[ExtensionTarget<D>],
+    s_sigmas: &[ExtensionTarget<D>],
+    betas: &[Target],
+    gammas: &[Target],
+    alphas: &[Target],
+) -> Vec<ExtensionTarget<D>> {
+    let max_degree = recursive_circuit_data.quotient_degree_factor;
+    let num_prods = recursive_circuit_data.num_partial_products;
 
     let constraint_terms = with_context!(
         builder,
         "evaluate gate constraints",
         evaluate_gate_constraints_recursively(
             builder,
-            &common_data.gates,
-            common_data.num_gate_constraints,
+            recursive_circuit_data.gates,
+            recursive_circuit_data.num_gate_constraints,
             vars,
         )
     );
@@ -320,16 +359,16 @@ pub(crate) fn eval_vanishing_poly_recursively<
     // The terms checking the partial products.
     let mut vanishing_partial_products_terms = Vec::new();
 
-    let l1_x = eval_l_1_recursively(builder, common_data.degree(), x, x_pow_deg);
+    let l1_x = eval_l_1_recursively(builder, recursive_circuit_data.degree(), x, x_pow_deg);
 
     // Holds `k[i] * x`.
     let mut s_ids = Vec::new();
-    for j in 0..common_data.config.num_routed_wires {
-        let k = builder.constant(common_data.k_is[j]);
+    for j in 0..inner_config.num_routed_wires {
+        let k = builder.constant(recursive_circuit_data.k_is[j]);
         s_ids.push(builder.scalar_mul_ext(k, x));
     }
 
-    for i in 0..common_data.config.num_challenges {
+    for i in 0..inner_config.num_challenges {
         let z_x = local_zs[i];
         let z_gx = next_zs[i];
 
@@ -339,7 +378,7 @@ pub(crate) fn eval_vanishing_poly_recursively<
         let mut numerator_values = Vec::new();
         let mut denominator_values = Vec::new();
 
-        for j in 0..common_data.config.num_routed_wires {
+        for j in 0..inner_config.num_routed_wires {
             let wire_value = vars.local_wires[j];
             let beta_ext = builder.convert_to_ext(betas[i]);
             let gamma_ext = builder.convert_to_ext(gammas[i]);
