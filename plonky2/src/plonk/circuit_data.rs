@@ -25,6 +25,7 @@ use crate::plonk::plonk_common::{PlonkOracle, FRI_ORACLES};
 use crate::plonk::proof::{CompressedProofWithPublicInputs, ProofWithPublicInputs};
 use crate::plonk::prover::prove;
 use crate::plonk::verifier::verify;
+use crate::plonk::recursive_verifier::RecursiveCiruitData;
 use crate::util::marking::MarkedTargets;
 use crate::util::timing::TimingTree;
 
@@ -83,6 +84,22 @@ impl CircuitConfig {
         CircuitConfig {
             zero_knowledge: true,
             ..Self::standard_recursion_config()
+        }
+    }
+
+
+    pub(crate) fn fri_params(&self, degree_bits: usize) -> FriParams {
+        let fri_config = &self.fri_config;
+        let reduction_arity_bits = fri_config.reduction_strategy.reduction_arity_bits(
+            degree_bits,
+            self.fri_config.rate_bits,
+            fri_config.num_query_rounds,
+        );
+        FriParams {
+            config: fri_config.clone(),
+            hiding: self.zero_knowledge,
+            degree_bits,
+            reduction_arity_bits,
         }
     }
 }
@@ -389,6 +406,20 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
             self.fri_quotient_polys(),
         ]
         .concat()
+    }
+
+    pub(crate) fn extract_recursive_circuit_data(&self) -> RecursiveCircuitData<'_, F, D> {
+        RecursiveCircuitData {
+            degree_bits: self.degree_bits,
+            num_gate_constraints: self.num_gate_contraints,
+            num_public_inputs: self.num_public_inputs,
+            quotient_degree_factor: self.quotient_degree_factor,
+            num_preprocessed_polys: self.num_preprocessed_polys(),
+            num_partial_products: self.num_partial_products,
+            gates: &self.gates,
+            fri_params: self.config.fri_params(self.degree_bits),
+            k_is: get_unique_coset_shifts(1 << self.degree_bits, self.config.num_routed_wires)
+        }
     }
 }
 

@@ -1,4 +1,5 @@
 use plonky2_field::extension_field::Extendable;
+use plonky2_field::cosets::get_unique_coset_shifts;
 
 use crate::hash::hash_types::{HashOutTarget, RichField};
 use crate::iop::challenger::RecursiveChallenger;
@@ -18,17 +19,23 @@ pub(crate) struct RecursiveCiruitData<'a, F: RichField + Extendable<D>, const D:
     quotient_degree_factor: usize,
     num_preprocessed_polys: usize,
     num_partial_products: usize,
-    fri_reduction_arities: &'a Vec<usize>,
     gates: &'a Vec<PrefixedGate<F, D>>,
+
+    fri_params: FriParams,
+    k_is: Vec<F>,
 }
 
-impl<'a, F: RichField + Extendable<D>, const D: usize> RecursiveCircuitData< 'a, F, D> {
+impl<'a, F: RichrField + Extendable<D>, const D: usize> RecursiveCircuitData< 'a, F, D> {
     pub(crate) fn num_zs_partial_products_polys(&self, num_challenges: usize) -> usize {
         num_challenges * (1 + self.num_partial_products)
     }
 
     pub(crate) fn num_quotient_polys(&self, num_challenges: usize) -> usize {
         num_challenges * self.quotient_degree_factor
+    }
+
+    pub(crate) fn degree(&self) -> usize {
+        1 << self.degree_bits
     }
 }
 
@@ -60,7 +67,30 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         );
     }
 
-    
+    pub(crate) fn extract_recursive_circuit_data<'a>(
+        &self,
+        degree_bits: usize,
+        num_gate_constraints: usize,
+        num_public_inputs: usize,
+        quotient_degree_factor: usize,
+        num_preprocessed_polys: usize,
+        num_partial_products: usize,
+        gates: &'a Vec<PrefixedGate<F, D>>
+    ) -> RecursiveCircuitData<'a, F, D> {
+        RecursiveCiruitData {
+            degree_bits,
+            num_gate_constraints,
+            num_public_inputs,
+            quotient_degree_factor,
+            num_preprocessed_polys,
+            num_partial_products,
+            gates,
+
+            fri_params: self.fri_params(degree_bits),
+            k_is: get_unique_coset_shifts(1 << degree_bits, self.config.num_routed_wires)
+        }
+    }
+
     /// Recursively verifies an inner proof.
     pub fn verify_proof<C: GenericConfig<D, F = F>>(
         &mut self,
