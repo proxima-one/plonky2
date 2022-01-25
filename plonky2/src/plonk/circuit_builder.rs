@@ -389,7 +389,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         })
     }
 
-    fn fri_params(&self, degree_bits: usize) -> FriParams {
+    pub(crate) fn fri_params(&self, degree_bits: usize) -> FriParams {
         let fri_config = &self.config.fri_config;
         let reduction_arity_bits = fri_config.reduction_strategy.reduction_arity_bits(
             degree_bits,
@@ -612,7 +612,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         if self.num_self_recursion_instances != 0 {
             panic!("build() cannot be used for circuits that recursively verify themselves. Use build_self_verifying() instead.")
         }
-        
+
         build_inner(self)
     }
 

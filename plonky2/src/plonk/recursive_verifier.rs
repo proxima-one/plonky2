@@ -11,6 +11,27 @@ use crate::plonk::vars::EvaluationTargets;
 use crate::util::reducing::ReducingFactorTarget;
 use crate::with_context;
 
+pub(crate) struct RecursiveCiruitData<'a, F: RichField + Extendable<D>, const D: usize> {
+    degree_bits: usize,
+    num_gate_constraints: usize,
+    num_public_inputs: usize,
+    quotient_degree_factor: usize,
+    num_preprocessed_polys: usize,
+    num_partial_products: usize,
+    fri_reduction_arities: &'a Vec<usize>,
+    gates: &'a Vec<PrefixedGate<F, D>>,
+}
+
+impl<'a, F: RichField + Extendable<D>, const D: usize> RecursiveCircuitData< 'a, F, D> {
+    pub(crate) fn num_zs_partial_products_polys(&self, num_challenges: usize) -> usize {
+        num_challenges * (1 + self.num_partial_products)
+    }
+
+    pub(crate) fn num_quotient_polys(&self, num_challenges: usize) -> usize {
+        num_challenges * self.quotient_degree_factor
+    }
+}
+
 impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     /// Recursively verifies an inner proof.
     pub fn verify_proof_with_pis<C: GenericConfig<D, F = F>>(
@@ -39,6 +60,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         );
     }
 
+    
     /// Recursively verifies an inner proof.
     pub fn verify_proof<C: GenericConfig<D, F = F>>(
         &mut self,
@@ -155,6 +177,31 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         ProofWithPublicInputsTarget {
             proof,
             public_inputs,
+        }
+    }
+
+
+    fn add_virtual_self_proof<'a>(
+        &mut self,
+        recursive_circuit_data: RecursiveCircuitData<'a, F, D>
+    ) -> ProofTarget<D> {
+        let fri_params = self.fri_params(recursive_circuit_data.degree_bits);
+        let cap_height = fri_params.config.cap_height;
+        let num_challenges = self.config.num_challenges;
+
+        let num_leaves_per_oracle = &[
+            recursive_circuit_data.num_preprocessed_polys,
+            self.config.num_wires,
+            recursive_circuit_data.num_zs_partial_products_polys(num_challenges),
+            common_data.num_quotient_polys(num_challenges),
+        ];
+
+        ProofTarget {
+            wires_cap: self.add_virtual_cap(cap_height),
+            plonk_zs_partial_products_cap: self.add_virtual_cap(cap_height),
+            quotient_polys_cap: self.add_virtual_cap(cap_height),
+            openings: self.add_opening_set(common_data),
+            opening_proof: self.add_virtual_fri_proof(num_leaves_per_oracle, &fri_params),
         }
     }
 
