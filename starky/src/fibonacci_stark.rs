@@ -110,6 +110,12 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for FibonacciStar
         yield_constr.constraint_transition(builder, second_col_constraint);
     }
 
+    fn eval_packed_interactive_step<FE, P, const D2: usize>()
+    where
+        FE: FieldExtension<D2, BaseField = F>,
+        P: PackedField<Scalar = FE>,
+    {}
+
     fn constraint_degree(&self) -> usize {
         2
     }

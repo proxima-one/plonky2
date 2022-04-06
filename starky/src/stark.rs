@@ -36,6 +36,17 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         FE: FieldExtension<D2, BaseField = F>,
         P: PackedField<Scalar = FE>;
 
+    /// Can be a stub. Neessary when you need access to a challenge point in your constraints
+    fn eval_packed_interactive_step<FE, P, const D2: usize>(
+        &self,
+        vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        interaction_challenge_set: Vec<F>,
+        yield_constr: &mut ConstraintConsumer<P>,
+    ) where
+        FE: FieldExtension<D2, BaseField = F>,
+        P: PackedField<Scalar = FE>;
+    
+
     /// Evaluate constraints at a vector of points from the base field `F`.
     fn eval_packed_base<P: PackedField<Scalar = F>>(
         &self,
@@ -178,6 +189,10 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
 
     fn uses_permutation_args(&self) -> bool {
         !self.permutation_pairs().is_empty()
+    }
+
+    fn uses_interaction_step(&self) -> bool {
+        false
     }
 
     /// The number of permutation argument instances that can be combined into a single constraint.

@@ -113,15 +113,18 @@ where
     }
 
     let alphas = challenger.get_n_challenges(config.num_challenges);
+    let interaction_challenges = if config.num_interaction_steps > 0 { Some(challenger.get_n_challenges(config.num_challenges * config.num_interaction_steps)) } else { None };
     let quotient_polys = compute_quotient_polys::<F, <F as Packable>::Packing, C, S, D>(
         &stark,
         &trace_commitment,
         &permutation_zs_commitment_challenges,
         public_inputs,
         alphas,
+        interaction_challenges,
         degree_bits,
         config,
     );
+
     let all_quotient_chunks = quotient_polys
         .into_par_iter()
         .flat_map(|mut quotient_poly| {
@@ -206,6 +209,7 @@ fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
     )>,
     public_inputs: [F; S::PUBLIC_INPUTS],
     alphas: Vec<F>,
+    interaction_challenges: Option<Vec<F>>,
     degree_bits: usize,
     config: &StarkConfig,
 ) -> Vec<PolynomialCoeffs<F>>
@@ -292,6 +296,7 @@ where
                 config,
                 vars,
                 permutation_check_data,
+                interaction_challenges,
                 &mut consumer,
             );
             let mut constraints_evals = consumer.accumulators();
