@@ -1,5 +1,6 @@
 use plonky2::field::extension_field::{Extendable, FieldExtension};
 use plonky2::field::packed_field::PackedField;
+use plonky2::field::polynomial::PolynomialValues;
 use plonky2::fri::structure::{
     FriBatchInfo, FriBatchInfoTarget, FriInstanceInfo, FriInstanceInfoTarget, FriOracleInfo,
     FriPolynomialInfo,
@@ -32,28 +33,19 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         &self,
         vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
         yield_constr: &mut ConstraintConsumer<P>,
-    ) where
-        FE: FieldExtension<D2, BaseField = F>,
-        P: PackedField<Scalar = FE>;
-
-    /// Can be a stub. Neessary when you need access to a challenge point in your constraints
-    fn eval_packed_interactive_step<FE, P, const D2: usize>(
-        &self,
-        vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
-        interaction_challenge_set: Vec<F>,
-        yield_constr: &mut ConstraintConsumer<P>,
+        interaction_challenges: Option<&Vec<F>>,
     ) where
         FE: FieldExtension<D2, BaseField = F>,
         P: PackedField<Scalar = FE>;
     
-
     /// Evaluate constraints at a vector of points from the base field `F`.
     fn eval_packed_base<P: PackedField<Scalar = F>>(
         &self,
         vars: StarkEvaluationVars<F, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
         yield_constr: &mut ConstraintConsumer<P>,
+        interaction_challenges: Option<&Vec<F>>
     ) {
-        self.eval_packed_generic(vars, yield_constr)
+        self.eval_packed_generic(vars, yield_constr, interaction_challenges)
     }
 
     /// Evaluate constraints at a single point from the degree `D` extension field.
@@ -66,8 +58,9 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             { Self::PUBLIC_INPUTS },
         >,
         yield_constr: &mut ConstraintConsumer<F::Extension>,
+        interaction_challenges: Option<&Vec<F>>
     ) {
-        self.eval_packed_generic(vars, yield_constr)
+        self.eval_packed_generic(vars, yield_constr, interaction_challenges)
     }
 
     /// Evaluate constraints at a vector of points from the degree `D` extension field. This is like
@@ -191,8 +184,21 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         !self.permutation_pairs().is_empty()
     }
 
-    fn uses_interaction_step(&self) -> bool {
-        false
+    /// returns the number of random challenge values required by the interaction step, if an interaction
+    /// step is used. Defaults to None.
+    fn interaction_step_num_challenge_vals(&self) -> Option<usize> {
+        None
+    }
+
+    /// Neessary when you need to compute trace cell values from a random challenge value.
+    /// This is a bit of a hack, but it's the easiest way to do it atm.
+    /// Defaults to a stub that spits back `trace_poly_values`
+    fn modify_trace_interactive_step(
+        &self,
+        trace_poly_values: Vec<PolynomialValues<F>>,
+        interaction_challenges: &Vec<F>,
+    ) -> Vec<PolynomialValues<F>> {
+        trace_poly_values
     }
 
     /// The number of permutation argument instances that can be combined into a single constraint.

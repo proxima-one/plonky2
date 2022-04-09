@@ -8,8 +8,6 @@ pub struct StarkConfig {
     /// `degree / |F|`.
     pub num_challenges: usize,
 
-    pub num_interaction_steps: usize,
-
     pub fri_config: FriConfig,
 }
 
@@ -20,7 +18,6 @@ impl StarkConfig {
         Self {
             security_bits: 100,
             num_challenges: 2,
-            num_interaction_steps: 0,
             fri_config: FriConfig {
                 rate_bits: 1,
                 cap_height: 4,

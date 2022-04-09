@@ -18,7 +18,7 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
     config: &StarkConfig,
     vars: StarkEvaluationVars<FE, P, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
     permutation_data: Option<PermutationCheckVars<F, FE, P, D2>>,
-    interaction_challenges: Option<Vec<F>>,
+    interaction_challenges: Option<&Vec<F>>,
     consumer: &mut ConstraintConsumer<P>,
 ) where
     F: RichField + Extendable<D>,
@@ -29,7 +29,7 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
     [(); S::COLUMNS]:,
     [(); S::PUBLIC_INPUTS]:,
 {
-    stark.eval_packed_generic(vars, consumer);
+    stark.eval_packed_generic(vars, consumer, interaction_challenges);
     if let Some(permutation_data) = permutation_data {
         eval_permutation_checks::<F, FE, P, C, S, D, D2>(
             stark,
@@ -38,10 +38,6 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
             permutation_data,
             consumer,
         );
-    }
-
-    if let Some(interaction_challenges) = permutation_data {
-        stark.eval_packed_interaction_step(vars, interaction_challenges, consumer);
     }
 }
 

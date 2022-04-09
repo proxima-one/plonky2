@@ -18,7 +18,7 @@ use crate::stark::Stark;
 
 fn get_challenges<F, C, S, const D: usize>(
     stark: &S,
-    trace_cap: &MerkleCap<F, C::Hasher>,
+    trace_cap: &TraceCap<F, C, D>,
     permutation_zs_cap: Option<&MerkleCap<F, C::Hasher>>,
     quotient_polys_cap: &MerkleCap<F, C::Hasher>,
     openings: &StarkOpeningSet<F, D>,
@@ -27,7 +27,7 @@ fn get_challenges<F, C, S, const D: usize>(
     pow_witness: F,
     config: &StarkConfig,
     degree_bits: usize,
-) -> StarkProofChallenges<F, D>
+) -> (StarkProofChallenges<F, D>, Option<Vec<F>>)
 where
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
@@ -37,7 +37,17 @@ where
 
     let mut challenger = Challenger::<F, C::Hasher>::new();
 
-    challenger.observe_cap(trace_cap);
+    let interaction_challenges = match trace_cap {
+        TraceCap::Interactive(pre_interaction, post_interaction) => {
+            challenger.observe_cap(pre_interaction);
+            let num_interaction_challenges = stark.interaction_step_num_challenge_vals().expect("STARK proof with interaction step has non-interactive trace cap!");
+            Some(challenger.get_n_challenges(num_interaction_challenges))
+        },
+        TraceCap::NonInteractive(trace_cap) => {
+            challenger.observe_cap(trace_cap);
+            None
+        }
+    };
 
     let permutation_challenge_sets = permutation_zs_cap.map(|permutation_zs_cap| {
         let tmp = get_n_permutation_challenge_sets(
@@ -56,18 +66,21 @@ where
 
     challenger.observe_openings(&openings.to_fri_openings());
 
-    StarkProofChallenges {
-        permutation_challenge_sets,
-        stark_alphas,
-        stark_zeta,
-        fri_challenges: challenger.fri_challenges::<C, D>(
-            commit_phase_merkle_caps,
-            final_poly,
-            pow_witness,
-            degree_bits,
-            &config.fri_config,
-        ),
-    }
+    (
+        StarkProofChallenges {
+            permutation_challenge_sets,
+            stark_alphas,
+            stark_zeta,
+            fri_challenges: challenger.fri_challenges::<C, D>(
+                commit_phase_merkle_caps,
+                final_poly,
+                pow_witness,
+                degree_bits,
+                &config.fri_config,
+            ),
+        },
+        interaction_challenges
+    )
 }
 
 impl<F, C, const D: usize> StarkProofWithPublicInputs<F, C, D>
@@ -84,6 +97,7 @@ where
         degree_bits: usize,
     ) -> Vec<usize> {
         self.get_challenges(stark, config, degree_bits)
+            .0
             .fri_challenges
             .fri_query_indices
     }
@@ -94,7 +108,7 @@ where
         stark: &S,
         config: &StarkConfig,
         degree_bits: usize,
-    ) -> StarkProofChallenges<F, D> {
+    ) -> (StarkProofChallenges<F, D>, Option<Vec<F>>) {
         let StarkProof {
             trace_cap,
             permutation_zs_cap,

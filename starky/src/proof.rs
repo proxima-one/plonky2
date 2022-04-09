@@ -20,7 +20,7 @@ use crate::permutation::PermutationChallengeSet;
 #[derive(Debug, Clone)]
 pub struct StarkProof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> {
     /// Merkle cap of LDEs of trace values.
-    pub trace_cap: MerkleCap<F, C::Hasher>,
+    pub trace_cap: TraceCap<F, C, D>,
     /// Merkle cap of LDEs of permutation Z values.
     pub permutation_zs_cap: Option<MerkleCap<F, C::Hasher>>,
     /// Merkle cap of LDEs of trace values.
@@ -79,13 +79,25 @@ pub struct StarkProofWithPublicInputsTarget<const D: usize> {
     pub public_inputs: Vec<Target>,
 }
 
+#[derive(Debug, Clone)]
+pub enum TraceCap<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> {
+    NonInteractive(MerkleCap<F, C::Hasher>),
+    Interactive(MerkleCap<F, C::Hasher>, MerkleCap<F, C::Hasher>)
+}
+
+pub enum TraceCommitment<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> {
+    NonInteractive(PolynomialBatch<F, C, D>),
+    Interactive(PolynomialBatch<F, C, D>, PolynomialBatch<F, C, D>),
+}
+
 pub struct CompressedStarkProof<
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
     const D: usize,
 > {
-    /// Merkle cap of LDEs of trace values.
-    pub trace_cap: MerkleCap<F, C::Hasher>,
+    /// Merkle cap of LDE's of trace values after interaction step
+    /// in the case of an interaction step, there's two caps - one pre-interaction and one post-interaction.
+    pub trace_cap: TraceCap<F, C, D>,
     /// Purported values of each polynomial at the challenge point.
     pub openings: StarkOpeningSet<F, D>,
     /// A batch FRI argument for all openings.
@@ -135,7 +147,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
     pub fn new<C: GenericConfig<D, F = F>>(
         zeta: F::Extension,
         g: F,
-        trace_commitment: &PolynomialBatch<F, C, D>,
+        trace_commitment: &TraceCommitment<F, C, D>,
         permutation_zs_commitment: Option<&PolynomialBatch<F, C, D>>,
         quotient_commitment: &PolynomialBatch<F, C, D>,
     ) -> Self {
@@ -146,6 +158,10 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
                 .collect::<Vec<_>>()
         };
         let zeta_right = zeta.scalar_mul(g);
+        let trace_commitment = match trace_commitment {
+            TraceCommitment::Interactive(_, c) => c,
+            TraceCommitment::NonInteractive(c) => c,
+        };
         Self {
             local_values: eval_commitment(zeta, trace_commitment),
             next_values: eval_commitment(zeta_right, trace_commitment),

@@ -17,7 +17,7 @@ use crate::constraint_consumer::RecursiveConstraintConsumer;
 use crate::permutation::PermutationCheckDataTarget;
 use crate::proof::{
     StarkOpeningSetTarget, StarkProof, StarkProofChallengesTarget, StarkProofTarget,
-    StarkProofWithPublicInputs, StarkProofWithPublicInputsTarget,
+    StarkProofWithPublicInputs, StarkProofWithPublicInputsTarget, TraceCap
 };
 use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly_recursively;
@@ -280,7 +280,12 @@ pub fn set_stark_proof_target<F, C: GenericConfig<D, F = F>, W, const D: usize>(
     C::Hasher: AlgebraicHasher<F>,
     W: Witness<F>,
 {
-    witness.set_cap_target(&proof_target.trace_cap, &proof.trace_cap);
+    let trace_cap = match &proof.trace_cap {
+        TraceCap::Interactive(_, cap) => cap,
+        TraceCap::NonInteractive(cap) => cap,
+    };
+
+    witness.set_cap_target(&proof_target.trace_cap, trace_cap);
     witness.set_cap_target(&proof_target.quotient_polys_cap, &proof.quotient_polys_cap);
 
     witness.set_fri_openings(

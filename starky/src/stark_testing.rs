@@ -51,7 +51,7 @@ where
                 lagrange_first.values[i],
                 lagrange_last.values[i],
             );
-            stark.eval_packed_base(vars, &mut consumer);
+            stark.eval_packed_base(vars, &mut consumer, None);
             consumer.accumulators()[0]
         })
         .collect::<Vec<_>>();

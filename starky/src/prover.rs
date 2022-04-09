@@ -24,10 +24,14 @@ use crate::permutation::PermutationCheckVars;
 use crate::permutation::{
     compute_permutation_z_polys, get_n_permutation_challenge_sets, PermutationChallengeSet,
 };
-use crate::proof::{StarkOpeningSet, StarkProof, StarkProofWithPublicInputs};
+use crate::proof::{StarkOpeningSet, StarkProof, StarkProofWithPublicInputs, TraceCap, TraceCommitment};
 use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly;
 use crate::vars::StarkEvaluationVars;
+
+
+
+
 
 pub fn prove<F, C, S, const D: usize>(
     stark: S,
@@ -74,6 +78,43 @@ where
     let mut challenger = Challenger::new();
     challenger.observe_cap(&trace_cap);
 
+    // populate columns during interaction step. For this, we need to commit to the trace as it exists currently.
+    let interaction_challenges = stark.interaction_step_num_challenge_vals().map(|num_challenges| {
+        challenger.get_n_challenges(num_challenges)
+    });
+
+    // do the interaction step
+    let trace_poly_values = if let Some(ref challenges) = interaction_challenges {
+        stark.modify_trace_interactive_step(trace_poly_values, challenges)
+    } else {
+        trace_poly_values
+    };
+
+
+    // recompute trace commitment, cap, and challenger if we did an interaction step
+    // TODO: This is a bit of a hack. We should be able to avoid redoing it from scratch somehow.
+    let (trace_commitment, trace_cap) = if interaction_challenges.is_some() {
+        let commitment = timed!(
+            timing,
+            "recompute trace commitment after interaction step",
+            PolynomialBatch::<F, C, D>::from_values(
+                trace_poly_values.clone(),
+                rate_bits,
+                false,
+                cap_height,
+                timing,
+                None,
+            )
+        );
+
+        let cap = commitment.merkle_tree.cap.clone();
+        challenger.observe_cap(&cap);
+
+        (TraceCommitment::Interactive(trace_commitment, commitment), TraceCap::Interactive(trace_cap, cap))
+    } else {
+        (TraceCommitment::NonInteractive(trace_commitment), TraceCap::NonInteractive(trace_cap))
+    };
+
     // Permutation arguments.
     let permutation_zs_commitment_challenges = stark.uses_permutation_args().then(|| {
         let permutation_challenge_sets = get_n_permutation_challenge_sets(
@@ -113,7 +154,6 @@ where
     }
 
     let alphas = challenger.get_n_challenges(config.num_challenges);
-    let interaction_challenges = if config.num_interaction_steps > 0 { Some(challenger.get_n_challenges(config.num_challenges * config.num_interaction_steps)) } else { None };
     let quotient_polys = compute_quotient_polys::<F, <F as Packable>::Packing, C, S, D>(
         &stark,
         &trace_commitment,
@@ -159,6 +199,11 @@ where
         zeta.exp_power_of_2(degree_bits) != F::Extension::ONE,
         "Opening point is in the subgroup."
     );
+    let last_trace_commitment = match &trace_commitment {
+        TraceCommitment::NonInteractive(commitment) => commitment,
+        TraceCommitment::Interactive(commitment, last_commitment) => last_commitment,
+    };
+
     let openings = StarkOpeningSet::new(
         zeta,
         g,
@@ -168,7 +213,7 @@ where
     );
     challenger.observe_openings(&openings.to_fri_openings());
 
-    let initial_merkle_trees = once(&trace_commitment)
+    let initial_merkle_trees = once(last_trace_commitment)
         .chain(permutation_zs_commitment)
         .chain(once(&quotient_commitment))
         .collect_vec();
@@ -202,7 +247,7 @@ where
 /// where the `C_i`s are the Stark constraints.
 fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
     stark: &S,
-    trace_commitment: &'a PolynomialBatch<F, C, D>,
+    trace_commitment: &'a TraceCommitment<F, C, D>,
     permutation_zs_commitment_challenges: &'a Option<(
         PolynomialBatch<F, C, D>,
         Vec<PermutationChallengeSet<F>>,
@@ -244,10 +289,20 @@ where
 
     // Retrieve the LDE values at index `i`.
     let get_trace_values_packed = |i_start| -> [P; S::COLUMNS] {
-        trace_commitment
-            .get_lde_values_packed(i_start, step)
-            .try_into()
-            .unwrap()
+        match trace_commitment {
+            TraceCommitment::NonInteractive(trace_commitment) => {
+                trace_commitment
+                    .get_lde_values_packed(i_start, step)
+                    .try_into()
+                    .unwrap()
+            },
+            TraceCommitment::Interactive(_, trace_commitment) => {
+                trace_commitment
+                    .get_lde_values_packed(i_start, step)
+                    .try_into()
+                    .unwrap()
+            },
+        }
     };
 
     // Last element of the subgroup.
@@ -296,7 +351,7 @@ where
                 config,
                 vars,
                 permutation_check_data,
-                interaction_challenges,
+                interaction_challenges.as_ref(),
                 &mut consumer,
             );
             let mut constraints_evals = consumer.accumulators();

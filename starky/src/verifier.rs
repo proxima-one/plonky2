@@ -12,7 +12,7 @@ use plonky2::plonk::plonk_common::reduce_with_powers;
 use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
 use crate::permutation::PermutationCheckVars;
-use crate::proof::{StarkOpeningSet, StarkProofChallenges, StarkProofWithPublicInputs};
+use crate::proof::{StarkOpeningSet, StarkProofChallenges, StarkProofWithPublicInputs, TraceCap};
 use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly;
 use crate::vars::StarkEvaluationVars;
@@ -34,8 +34,8 @@ where
 {
     ensure!(proof_with_pis.public_inputs.len() == S::PUBLIC_INPUTS);
     let degree_bits = proof_with_pis.proof.recover_degree_bits(config);
-    let challenges = proof_with_pis.get_challenges(&stark, config, degree_bits);
-    verify_stark_proof_with_challenges(stark, proof_with_pis, challenges, degree_bits, config)
+    let (challenges, interaction_challenges) = proof_with_pis.get_challenges(&stark, config, degree_bits);
+    verify_stark_proof_with_challenges(stark, proof_with_pis, challenges, interaction_challenges, degree_bits, config)
 }
 
 pub(crate) fn verify_stark_proof_with_challenges<
@@ -47,6 +47,7 @@ pub(crate) fn verify_stark_proof_with_challenges<
     stark: S,
     proof_with_pis: StarkProofWithPublicInputs<F, C, D>,
     challenges: StarkProofChallenges<F, D>,
+    interaction_challenges: Option<Vec<F>>,
     degree_bits: usize,
     config: &StarkConfig,
 ) -> Result<()>
@@ -101,6 +102,7 @@ where
         config,
         vars,
         permutation_data,
+        interaction_challenges.as_ref(),
         &mut consumer,
     );
     let vanishing_polys_zeta = consumer.accumulators();
@@ -123,7 +125,12 @@ where
         );
     }
 
-    let merkle_caps = once(proof.trace_cap)
+    let trace_cap = match proof.trace_cap {
+        TraceCap::Interactive(_, cap) => cap,
+        TraceCap::NonInteractive(cap) => cap,
+    };
+
+    let merkle_caps = once(trace_cap)
         .chain(proof.permutation_zs_cap)
         .chain(once(proof.quotient_polys_cap))
         .collect_vec();
