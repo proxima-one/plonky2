@@ -29,10 +29,6 @@ use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly;
 use crate::vars::StarkEvaluationVars;
 
-
-
-
-
 pub fn prove<F, C, S, const D: usize>(
     stark: S,
     config: &StarkConfig,

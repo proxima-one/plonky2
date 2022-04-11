@@ -27,7 +27,7 @@ fn get_challenges<F, C, S, const D: usize>(
     pow_witness: F,
     config: &StarkConfig,
     degree_bits: usize,
-) -> (StarkProofChallenges<F, D>, Option<Vec<F>>)
+) -> (StarkProofChallenges<F, D>, Option<Vec<F::Extension>>)
 where
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
@@ -41,7 +41,7 @@ where
         TraceCap::Interactive(pre_interaction, post_interaction) => {
             challenger.observe_cap(pre_interaction);
             let num_interaction_challenges = stark.interaction_step_num_challenge_vals().expect("STARK proof with interaction step has non-interactive trace cap!");
-            Some(challenger.get_n_challenges(num_interaction_challenges))
+            Some(challenger.get_n_extension_challenges::<D>(num_interaction_challenges))
         },
         TraceCap::NonInteractive(trace_cap) => {
             challenger.observe_cap(trace_cap);
@@ -108,7 +108,7 @@ where
         stark: &S,
         config: &StarkConfig,
         degree_bits: usize,
-    ) -> (StarkProofChallenges<F, D>, Option<Vec<F>>) {
+    ) -> (StarkProofChallenges<F, D>, Option<Vec<F::Extension>>) {
         let StarkProof {
             trace_cap,
             permutation_zs_cap,

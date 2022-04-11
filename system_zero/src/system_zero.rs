@@ -124,7 +124,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for SystemZero<F,
         &self,
         vars: StarkEvaluationVars<FE, P, NUM_COLUMNS, NUM_PUBLIC_INPUTS>,
         yield_constr: &mut ConstraintConsumer<P>,
-        interaction_challenges: Option<&Vec<F>>
+        interaction_challenges: Option<&Vec<FE>>
     ) where
         FE: FieldExtension<D2, BaseField = F>,
         P: PackedField<Scalar = FE>,

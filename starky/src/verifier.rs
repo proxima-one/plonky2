@@ -47,7 +47,7 @@ pub(crate) fn verify_stark_proof_with_challenges<
     stark: S,
     proof_with_pis: StarkProofWithPublicInputs<F, C, D>,
     challenges: StarkProofChallenges<F, D>,
-    interaction_challenges: Option<Vec<F>>,
+    interaction_challenges: Option<Vec<F::Extension>>,
     degree_bits: usize,
     config: &StarkConfig,
 ) -> Result<()>

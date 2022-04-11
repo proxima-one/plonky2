@@ -33,7 +33,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         &self,
         vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
         yield_constr: &mut ConstraintConsumer<P>,
-        interaction_challenges: Option<&Vec<F>>,
+        interaction_challenges: Option<&Vec<FE>>,
     ) where
         FE: FieldExtension<D2, BaseField = F>,
         P: PackedField<Scalar = FE>;
@@ -58,7 +58,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             { Self::PUBLIC_INPUTS },
         >,
         yield_constr: &mut ConstraintConsumer<F::Extension>,
-        interaction_challenges: Option<&Vec<F>>
+        interaction_challenges: Option<&Vec<F::Extension>>
     ) {
         self.eval_packed_generic(vars, yield_constr, interaction_challenges)
     }

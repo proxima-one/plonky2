@@ -18,7 +18,7 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
     config: &StarkConfig,
     vars: StarkEvaluationVars<FE, P, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
     permutation_data: Option<PermutationCheckVars<F, FE, P, D2>>,
-    interaction_challenges: Option<&Vec<F>>,
+    interaction_challenges: Option<&Vec<FE>>,
     consumer: &mut ConstraintConsumer<P>,
 ) where
     F: RichField + Extendable<D>,
