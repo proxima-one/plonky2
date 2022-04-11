@@ -201,6 +201,17 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         trace_poly_values
     }
 
+    /// Necessary when public input needs to depend on challenges
+    /// this is a bit of a hack, but it's the easiers way to do it atm
+    /// defaults to a stub that spits back the same public inputs
+    fn modify_public_inputs_interactive_step(
+        &self,
+        public_inputs: [F; Self::PUBLIC_INPUTS],
+        interaction_challenges: &Vec<F>,
+    ) -> [F; Self::PUBLIC_INPUTS] {
+        public_inputs
+    }
+
     /// The number of permutation argument instances that can be combined into a single constraint.
     fn permutation_batch_size(&self) -> usize {
         // The permutation argument constraints look like

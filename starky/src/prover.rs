@@ -80,10 +80,10 @@ where
     });
 
     // do the interaction step
-    let trace_poly_values = if let Some(ref challenges) = interaction_challenges {
-        stark.modify_trace_interactive_step(trace_poly_values, challenges)
+    let (trace_poly_values, public_inputs) = if let Some(ref challenges) = interaction_challenges {
+        (stark.modify_trace_interactive_step(trace_poly_values, challenges), stark.modify_public_inputs_interactive_step(public_inputs, challenges))
     } else {
-        trace_poly_values
+        (trace_poly_values, public_inputs)
     };
 
 
