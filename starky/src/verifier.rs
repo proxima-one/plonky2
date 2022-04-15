@@ -59,8 +59,13 @@ where
     check_permutation_options(&stark, &proof_with_pis, &challenges)?;
     let StarkProofWithPublicInputs {
         proof,
-        public_inputs,
+        mut public_inputs,
     } = proof_with_pis;
+
+    // if let Some(ref interaction_challenges) = interaction_challenges {
+    //     public_inputs = stark.modify_public_inputs_interactive_step(public_inputs, interaction_challenges);
+    // }
+
     let StarkOpeningSet {
         local_values,
         next_values,

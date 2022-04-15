@@ -81,7 +81,11 @@ where
 
     // do the interaction step
     let (trace_poly_values, public_inputs) = if let Some(ref challenges) = interaction_challenges {
-        (stark.modify_trace_interactive_step(trace_poly_values, challenges), stark.modify_public_inputs_interactive_step(public_inputs, challenges))
+        let mut public_inputs = public_inputs.clone();
+        let pis_vec = stark.modify_public_inputs_interactive_step(public_inputs.to_vec(), challenges);
+        public_inputs.copy_from_slice(&pis_vec);
+
+        (stark.modify_trace_interactive_step(trace_poly_values, challenges), public_inputs)
     } else {
         (trace_poly_values, public_inputs)
     };

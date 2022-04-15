@@ -206,9 +206,9 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
     /// defaults to a stub that spits back the same public inputs
     fn modify_public_inputs_interactive_step(
         &self,
-        public_inputs: [F; Self::PUBLIC_INPUTS],
+        public_inputs: Vec<F>,
         interaction_challenges: &Vec<F>,
-    ) -> [F; Self::PUBLIC_INPUTS] {
+    ) -> Vec<F> {
         public_inputs
     }
 
