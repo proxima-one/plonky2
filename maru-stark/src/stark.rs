@@ -21,6 +21,8 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
     const COLUMNS: usize;
     /// The number of public inputs.
     const PUBLIC_INPUTS: usize;
+    /// The number of memory accesses per trace row
+    const MEMORY_WIDTH: usize;
 
     /// Evaluate constraints at a vector of points.
     ///
@@ -180,6 +182,24 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
 
     fn uses_permutation_args(&self) -> bool {
         !self.permutation_pairs().is_empty()
+    }
+
+    fn public_memory_pis() -> Option<[usize; Self::MEMORY_WIDTH]> {
+        None
+    }
+
+    // return `[start_addrs, start_vals, start_addrs_sorted, start_vals_sorted]` if public memory is used
+    // where we assume the address, value, sorted address, and sorted value cols are contiguous
+    // and there are `MEMORY_WIDTH `of each
+    fn public_memory_cols() -> Option<[usize; 4]> {
+        None
+    }
+
+    fn uses_public_memory() -> bool
+    where
+        [(); Self::MEMORY_WIDTH]:,
+    {
+        !Self::public_memory_pis().is_none() && !Self::public_memory_cols().is_none()
     }
 
     /// The number of permutation argument instances that can be combined into a single constraint.
