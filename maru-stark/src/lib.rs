@@ -9,6 +9,7 @@ mod get_challenges;
 pub mod permutation;
 pub mod proof;
 pub mod prover;
+pub mod public_memory;
 pub mod recursive_verifier;
 pub mod stark;
 pub mod stark_testing;
