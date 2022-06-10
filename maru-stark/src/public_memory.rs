@@ -181,7 +181,7 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const W: usize, const D: usize,
     S: Stark<F, D>,
     [(); S::COLUMNS]:,
     [(); S::PUBLIC_INPUTS]:,
-    [(); S::MEMORY_WIDTH]:
+    [(); S::MEMORY_WIDTH]:,
 {
     let PublicMemoryVars {
         public_memory_pis,
