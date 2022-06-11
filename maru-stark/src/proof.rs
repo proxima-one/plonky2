@@ -23,6 +23,8 @@ pub struct StarkProof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, 
     pub trace_cap: MerkleCap<F, C::Hasher>,
     /// Merkle cap of LDEs of permutation Z values.
     pub permutation_zs_cap: Option<MerkleCap<F, C::Hasher>>,
+    // Merkle cap of LDEs of public memory Z values.
+    pub public_memory_zs_cap: Option<MerkleCap<F, C::Hasher>>,
     /// Merkle cap of LDEs of trace values.
     pub quotient_polys_cap: MerkleCap<F, C::Hasher>,
     /// Purported values of each polynomial at the challenge point.
@@ -128,6 +130,8 @@ pub struct StarkOpeningSet<F: RichField + Extendable<D>, const D: usize> {
     pub next_values: Vec<F::Extension>,
     pub permutation_zs: Option<Vec<F::Extension>>,
     pub permutation_zs_next: Option<Vec<F::Extension>>,
+    pub public_memory_zs: Option<Vec<F::Extension>>,
+    pub public_memory_zs_next: Option<Vec<F::Extension>>,
     pub quotient_polys: Vec<F::Extension>,
 }
 
@@ -137,6 +141,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
         g: F,
         trace_commitment: &PolynomialBatch<F, C, D>,
         permutation_zs_commitment: Option<&PolynomialBatch<F, C, D>>,
+        public_memory_zs_commitment: Option<&PolynomialBatch<F, C, D>>,
         quotient_commitment: &PolynomialBatch<F, C, D>,
     ) -> Self {
         let eval_commitment = |z: F::Extension, c: &PolynomialBatch<F, C, D>| {
@@ -151,6 +156,9 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
             next_values: eval_commitment(zeta_next, trace_commitment),
             permutation_zs: permutation_zs_commitment.map(|c| eval_commitment(zeta, c)),
             permutation_zs_next: permutation_zs_commitment.map(|c| eval_commitment(zeta_next, c)),
+            public_memory_zs: public_memory_zs_commitment.map(|c| eval_commitment(zeta, c)),
+            public_memory_zs_next: public_memory_zs_commitment
+                .map(|c| eval_commitment(zeta_next, c)),
             quotient_polys: eval_commitment(zeta, quotient_commitment),
         }
     }
