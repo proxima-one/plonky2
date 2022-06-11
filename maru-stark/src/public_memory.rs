@@ -33,7 +33,7 @@ fn get_public_memory_challenge<F: RichField, H: Hasher<F>>(
     PublicMemoryChallenge { z, alpha }
 }
 
-fn get_n_public_memory_challenges<F: RichField, H: Hasher<F>>(
+pub(crate) fn get_n_public_memory_challenges<F: RichField, H: Hasher<F>>(
     challenger: &mut Challenger<F, H>,
     num_challenges: usize,
 ) -> Vec<PublicMemoryChallenge<F>> {
@@ -42,26 +42,30 @@ fn get_n_public_memory_challenges<F: RichField, H: Hasher<F>>(
         .collect()
 }
 
-pub(crate) struct MemoryAccessVars<'a, F: Field, const W: usize> {
-    addr_columns: &'a [PolynomialValues<F>; W],
-    addr_sorted_columns: &'a [PolynomialValues<F>; W],
-    value_columns: &'a [PolynomialValues<F>; W],
-    value_sorted_columns: &'a [PolynomialValues<F>; W],
+pub(crate) struct MemoryAccessVars<'a, F: Field> {
+    pub(crate) addr_columns: &'a [PolynomialValues<F>],
+    pub(crate) addr_sorted_columns: &'a [PolynomialValues<F>],
+    pub(crate) value_columns: &'a [PolynomialValues<F>],
+    pub(crate) value_sorted_columns: &'a [PolynomialValues<F>],
 }
 
-impl<'a, F: Field, const W: usize> MemoryAccessVars<'a, F, W> {
+impl<'a, F: Field> MemoryAccessVars<'a, F> {
     fn len(&self) -> usize {
+        self.addr_columns[0].len()
+    }
+
+    fn width(&self) -> usize {
         self.addr_columns.len()
     }
 }
 
 /// Compute all Z polynomials (for public memory arguments).
-pub(crate) fn compute_public_memory_z_poly_groups<F, C, S, const W: usize, const D: usize>(
+pub(crate) fn compute_public_memory_z_polys<F, C, S, const D: usize>(
     stark: &S,
     config: &StarkConfig,
-    memory_access_vars: &MemoryAccessVars<F, W>,
+    memory_access_vars: &MemoryAccessVars<F>,
     public_memory_challenges: &Vec<PublicMemoryChallenge<F>>,
-) -> Vec<[PolynomialValues<F>; W]>
+) -> Vec<PolynomialValues<F>>
 where
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
@@ -70,26 +74,29 @@ where
     public_memory_challenges
         .into_par_iter()
         .map(|challenge| compute_public_memory_z_poly_group(&challenge, memory_access_vars))
+        .flatten_iter()
         .collect()
 }
 
-fn compute_public_memory_z_poly_group<F: Field, const W: usize>(
+fn compute_public_memory_z_poly_group<F: Field>(
     challenge: &PublicMemoryChallenge<F>,
-    memory_access_vars: &MemoryAccessVars<F, W>,
-) -> [PolynomialValues<F>; W] {
+    memory_access_vars: &MemoryAccessVars<F>,
+) -> Vec<PolynomialValues<F>> {
     let &PublicMemoryChallenge { z, alpha } = challenge;
-    let mut res =
-        [(); W].map(|_| PolynomialValues::new(Vec::with_capacity(memory_access_vars.len())));
+    let mut res = vec![
+        PolynomialValues::new(Vec::with_capacity(memory_access_vars.len()));
+        memory_access_vars.width()
+    ];
 
     res[0].values[0] = prod_term(memory_access_vars, 0, 0, challenge);
-    for j in 1..W {
+    for j in 1..memory_access_vars.width() {
         res[j].values[0] = prod_term(memory_access_vars, 0, j, challenge) * res[j - 1].values[0];
     }
 
     for i in 1..memory_access_vars.len() {
-        res[0].values[i] =
-            prod_term(memory_access_vars, i, 0, challenge) * res[W - 1].values[i - 1];
-        for j in 1..W {
+        res[0].values[i] = prod_term(memory_access_vars, i, 0, challenge)
+            * res[memory_access_vars.width() - 1].values[i - 1];
+        for j in 1..memory_access_vars.width() {
             res[j].values[i] =
                 prod_term(memory_access_vars, i, j, challenge) * res[j - 1].values[i - 1];
         }
@@ -98,13 +105,13 @@ fn compute_public_memory_z_poly_group<F: Field, const W: usize>(
     res
 }
 
-fn prod_term<F: Field, const W: usize>(
-    memory_access_vars: &MemoryAccessVars<F, W>,
+fn prod_term<F: Field>(
+    memory_access_vars: &MemoryAccessVars<F>,
     i: usize,
     j: usize,
     challenge: &PublicMemoryChallenge<F>,
 ) -> F {
-    let &MemoryAccessVars::<F, W> {
+    let &MemoryAccessVars::<F> {
         addr_columns,
         value_columns,
         addr_sorted_columns,
@@ -150,27 +157,38 @@ macro_rules! prod_term_constraint {
 }
 
 // variables for evaluating 1 row of Cairo's public memory constraints staggered over `W` accesses per row.
-pub struct PublicMemoryVars<F, FE, P, const W: usize, const D2: usize>
+pub struct PublicMemoryVars<F, FE, P, const D2: usize>
 where
     F: Field,
     FE: FieldExtension<D2, BaseField = F>,
     P: PackedField<Scalar = FE>,
 {
-    pub(crate) public_memory_pis: [usize; W],
+    pub(crate) public_memory_pis: Vec<usize>,
     pub(crate) addr_cols_start: usize,
     pub(crate) mem_cols_start: usize,
     pub(crate) addr_sorted_cols_start: usize,
     pub(crate) mem_sorted_cols_start: usize,
-    pub(crate) local_cumulative_products: Vec<[P; W]>,
-    pub(crate) next_cumulative_products: Vec<[P; W]>,
+    pub(crate) local_cumulative_products: Vec<Vec<P>>,
+    pub(crate) next_cumulative_products: Vec<Vec<P>>,
     pub(crate) public_memory_challenges: Vec<PublicMemoryChallenge<F>>,
 }
 
-pub(crate) fn eval_public_memory<F, FE, P, C, S, const W: usize, const D: usize, const D2: usize>(
+impl<F, FE, P, const D2: usize> PublicMemoryVars<F, FE, P, D2>
+where
+    F: Field,
+    FE: FieldExtension<D2, BaseField = F>,
+    P: PackedField<Scalar = FE>,
+{
+    pub(crate) fn width(&self) -> usize {
+        self.public_memory_pis.len()
+    }
+}
+
+pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize>(
     stark: &S,
     config: &StarkConfig,
     vars: StarkEvaluationVars<FE, P, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
-    public_memory_vars: &PublicMemoryVars<F, FE, P, W, D2>,
+    public_memory_vars: &PublicMemoryVars<F, FE, P, D2>,
     challenges: &Vec<PublicMemoryChallenge<F>>,
     constrainer: &mut ConstraintConsumer<P>,
 ) where
@@ -181,7 +199,6 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const W: usize, const D: usize,
     S: Stark<F, D>,
     [(); S::COLUMNS]:,
     [(); S::PUBLIC_INPUTS]:,
-    [(); S::MEMORY_WIDTH]:,
 {
     let PublicMemoryVars {
         public_memory_pis,
@@ -204,7 +221,7 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const W: usize, const D: usize,
     let next_row = next_values;
 
     // make sure sorted addresses are sequential
-    for i in 1..W {
+    for i in 1..public_memory_vars.width() {
         constrainer.constraint(
             (curr_row[addr_sorted_cols_start + i] - curr_row[addr_sorted_cols_start + i - 1])
                 * (curr_row[addr_sorted_cols_start + i]
@@ -213,14 +230,15 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const W: usize, const D: usize,
         );
     }
     constrainer.constraint_transition(
-        (next_row[*addr_sorted_cols_start] - curr_row[addr_sorted_cols_start + W - 1])
+        (next_row[*addr_sorted_cols_start]
+            - curr_row[addr_sorted_cols_start + public_memory_vars.width() - 1])
             * (next_row[*addr_sorted_cols_start]
-                - curr_row[addr_sorted_cols_start + W - 1]
+                - curr_row[addr_sorted_cols_start + public_memory_vars.width() - 1]
                 - FE::ONE),
     );
 
     // make sure sorted accesses are single-valued
-    for i in 1..W {
+    for i in 1..public_memory_vars.width() {
         constrainer.constraint(
             (curr_row[mem_sorted_cols_start + i] - curr_row[mem_sorted_cols_start + i - 1])
                 * (curr_row[addr_sorted_cols_start + i]
@@ -229,9 +247,10 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const W: usize, const D: usize,
         );
     }
     constrainer.constraint_transition(
-        (next_row[*mem_sorted_cols_start] - curr_row[mem_sorted_cols_start + W - 1])
+        (next_row[*mem_sorted_cols_start]
+            - curr_row[mem_sorted_cols_start + public_memory_vars.width() - 1])
             * (curr_row[*addr_sorted_cols_start]
-                - curr_row[addr_sorted_cols_start + W - 1]
+                - curr_row[addr_sorted_cols_start + public_memory_vars.width() - 1]
                 - FE::ONE),
     );
 
@@ -247,7 +266,7 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const W: usize, const D: usize,
         let denom = -(a_sorted + v_sorted * alpha) + z;
         constrainer.constraint_first_row(local_cumulative_products[i][0] * denom - num);
 
-        for j in 1..W {
+        for j in 1..public_memory_vars.width() {
             constrainer.constraint(prod_term_constraint!(
                 curr_row[addr_cols_start + j],
                 curr_row[mem_cols_start + j],
@@ -265,7 +284,7 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const W: usize, const D: usize,
             next_row[*mem_cols_start],
             next_row[*addr_sorted_cols_start],
             next_row[*mem_sorted_cols_start],
-            local_cumulative_products[i][W - 1],
+            local_cumulative_products[i][public_memory_vars.width() - 1],
             next_cumulative_products[i][0],
             z,
             alpha
@@ -273,8 +292,10 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const W: usize, const D: usize,
     }
 
     // check cumulative products against public memory public input
-    for i in 0..W {
+    for i in 0..public_memory_vars.width() {
         let pi = vars.public_inputs[public_memory_pis[i]];
-        constrainer.constraint_last_row(local_cumulative_products[i][W - 1] * pi - FE::ONE);
+        constrainer.constraint_last_row(
+            local_cumulative_products[i][public_memory_vars.width() - 1] * pi - FE::ONE,
+        );
     }
 }

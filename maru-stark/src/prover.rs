@@ -1,6 +1,7 @@
 use std::iter::once;
 
 use anyhow::{ensure, Result};
+use arrayref::array_ref;
 use itertools::Itertools;
 use plonky2::field::extension_field::Extendable;
 use plonky2::field::field_types::Field;
@@ -25,6 +26,9 @@ use crate::permutation::{
     compute_permutation_z_polys, get_n_permutation_challenge_sets, PermutationChallengeSet,
 };
 use crate::proof::{StarkOpeningSet, StarkProof, StarkProofWithPublicInputs};
+use crate::public_memory::{
+    compute_public_memory_z_polys, get_n_public_memory_challenges, MemoryAccessVars,
+};
 use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly;
 use crate::vars::StarkEvaluationVars;
@@ -91,7 +95,7 @@ where
         let permutation_zs_commitment = timed!(
             timing,
             "compute permutation Z commitments",
-            PolynomialBatch::from_values(
+            PolynomialBatch::<F, C, D>::from_values(
                 permutation_z_polys,
                 rate_bits,
                 false,
@@ -109,6 +113,52 @@ where
         .as_ref()
         .map(|commit| commit.merkle_tree.cap.clone());
     if let Some(cap) = &permutation_zs_cap {
+        challenger.observe_cap(cap);
+    }
+
+    // public memory argument;
+    let public_memory_zs_commitment_challenges = S::uses_public_memory().then(|| {
+        let public_memory_challenges =
+            get_n_public_memory_challenges(&mut challenger, config.num_challenges);
+
+        let public_memory_cols = S::public_memory_cols().unwrap();
+        let width = S::public_memory_width();
+        let memory_access_vars = MemoryAccessVars {
+            addr_columns: &trace_poly_values[public_memory_cols[0]..public_memory_cols[0] + width],
+            value_columns: &trace_poly_values[public_memory_cols[1]..public_memory_cols[1] + width],
+            value_sorted_columns: &trace_poly_values
+                [public_memory_cols[2]..public_memory_cols[2] + width],
+            addr_sorted_columns: &trace_poly_values
+                [public_memory_cols[3]..public_memory_cols[3] + width],
+        };
+        let public_memory_z_polys = compute_public_memory_z_polys::<F, C, S, D>(
+            &stark,
+            config,
+            &memory_access_vars,
+            &public_memory_challenges,
+        );
+
+        let public_memory_zs_commitment = timed!(
+            timing,
+            "compute public memory Z commitments",
+            PolynomialBatch::<F, C, D>::from_values(
+                public_memory_z_polys,
+                rate_bits,
+                false,
+                config.fri_config.cap_height,
+                timing,
+                None
+            )
+        );
+        (public_memory_zs_commitment, public_memory_challenges)
+    });
+    let public_memory_zs_commitment = public_memory_zs_commitment_challenges
+        .as_ref()
+        .map(|(commitment, _)| commitment);
+    let public_memory_zs_cap = public_memory_zs_commitment
+        .as_ref()
+        .map(|commitment| commitment.merkle_tree.cap.clone());
+    if let Some(cap) = &public_memory_zs_cap {
         challenger.observe_cap(cap);
     }
 
@@ -161,6 +211,7 @@ where
         g,
         &trace_commitment,
         permutation_zs_commitment,
+        public_memory_zs_commitment,
         &quotient_commitment,
     );
     challenger.observe_openings(&openings.to_fri_openings());
@@ -184,6 +235,7 @@ where
     let proof = StarkProof {
         trace_cap,
         permutation_zs_cap,
+        public_memory_zs_cap,
         quotient_polys_cap,
         openings,
         opening_proof,

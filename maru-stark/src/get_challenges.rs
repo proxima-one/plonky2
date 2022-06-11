@@ -107,6 +107,7 @@ where
                     pow_witness,
                     ..
                 },
+            public_memory_zs_cap,
         } = &self.proof;
 
         get_challenges::<F, C, S, D>(

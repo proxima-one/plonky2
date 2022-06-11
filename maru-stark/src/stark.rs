@@ -21,8 +21,6 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
     const COLUMNS: usize;
     /// The number of public inputs.
     const PUBLIC_INPUTS: usize;
-    /// The number of memory accesses per trace row
-    const MEMORY_WIDTH: usize;
 
     /// Evaluate constraints at a vector of points.
     ///
@@ -184,7 +182,25 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         !self.permutation_pairs().is_empty()
     }
 
-    fn public_memory_pis() -> Option<[usize; Self::MEMORY_WIDTH]> {
+    fn check_public_memory_width() -> bool {
+        let width = Self::public_memory_width();
+        if width == 0 && !Self::uses_public_memory() {
+            true
+        } else {
+            let pis = Self::public_memory_pis();
+            let cols = Self::public_memory_cols();
+            pis.is_some()
+                && cols.is_some()
+                && pis.unwrap().len() == width
+                && cols.unwrap().len() == width
+        }
+    }
+
+    fn public_memory_width() -> usize {
+        0
+    }
+
+    fn public_memory_pis() -> Option<Vec<usize>> {
         None
     }
 
@@ -195,10 +211,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         None
     }
 
-    fn uses_public_memory() -> bool
-    where
-        [(); Self::MEMORY_WIDTH]:,
-    {
+    fn uses_public_memory() -> bool {
         !Self::public_memory_pis().is_none() && !Self::public_memory_cols().is_none()
     }
 

@@ -58,7 +58,6 @@ impl<F: RichField + Extendable<D>, const D: usize> FibonacciStark<F, D> {
 impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for FibonacciStark<F, D> {
     const COLUMNS: usize = 4;
     const PUBLIC_INPUTS: usize = 3;
-    const MEMORY_WIDTH: usize = 0;
 
     fn eval_packed_generic<FE, P, const D2: usize>(
         &self,

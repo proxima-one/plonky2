@@ -66,6 +66,8 @@ where
         permutation_zs,
         permutation_zs_next,
         quotient_polys,
+        public_memory_zs,
+        public_memory_zs_next,
     } = &proof.openings;
     let vars = StarkEvaluationVars {
         local_values: &local_values.to_vec().try_into().unwrap(),
@@ -154,6 +156,31 @@ fn eval_l_1_and_l_last<F: Field>(log_n: usize, x: F) -> (F, F) {
     let invs = F::batch_multiplicative_inverse(&[n * (x - F::ONE), n * (g * x - F::ONE)]);
 
     (z_x * invs[0], z_x * invs[1])
+}
+
+fn check_public_memory_options<
+    F: RichField + Extendable<D>,
+    C: GenericConfig<D, F = F>,
+    S: Stark<F, D>,
+    const D: usize,
+>(
+    stark: &S,
+    proof_with_pis: &StarkProofWithPublicInputs<F, C, D>,
+    challenges: &StarkProofChallenges<F, D>,
+) -> Result<()> {
+    let options_is_some = [
+        proof_with_pis.proof.public_memory_zs_cap.is_some(),
+        proof_with_pis.proof.openings.permutation_zs.is_some(),
+        proof_with_pis.proof.openings.permutation_zs_next.is_some(),
+        challenges.permutation_challenge_sets.is_some(),
+    ];
+    ensure!(
+        options_is_some
+            .into_iter()
+            .all(|b| b == stark.uses_permutation_args()),
+        "Permutation data doesn't match with Stark configuration."
+    );
+    Ok(())
 }
 
 /// Utility function to check that all permutation data wrapped in `Option`s are `Some` iff
