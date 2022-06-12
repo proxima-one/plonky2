@@ -50,12 +50,9 @@ where
         challenger.observe_cap(permutation_zs_cap);
         tmp
     });
-    
+
     let public_memory_challenges = public_memory_zs_cap.map(|public_memory_zs_cap| {
-        let tmp = get_n_public_memory_challenges(
-            &mut challenger,
-            num_challenges,
-        );
+        let tmp = get_n_public_memory_challenges(&mut challenger, num_challenges);
         challenger.observe_cap(public_memory_zs_cap);
         tmp
     });

@@ -5,6 +5,7 @@
 
 pub mod config;
 pub mod constraint_consumer;
+pub mod cpu;
 mod get_challenges;
 pub mod permutation;
 pub mod proof;
@@ -17,7 +18,6 @@ pub mod util;
 pub mod vanishing_poly;
 pub mod vars;
 pub mod verifier;
-pub mod cpu;
 
 #[cfg(test)]
 pub mod fibonacci_stark;

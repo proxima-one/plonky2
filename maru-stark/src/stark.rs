@@ -200,7 +200,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         0
     }
 
-    /// return the PI index for a "public memory product" for each challenge, 
+    /// return the PI index for a "public memory product" for each challenge,
     /// followed by the minimum and maximum addresses accessed by the VM
     /// followed by a PI index for the number of non-padding trace rows,
     fn public_memory_pis(&self) -> Option<Vec<usize>> {

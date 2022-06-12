@@ -27,7 +27,7 @@ pub fn verify_stark_proof<
     stark: S,
     proof_with_pis: StarkProofWithPublicInputs<F, C, D>,
     config: &StarkConfig,
-    public_memory_accesses: Option<&[(F, F)]>
+    public_memory_accesses: Option<&[(F, F)]>,
 ) -> Result<()>
 where
     [(); S::COLUMNS]:,
@@ -40,9 +40,15 @@ where
     check_permutation_options(&stark, &proof_with_pis, &challenges)?;
     check_public_memory_options(&stark, &proof_with_pis, &challenges, public_memory_accesses)?;
     if stark.uses_public_memory() {
-        check_public_memory_pis(&stark, config, &proof_with_pis, public_memory_accesses.as_ref().unwrap(), challenges.public_memory_challenges.as_ref().unwrap())?;
+        check_public_memory_pis(
+            &stark,
+            config,
+            &proof_with_pis,
+            public_memory_accesses.as_ref().unwrap(),
+            challenges.public_memory_challenges.as_ref().unwrap(),
+        )?;
     }
-    
+
     verify_stark_proof_with_challenges(stark, proof_with_pis, challenges, degree_bits, config)
 }
 
@@ -174,14 +180,18 @@ fn check_public_memory_options<
     stark: &S,
     proof_with_pis: &StarkProofWithPublicInputs<F, C, D>,
     challenges: &StarkProofChallenges<F, D>,
-    public_memory_accesses: Option<&[(F, F)]>
+    public_memory_accesses: Option<&[(F, F)]>,
 ) -> Result<()> {
     let options_is_some = [
         proof_with_pis.proof.public_memory_zs_cap.is_some(),
         proof_with_pis.proof.openings.public_memory_zs.is_some(),
-        proof_with_pis.proof.openings.public_memory_zs_next.is_some(),
+        proof_with_pis
+            .proof
+            .openings
+            .public_memory_zs_next
+            .is_some(),
         challenges.public_memory_challenges.is_some(),
-        public_memory_accesses.is_some()
+        public_memory_accesses.is_some(),
     ];
     ensure!(
         options_is_some

@@ -2,10 +2,6 @@ use plonky2::field::extension_field::{Extendable, FieldExtension};
 use plonky2::field::packed_field::PackedField;
 use plonky2::hash::hash_types::RichField;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
-use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
-use crate::stark::Stark;
-use crate::vars::StarkEvaluationTargets;
-use crate::vars::StarkEvaluationVars;
 
 use super::alu::*;
 use super::alu_recursive::{
@@ -13,6 +9,10 @@ use super::alu_recursive::{
     constrain_state_transition_recursively,
 };
 use super::layout::*;
+use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
+use crate::stark::Stark;
+use crate::vars::StarkEvaluationTargets;
+use crate::vars::StarkEvaluationVars;
 
 #[derive(Clone, Debug)]
 pub struct MaruSTARK<F: RichField + Extendable<D>, const D: usize> {
