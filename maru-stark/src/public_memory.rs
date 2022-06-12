@@ -258,7 +258,6 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
 
     // once for each challenge
     for (i, challenge) in public_memory_challenges.iter().enumerate() {
-        
         let z = FE::from_basefield(challenge.z);
         let alpha = FE::from_basefield(challenge.alpha);
         let a = curr_row[*addr_cols_start];
@@ -311,10 +310,17 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
     let rc_min = vars.public_inputs[rc_min_idx];
     let rc_max = vars.public_inputs[rc_max_idx];
     constrainer.constraint_first_row(curr_row[*addr_sorted_cols_start] - rc_min);
-    constrainer.constraint_last_row(curr_row[addr_sorted_cols_start + public_memory_vars.width() - 1] - rc_max);
+    constrainer.constraint_last_row(
+        curr_row[addr_sorted_cols_start + public_memory_vars.width() - 1] - rc_max,
+    );
 }
 
-pub(crate) fn check_public_memory_pis<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize, S: Stark<F, D>>(
+pub(crate) fn check_public_memory_pis<
+    F: RichField + Extendable<D>,
+    C: GenericConfig<D, F = F>,
+    const D: usize,
+    S: Stark<F, D>,
+>(
     stark: &S,
     config: &StarkConfig,
     proof_with_pis: &StarkProofWithPublicInputs<F, C, D>,
@@ -327,8 +333,11 @@ pub(crate) fn check_public_memory_pis<F: RichField + Extendable<D>, C: GenericCo
     let num_dummy_insns = F::from_canonical_u64(trace_length) - num_non_padding_insns;
 
     for (i, &PublicMemoryChallenge { z, alpha }) in public_memory_challenges.iter().enumerate() {
-        let denom = z.exp_u64(public_memory_accesses.len() as u64 + num_dummy_insns.to_canonical_u64());
-        let num = public_memory_accesses.iter().fold(F::ONE, |p, &(a, v)| p * (z - (a + alpha * v)));
+        let denom =
+            z.exp_u64(public_memory_accesses.len() as u64 + num_dummy_insns.to_canonical_u64());
+        let num = public_memory_accesses
+            .iter()
+            .fold(F::ONE, |p, &(a, v)| p * (z - (a + alpha * v)));
         ensure!(
             num * denom.inverse() == proof_with_pis.public_inputs[pis[i]],
             "public memory PIs given in proof doesn't match public memory trace"

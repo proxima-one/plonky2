@@ -1,8 +1,8 @@
 use plonky2::field::field_types::Field;
 use plonky2::field::packed_field::PackedField;
-use crate::constraint_consumer::ConstraintConsumer;
 
 use super::layout::*;
+use crate::constraint_consumer::ConstraintConsumer;
 
 pub(crate) fn constrain_insn<F, P>(
     curr_row: &[P; NUM_COLUMNS],
@@ -217,7 +217,7 @@ pub(crate) fn constrain_state_transition<F: Field, P: PackedField<Scalar = F>>(
 
     // ensure clk increments unless it's a dummy padding insn
     constrainer.constraint_transition(
-        (-is_dummy_padding_insn + F::ONE) * (next_row[CLK_COL] - curr_row[CLK_COL] - F::ONE)
+        (-is_dummy_padding_insn + F::ONE) * (next_row[CLK_COL] - curr_row[CLK_COL] - F::ONE),
     );
 
     // make sure memory addresses and values are 0 for dummy access instructions

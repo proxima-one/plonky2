@@ -2,9 +2,9 @@ use plonky2::field::extension_field::Extendable;
 use plonky2::hash::hash_types::RichField;
 use plonky2::iop::ext_target::ExtensionTarget;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
-use crate::constraint_consumer::RecursiveConstraintConsumer;
 
 use super::layout::*;
+use crate::constraint_consumer::RecursiveConstraintConsumer;
 
 pub(crate) fn constrain_insn_recursively<F: RichField + Extendable<D>, const D: usize>(
     builder: &mut CircuitBuilder<F, D>,
