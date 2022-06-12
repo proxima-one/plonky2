@@ -14,12 +14,14 @@ use crate::permutation::{
     get_n_permutation_challenge_sets, get_n_permutation_challenge_sets_target,
 };
 use crate::proof::*;
+use crate::public_memory::get_n_public_memory_challenges;
 use crate::stark::Stark;
 
 fn get_challenges<F, C, S, const D: usize>(
     stark: &S,
     trace_cap: &MerkleCap<F, C::Hasher>,
     permutation_zs_cap: Option<&MerkleCap<F, C::Hasher>>,
+    public_memory_zs_cap: Option<&MerkleCap<F, C::Hasher>>,
     quotient_polys_cap: &MerkleCap<F, C::Hasher>,
     openings: &StarkOpeningSet<F, D>,
     commit_phase_merkle_caps: &[MerkleCap<F, C::Hasher>],
@@ -48,6 +50,15 @@ where
         challenger.observe_cap(permutation_zs_cap);
         tmp
     });
+    
+    let public_memory_challenges = public_memory_zs_cap.map(|public_memory_zs_cap| {
+        let tmp = get_n_public_memory_challenges(
+            &mut challenger,
+            num_challenges,
+        );
+        challenger.observe_cap(public_memory_zs_cap);
+        tmp
+    });
 
     let stark_alphas = challenger.get_n_challenges(num_challenges);
 
@@ -58,6 +69,7 @@ where
 
     StarkProofChallenges {
         permutation_challenge_sets,
+        public_memory_challenges,
         stark_alphas,
         stark_zeta,
         fri_challenges: challenger.fri_challenges::<C, D>(
@@ -98,6 +110,7 @@ where
         let StarkProof {
             trace_cap,
             permutation_zs_cap,
+            public_memory_zs_cap,
             quotient_polys_cap,
             openings,
             opening_proof:
@@ -107,13 +120,13 @@ where
                     pow_witness,
                     ..
                 },
-            public_memory_zs_cap,
         } = &self.proof;
 
         get_challenges::<F, C, S, D>(
             stark,
             trace_cap,
             permutation_zs_cap.as_ref(),
+            public_memory_zs_cap.as_ref(),
             quotient_polys_cap,
             openings,
             commit_phase_merkle_caps,

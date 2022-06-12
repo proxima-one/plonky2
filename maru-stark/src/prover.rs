@@ -117,7 +117,7 @@ where
     }
 
     // public memory argument;
-    let public_memory_zs_commitment_challenges = S::uses_public_memory().then(|| {
+    let public_memory_zs_commitment_challenges = stark.uses_public_memory().then(|| {
         let public_memory_challenges =
             get_n_public_memory_challenges(&mut challenger, config.num_challenges);
 
