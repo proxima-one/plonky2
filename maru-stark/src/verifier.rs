@@ -13,6 +13,7 @@ use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
 use crate::permutation::PermutationCheckVars;
 use crate::proof::{StarkOpeningSet, StarkProofChallenges, StarkProofWithPublicInputs};
+use crate::public_memory::check_public_memory_pis;
 use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly;
 use crate::vars::StarkEvaluationVars;
@@ -26,6 +27,7 @@ pub fn verify_stark_proof<
     stark: S,
     proof_with_pis: StarkProofWithPublicInputs<F, C, D>,
     config: &StarkConfig,
+    public_memory_accesses: Option<&[(F, F)]>
 ) -> Result<()>
 where
     [(); S::COLUMNS]:,
@@ -35,6 +37,12 @@ where
     ensure!(proof_with_pis.public_inputs.len() == S::PUBLIC_INPUTS);
     let degree_bits = proof_with_pis.proof.recover_degree_bits(config);
     let challenges = proof_with_pis.get_challenges(&stark, config, degree_bits);
+    check_permutation_options(&stark, &proof_with_pis, &challenges)?;
+    check_public_memory_options(&stark, &proof_with_pis, &challenges, public_memory_accesses)?;
+    if stark.uses_public_memory() {
+        check_public_memory_pis(&stark, config, &proof_with_pis, public_memory_accesses.as_ref().unwrap(), challenges.public_memory_challenges.as_ref().unwrap())?;
+    }
+    
     verify_stark_proof_with_challenges(stark, proof_with_pis, challenges, degree_bits, config)
 }
 
@@ -55,7 +63,6 @@ where
     [(); S::PUBLIC_INPUTS]:,
     [(); C::Hasher::HASH_SIZE]:,
 {
-    check_permutation_options(&stark, &proof_with_pis, &challenges)?;
     let StarkProofWithPublicInputs {
         proof,
         public_inputs,
@@ -167,18 +174,20 @@ fn check_public_memory_options<
     stark: &S,
     proof_with_pis: &StarkProofWithPublicInputs<F, C, D>,
     challenges: &StarkProofChallenges<F, D>,
+    public_memory_accesses: Option<&[(F, F)]>
 ) -> Result<()> {
     let options_is_some = [
         proof_with_pis.proof.public_memory_zs_cap.is_some(),
-        proof_with_pis.proof.openings.permutation_zs.is_some(),
-        proof_with_pis.proof.openings.permutation_zs_next.is_some(),
-        challenges.permutation_challenge_sets.is_some(),
+        proof_with_pis.proof.openings.public_memory_zs.is_some(),
+        proof_with_pis.proof.openings.public_memory_zs_next.is_some(),
+        challenges.public_memory_challenges.is_some(),
+        public_memory_accesses.is_some()
     ];
     ensure!(
         options_is_some
             .into_iter()
-            .all(|b| b == stark.uses_permutation_args()),
-        "Permutation data doesn't match with Stark configuration."
+            .all(|b| b == stark.uses_public_memory()),
+        "Public memory data doesn't match with Stark configuration."
     );
     Ok(())
 }

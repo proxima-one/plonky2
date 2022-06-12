@@ -16,6 +16,7 @@ use rayon::prelude::*;
 
 use crate::config::StarkConfig;
 use crate::permutation::PermutationChallengeSet;
+use crate::public_memory::PublicMemoryChallenge;
 
 #[derive(Debug, Clone)]
 pub struct StarkProof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> {
@@ -106,6 +107,9 @@ pub struct CompressedStarkProofWithPublicInputs<
 pub(crate) struct StarkProofChallenges<F: RichField + Extendable<D>, const D: usize> {
     /// Randomness used in any permutation arguments.
     pub permutation_challenge_sets: Option<Vec<PermutationChallengeSet<F>>>,
+
+    /// Randomness used in any public memory arguments.
+    pub public_memory_challenges: Option<Vec<PublicMemoryChallenge<F>>>,
 
     /// Random values used to combine STARK constraints.
     pub stark_alphas: Vec<F>,

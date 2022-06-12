@@ -1,4 +1,5 @@
 //! Cairo's public memory argument in Maru
+use anyhow::ensure;
 use itertools::Itertools;
 use plonky2::field::batch_util::batch_multiply_inplace;
 use plonky2::field::extension_field::{Extendable, FieldExtension};
@@ -16,6 +17,7 @@ use rayon::prelude::*;
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
+use crate::proof::StarkProofWithPublicInputs;
 use crate::stark::Stark;
 use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
 
@@ -84,15 +86,15 @@ fn compute_public_memory_z_poly_group<F: Field>(
 ) -> Vec<PolynomialValues<F>> {
     let &PublicMemoryChallenge { z, alpha } = challenge;
     let mut res = vec![
-        PolynomialValues::new(Vec::with_capacity(memory_access_vars.len()));
+        PolynomialValues::new(vec![F::ZERO; memory_access_vars.len()]);
         memory_access_vars.width()
     ];
 
+    // public memory argument
     res[0].values[0] = prod_term(memory_access_vars, 0, 0, challenge);
     for j in 1..memory_access_vars.width() {
         res[j].values[0] = prod_term(memory_access_vars, 0, j, challenge) * res[j - 1].values[0];
     }
-
     for i in 1..memory_access_vars.len() {
         res[0].values[i] = prod_term(memory_access_vars, i, 0, challenge)
             * res[memory_access_vars.width() - 1].values[i - 1];
@@ -150,9 +152,9 @@ macro_rules! prod_term_constraint {
         $z:expr,
         $alpha:expr
     ) => {{
-        let _num = -($a + $v * $alpha) + $z;
-        let _denom = -($a_sorted + $v_sorted * $alpha) + $z;
-        _denom * $new_product - _num * $prev_product
+        let __num = -($a + $v * $alpha) + $z;
+        let __denom = -($a_sorted + $v_sorted * $alpha) + $z;
+        __denom * $new_product - __num * $prev_product
     }};
 }
 
@@ -180,7 +182,7 @@ where
     P: PackedField<Scalar = FE>,
 {
     pub(crate) fn width(&self) -> usize {
-        self.public_memory_pis.len()
+        self.local_cumulative_products.len()
     }
 }
 
@@ -254,8 +256,9 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
                 - FE::ONE),
     );
 
-    // permutation / public memory argument, once for each challenge
+    // once for each challenge
     for (i, challenge) in public_memory_challenges.iter().enumerate() {
+        
         let z = FE::from_basefield(challenge.z);
         let alpha = FE::from_basefield(challenge.alpha);
         let a = curr_row[*addr_cols_start];
@@ -264,8 +267,9 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
         let v_sorted = curr_row[*mem_sorted_cols_start];
         let num = -(a + v * alpha) + z;
         let denom = -(a_sorted + v_sorted * alpha) + z;
-        constrainer.constraint_first_row(local_cumulative_products[i][0] * denom - num);
 
+        // permutation / public memory argument
+        constrainer.constraint_first_row(local_cumulative_products[i][0] * denom - num);
         for j in 1..public_memory_vars.width() {
             constrainer.constraint(prod_term_constraint!(
                 curr_row[addr_cols_start + j],
@@ -278,7 +282,6 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
                 FE::from_basefield(challenge.alpha)
             ));
         }
-
         constrainer.constraint_transition(prod_term_constraint!(
             next_row[*addr_cols_start],
             next_row[*mem_cols_start],
@@ -288,14 +291,48 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
             next_cumulative_products[i][0],
             z,
             alpha
-        ))
+        ));
     }
 
-    // check cumulative products against public memory public input
+    // check final comulative product against one given as public input for each challenge
     for i in 0..public_memory_vars.width() {
         let pi = vars.public_inputs[public_memory_pis[i]];
         constrainer.constraint_last_row(
             local_cumulative_products[i][public_memory_vars.width() - 1] * pi - FE::ONE,
         );
     }
+
+    // range checks - since we've verified that...
+    // 1) the sorted addresses are a permutation of the non-sorted addresses
+    // 2) the sorted addresses are sequential
+    // we only need to check the first and last addresses correspond to the min and max address respectively.
+    let rc_min_idx = public_memory_pis[public_memory_pis.len() - 3];
+    let rc_max_idx = public_memory_pis[public_memory_pis.len() - 2];
+    let rc_min = vars.public_inputs[rc_min_idx];
+    let rc_max = vars.public_inputs[rc_max_idx];
+    constrainer.constraint_first_row(curr_row[*addr_sorted_cols_start] - rc_min);
+    constrainer.constraint_last_row(curr_row[addr_sorted_cols_start + public_memory_vars.width() - 1] - rc_max);
+}
+
+pub(crate) fn check_public_memory_pis<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize, S: Stark<F, D>>(
+    stark: &S,
+    config: &StarkConfig,
+    proof_with_pis: &StarkProofWithPublicInputs<F, C, D>,
+    public_memory_accesses: &[(F, F)],
+    public_memory_challenges: &[PublicMemoryChallenge<F>],
+) -> anyhow::Result<()> {
+    let trace_length = 1u64 << proof_with_pis.proof.recover_degree_bits(config);
+    let pis = stark.public_memory_pis().unwrap();
+    let num_non_padding_insns = proof_with_pis.public_inputs[pis[pis.len() - 1]];
+    let num_dummy_insns = F::from_canonical_u64(trace_length) - num_non_padding_insns;
+
+    for (i, &PublicMemoryChallenge { z, alpha }) in public_memory_challenges.iter().enumerate() {
+        let denom = z.exp_u64(public_memory_accesses.len() as u64 + num_dummy_insns.to_canonical_u64());
+        let num = public_memory_accesses.iter().fold(F::ONE, |p, &(a, v)| p * (z - (a + alpha * v)));
+        ensure!(
+            num * denom.inverse() == proof_with_pis.public_inputs[pis[i]],
+            "public memory PIs given in proof doesn't match public memory trace"
+        );
+    }
+    Ok(())
 }

@@ -182,16 +182,16 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         !self.permutation_pairs().is_empty()
     }
 
-    fn check_public_memory_width() -> bool {
+    fn check_public_memory_width(&self) -> bool {
         let width = Self::public_memory_width();
-        if width == 0 && !Self::uses_public_memory() {
+        if width == 0 && !self.uses_public_memory() {
             true
         } else {
-            let pis = Self::public_memory_pis();
+            let pis = self.public_memory_pis();
             let cols = Self::public_memory_cols();
             pis.is_some()
                 && cols.is_some()
-                && pis.unwrap().len() == width
+                && pis.unwrap().len() == width + 1
                 && cols.unwrap().len() == width
         }
     }
@@ -200,19 +200,23 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         0
     }
 
-    fn public_memory_pis() -> Option<Vec<usize>> {
+    /// return the PI index for a "public memory product" for each challenge, 
+    /// followed by the minimum and maximum addresses accessed by the VM
+    /// followed by a PI index for the number of non-padding trace rows,
+    fn public_memory_pis(&self) -> Option<Vec<usize>> {
         None
     }
 
-    // return `[start_addrs, start_vals, start_addrs_sorted, start_vals_sorted]` if public memory is used
-    // where we assume the address, value, sorted address, and sorted value cols are contiguous
-    // and there are `MEMORY_WIDTH `of each
+    /// return `[start_addrs, start_vals, start_addrs_sorted, start_vals_sorted]` if public memory is used
+    /// where we assume the address, value, sorted address, and sorted value cols are contiguous
+    /// and there are `MEMORY_WIDTH` of each
     fn public_memory_cols() -> Option<[usize; 4]> {
         None
     }
 
-    fn uses_public_memory() -> bool {
-        !Self::public_memory_pis().is_none() && !Self::public_memory_cols().is_none()
+    /// should only be true for the AIR
+    fn uses_public_memory(&self) -> bool {
+        !self.public_memory_pis().is_none() && !Self::public_memory_cols().is_none()
     }
 
     /// The number of permutation argument instances that can be combined into a single constraint.
