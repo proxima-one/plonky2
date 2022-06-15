@@ -27,7 +27,7 @@ use crate::permutation::{
 };
 use crate::proof::{StarkOpeningSet, StarkProof, StarkProofWithPublicInputs};
 use crate::public_memory::{
-    compute_public_memory_z_polys, get_n_public_memory_challenges, MemoryAccessVars,
+    compute_public_memory_z_polys, get_n_public_memory_challenges, MemoryAccessVars, PublicMemoryChallenge, PublicMemoryVars,
 };
 use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly;
@@ -167,6 +167,7 @@ where
         &stark,
         &trace_commitment,
         &permutation_zs_commitment_challenges,
+        &public_memory_zs_commitment_challenges,
         public_inputs,
         alphas,
         degree_bits,
@@ -256,6 +257,10 @@ fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
         PolynomialBatch<F, C, D>,
         Vec<PermutationChallengeSet<F>>,
     )>,
+    public_memory_zs_commitment_challenges: &'a Option<(
+        PolynomialBatch<F, C, D>,
+        Vec<PublicMemoryChallenge<F>>,
+    )>,
     public_inputs: [F; S::PUBLIC_INPUTS],
     alphas: Vec<F>,
     degree_bits: usize,
@@ -339,11 +344,32 @@ where
                     permutation_challenge_sets: permutation_challenge_sets.to_vec(),
                 },
             );
+            let public_memory_check_data: Option<PublicMemoryVars<F, F, P, 1>> = public_memory_zs_commitment_challenges.as_ref().map(
+                |(zs_commitment, challenges)| {
+                    let public_memory_pis = stark.public_memory_pis().unwrap();
+                    let public_memory_cols = S::public_memory_cols().unwrap();
+                    let addr_cols_start = public_memory_cols[0];
+                    let mem_cols_start = public_memory_cols[1];
+                    let addr_sorted_cols_start = public_memory_cols[2];
+                    let mem_sorted_cols_start = public_memory_cols[3];
+                    PublicMemoryVars {
+                        local_cumulative_products: zs_commitment.get_lde_values_packed(i_start, step),
+                        next_cumulative_products: zs_commitment.get_lde_values_packed(i_next_start, step),
+                        public_memory_challenges: challenges.to_vec(),
+                        public_memory_pis,
+                        addr_cols_start,
+                        mem_cols_start,
+                        addr_sorted_cols_start,
+                        mem_sorted_cols_start,
+                    }
+                }
+            );
             eval_vanishing_poly::<F, F, P, C, S, D, 1>(
                 stark,
                 config,
                 vars,
                 permutation_check_data,
+                public_memory_check_data,
                 &mut consumer,
             );
             let mut constraints_evals = consumer.accumulators();

@@ -170,8 +170,8 @@ where
     pub(crate) mem_cols_start: usize,
     pub(crate) addr_sorted_cols_start: usize,
     pub(crate) mem_sorted_cols_start: usize,
-    pub(crate) local_cumulative_products: Vec<Vec<P>>,
-    pub(crate) next_cumulative_products: Vec<Vec<P>>,
+    pub(crate) local_cumulative_products: Vec<P>,
+    pub(crate) next_cumulative_products: Vec<P>,
     pub(crate) public_memory_challenges: Vec<PublicMemoryChallenge<F>>,
 }
 
@@ -191,7 +191,6 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
     config: &StarkConfig,
     vars: StarkEvaluationVars<FE, P, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
     public_memory_vars: &PublicMemoryVars<F, FE, P, D2>,
-    challenges: &Vec<PublicMemoryChallenge<F>>,
     constrainer: &mut ConstraintConsumer<P>,
 ) where
     F: RichField + Extendable<D>,
@@ -257,6 +256,8 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
     );
 
     // once for each challenge
+    // TODO: rewrite using an iterator over cumulative products of size `publc_memory_vars.width()`
+    let width = public_memory_vars.width();
     for (i, challenge) in public_memory_challenges.iter().enumerate() {
         let z = FE::from_basefield(challenge.z);
         let alpha = FE::from_basefield(challenge.alpha);
@@ -268,15 +269,15 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
         let denom = -(a_sorted + v_sorted * alpha) + z;
 
         // permutation / public memory argument
-        constrainer.constraint_first_row(local_cumulative_products[i][0] * denom - num);
-        for j in 1..public_memory_vars.width() {
+        constrainer.constraint_first_row(local_cumulative_products[width * i] * denom - num);
+        for j in 1..width {
             constrainer.constraint(prod_term_constraint!(
                 curr_row[addr_cols_start + j],
                 curr_row[mem_cols_start + j],
                 curr_row[addr_sorted_cols_start + j],
                 curr_row[mem_sorted_cols_start + j],
-                local_cumulative_products[i][j - 1],
-                local_cumulative_products[i][j],
+                local_cumulative_products[i * width + j - 1],
+                local_cumulative_products[i * width + j],
                 FE::from_basefield(challenge.z),
                 FE::from_basefield(challenge.alpha)
             ));
@@ -286,18 +287,18 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
             next_row[*mem_cols_start],
             next_row[*addr_sorted_cols_start],
             next_row[*mem_sorted_cols_start],
-            local_cumulative_products[i][public_memory_vars.width() - 1],
-            next_cumulative_products[i][0],
+            local_cumulative_products[(i + 1) * width + public_memory_vars.width() - 1],
+            next_cumulative_products[i * width],
             z,
             alpha
         ));
     }
 
     // check final comulative product against one given as public input for each challenge
-    for i in 0..public_memory_vars.width() {
+    for i in 0..width {
         let pi = vars.public_inputs[public_memory_pis[i]];
         constrainer.constraint_last_row(
-            local_cumulative_products[i][public_memory_vars.width() - 1] * pi - FE::ONE,
+            local_cumulative_products[(i + 1) * width - 1] * pi - FE::ONE,
         );
     }
 
@@ -343,5 +344,6 @@ pub(crate) fn check_public_memory_pis<
             "public memory PIs given in proof doesn't match public memory trace"
         );
     }
+    
     Ok(())
 }

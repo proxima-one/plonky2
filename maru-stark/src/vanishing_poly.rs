@@ -10,6 +10,7 @@ use crate::permutation::{
     eval_permutation_checks, eval_permutation_checks_circuit, PermutationCheckDataTarget,
     PermutationCheckVars,
 };
+use crate::public_memory::{PublicMemoryVars, eval_public_memory};
 use crate::stark::Stark;
 use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
 
@@ -18,6 +19,7 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
     config: &StarkConfig,
     vars: StarkEvaluationVars<FE, P, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
     permutation_data: Option<PermutationCheckVars<F, FE, P, D2>>,
+    public_memory_data: Option<PublicMemoryVars<F, FE, P, D2>>,
     consumer: &mut ConstraintConsumer<P>,
 ) where
     F: RichField + Extendable<D>,
@@ -35,6 +37,15 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
             config,
             vars,
             permutation_data,
+            consumer,
+        );
+    }
+    if let Some(public_memory_data) = public_memory_data {
+        eval_public_memory::<F, FE, P, C, S, D, D2>(
+            stark,
+            config,
+            vars,
+            &public_memory_data,
             consumer,
         );
     }
