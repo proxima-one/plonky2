@@ -1,5 +1,5 @@
-use maru_air::layout::*;
-use maru_air::maru_stark::MaruSTARK;
+use maru_stark::cpu::layout::*;
+use maru_stark::cpu::maru_stark::MaruSTARK;
 use maru_air::memory::MemorySegment;
 use maru_air::trace::{AIRTrace, ExecutionTrace, ExecutionTraceRow};
 use maru_stark::config::StarkConfig;
@@ -97,7 +97,6 @@ fn fib_exec<F: RichField + Extendable<D>, const D: usize>(mut n: u64) -> Executi
     let mut trace = ExecutionTrace {
         rows: Vec::new(),
         segments: segments,
-        mmio_segments: Vec::new(),
     };
 
     let mut pc = 0;
@@ -223,7 +222,7 @@ fn test_fib() -> Result<()> {
     public_inputs[RC_MIN] = F::ZERO;
     public_inputs[RC_MAX] = last_row[ADDR_SORTED_COLS[3]];
 
-    let stark = MaruSTARK::from_trace(&trace);
+    let stark = trace.to_stark();
     let trace_poly_values = trace_rows_to_poly_values(trace.rows);
     let config = StarkConfig::standard_fast_config();
 

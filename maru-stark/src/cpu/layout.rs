@@ -1,7 +1,7 @@
 pub const NUM_PUBLIC_INPUTS: usize = 8;
-pub(crate) const NUM_COLUMNS: usize =
+pub const NUM_COLUMNS: usize =
     INSNS_NUM_COLS + REGISTERS_NUM_COLS + MEM_NUM_COLS + MEM_SORTED_NUM_COLS;
-pub(crate) const MAX_ROWS: usize = 1 << 16;
+pub const MAX_ROWS: usize = 1 << 16;
 
 // public input layout
 pub const PC_INITIAL: usize = 0;
@@ -17,18 +17,18 @@ pub const RC_MIN: usize = PUBLIC_MEMORY_PRODUCT_1 + 1;
 pub const RC_MAX: usize = RC_MIN + 1;
 
 // define regions of trace columns
-pub(crate) const START_INSNS: usize = 0;
-pub(crate) const START_REGISTERS: usize = START_INSNS + INSNS_NUM_COLS;
-pub(crate) const START_MEM: usize = START_REGISTERS + REGISTERS_NUM_COLS;
-pub(crate) const START_MEM_SORTED: usize = START_MEM + MEM_NUM_COLS;
+pub const START_INSNS: usize = 0;
+pub const START_REGISTERS: usize = START_INSNS + INSNS_NUM_COLS;
+pub const START_MEM: usize = START_REGISTERS + REGISTERS_NUM_COLS;
+pub const START_MEM_SORTED: usize = START_MEM + MEM_NUM_COLS;
 
 // Instruction cols
 
-pub(crate) const OP0_OFFSET_COL: usize = START_INSNS;
-pub(crate) const OP1_OFFSET_COL: usize = OP0_OFFSET_COL + 1;
-pub(crate) const DST_OFFSET_COL: usize = OP1_OFFSET_COL + 1;
-pub(crate) const FLAG_NUM_COLS: usize = 16;
-pub(crate) const FLAG_COLS: [usize; FLAG_NUM_COLS] = [
+pub const OP0_OFFSET_COL: usize = START_INSNS;
+pub const OP1_OFFSET_COL: usize = OP0_OFFSET_COL + 1;
+pub const DST_OFFSET_COL: usize = OP1_OFFSET_COL + 1;
+pub const FLAG_NUM_COLS: usize = 16;
+pub const FLAG_COLS: [usize; FLAG_NUM_COLS] = [
     DST_OFFSET_COL + 1,
     DST_OFFSET_COL + 2,
     DST_OFFSET_COL + 3,
@@ -46,33 +46,33 @@ pub(crate) const FLAG_COLS: [usize; FLAG_NUM_COLS] = [
     DST_OFFSET_COL + 15,
     DST_OFFSET_COL + 16,
 ];
-pub(crate) const INSNS_NUM_COLS: usize = FLAG_COLS[FLAG_NUM_COLS - 1] - START_INSNS + 1;
+pub const INSNS_NUM_COLS: usize = FLAG_COLS[FLAG_NUM_COLS - 1] - START_INSNS + 1;
 
 // Register columns
 
-pub(crate) const PC_COL: usize = START_REGISTERS;
-pub(crate) const SP_COL: usize = PC_COL + 1;
+pub const PC_COL: usize = START_REGISTERS;
+pub const SP_COL: usize = PC_COL + 1;
 pub const AP_COL: usize = SP_COL + 1;
-pub(crate) const OP0_COL: usize = AP_COL + 1;
-pub(crate) const OP1_COL: usize = OP0_COL + 1;
-pub(crate) const DST_COL: usize = OP1_COL + 1;
+pub const OP0_COL: usize = AP_COL + 1;
+pub const OP1_COL: usize = OP0_COL + 1;
+pub const DST_COL: usize = OP1_COL + 1;
 // * when insn is a conditional relative jump, row[RES_COL] should contain inv(dst)
 pub const RES_COL: usize = DST_COL + 1;
 // * used to reduce the degree of some constraints
-pub(crate) const TMP_0_COL: usize = RES_COL + 1;
-pub(crate) const TMP_1_COL: usize = TMP_0_COL + 1;
-pub(crate) const TMP_2_COL: usize = TMP_1_COL + 1;
-pub(crate) const TMP_3_COL: usize = TMP_2_COL + 1;
-pub(crate) const TMP_4_COL: usize = TMP_3_COL + 1;
-pub(crate) const CLK_COL: usize = TMP_4_COL + 1;
-pub(crate) const REGISTERS_NUM_COLS: usize = CLK_COL - START_REGISTERS + 1;
+pub const TMP_0_COL: usize = RES_COL + 1;
+pub const TMP_1_COL: usize = TMP_0_COL + 1;
+pub const TMP_2_COL: usize = TMP_1_COL + 1;
+pub const TMP_3_COL: usize = TMP_2_COL + 1;
+pub const TMP_4_COL: usize = TMP_3_COL + 1;
+pub const CLK_COL: usize = TMP_4_COL + 1;
+pub const REGISTERS_NUM_COLS: usize = CLK_COL - START_REGISTERS + 1;
 
 // Memory columns for each calculated address
-pub(crate) const PC_MEM_COL: usize = START_MEM;
-pub(crate) const OP0_MEM_COL: usize = PC_MEM_COL + 1;
-pub(crate) const OP1_MEM_COL: usize = OP0_MEM_COL + 1;
-pub(crate) const DST_MEM_COL: usize = OP1_MEM_COL + 1;
-pub(crate) const MEM_NUM_COLS: usize = DST_MEM_COL - START_MEM + 1;
+pub const PC_MEM_COL: usize = START_MEM;
+pub const OP0_MEM_COL: usize = PC_MEM_COL + 1;
+pub const OP1_MEM_COL: usize = OP0_MEM_COL + 1;
+pub const DST_MEM_COL: usize = OP1_MEM_COL + 1;
+pub const MEM_NUM_COLS: usize = DST_MEM_COL - START_MEM + 1;
 
 // Sorted memory addresses for the permuation check, staggered across
 // three columns
@@ -82,10 +82,10 @@ pub const ADDR_SORTED_COLS: [usize; 4] = [
     START_MEM_SORTED + 2,
     START_MEM_SORTED + 3,
 ];
-pub(crate) const MEM_SORTED_COLS: [usize; 4] = [
+pub const MEM_SORTED_COLS: [usize; 4] = [
     ADDR_SORTED_COLS[3] + 1,
     ADDR_SORTED_COLS[3] + 2,
     ADDR_SORTED_COLS[3] + 3,
     ADDR_SORTED_COLS[3] + 4,
 ];
-pub(crate) const MEM_SORTED_NUM_COLS: usize = MEM_SORTED_COLS[3] - START_MEM_SORTED + 1;
+pub const MEM_SORTED_NUM_COLS: usize = MEM_SORTED_COLS[3] - START_MEM_SORTED + 1;

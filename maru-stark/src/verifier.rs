@@ -13,7 +13,7 @@ use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
 use crate::permutation::PermutationCheckVars;
 use crate::proof::{StarkOpeningSet, StarkProofChallenges, StarkProofWithPublicInputs};
-use crate::public_memory::check_public_memory_pis;
+use crate::public_memory::{check_public_memory_pis, PublicMemoryVars};
 use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly;
 use crate::vars::StarkEvaluationVars;
@@ -111,11 +111,31 @@ where
         next_zs: permutation_zs_next.as_ref().unwrap().clone(),
         permutation_challenge_sets: challenges.permutation_challenge_sets.unwrap(),
     });
+    let public_memory_data = stark.uses_public_memory().then(|| {
+            let public_memory_pis = stark.public_memory_pis().unwrap();
+            let public_memory_cols = S::public_memory_cols().unwrap();
+            let addr_cols_start = public_memory_cols[0];
+            let mem_cols_start = public_memory_cols[1];
+            let addr_sorted_cols_start = public_memory_cols[2];
+            let mem_sorted_cols_start = public_memory_cols[3];
+            PublicMemoryVars {
+                local_cumulative_products: public_memory_zs.as_ref().unwrap().clone(),
+                next_cumulative_products: public_memory_zs_next.as_ref().unwrap().clone(),
+                public_memory_challenges: challenges.public_memory_challenges.unwrap(),
+                public_memory_pis,
+                addr_cols_start,
+                mem_cols_start,
+                addr_sorted_cols_start,
+                mem_sorted_cols_start,
+            }
+        }
+    );
     eval_vanishing_poly::<F, F::Extension, F::Extension, C, S, D, D>(
         &stark,
         config,
         vars,
         permutation_data,
+        public_memory_data,
         &mut consumer,
     );
     let vanishing_polys_zeta = consumer.accumulators();
