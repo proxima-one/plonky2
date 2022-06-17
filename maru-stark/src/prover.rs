@@ -1,7 +1,6 @@
 use std::iter::once;
 
 use anyhow::{ensure, Result};
-use arrayref::array_ref;
 use itertools::Itertools;
 use plonky2::field::extension_field::Extendable;
 use plonky2::field::field_types::Field;
@@ -37,7 +36,8 @@ pub fn prove<F, C, S, const D: usize>(
     stark: S,
     config: &StarkConfig,
     trace_poly_values: Vec<PolynomialValues<F>>,
-    public_inputs: [F; S::PUBLIC_INPUTS],
+    mut public_inputs: [F; S::PUBLIC_INPUTS],
+    public_memory_accesses: Option<&[(F, F)]>,
     timing: &mut TimingTree,
 ) -> Result<StarkProofWithPublicInputs<F, C, D>>
 where
@@ -131,6 +131,25 @@ where
             addr_sorted_columns: &trace_poly_values
                 [public_memory_cols[3]..public_memory_cols[3] + width],
         };
+
+        // set PIs to public memory product for each challenge
+        let public_memory_accesses = public_memory_accesses.unwrap();
+        let public_memory_pis = stark.public_memory_pis().unwrap();
+        assert!(public_memory_challenges.len() == public_memory_pis.len() - 3);
+        let trace_len = 1u64 << degree_bits;
+        let clk_final = public_inputs[public_memory_pis[public_memory_pis.len() - 1]];
+        let num_extra_access_rows = trace_len - clk_final.to_canonical_u64();
+        public_memory_pis[..public_memory_pis.len() - 3]
+            .iter()
+            .zip(public_memory_challenges.iter())
+            .for_each(|(&i, &challenge)| {
+                let PublicMemoryChallenge { alpha, z } = challenge;
+                let num = public_memory_accesses.iter().fold(F::ONE, |p, &(a, v)| p * (z - (a + alpha * v)));
+                let denom = z.exp_u64(num_extra_access_rows * S::public_memory_width() as u64);
+                public_inputs[i] = num * denom.inverse()
+            });
+        
+
         let public_memory_z_polys = compute_public_memory_z_polys::<F, C, S, D>(
             &stark,
             config,

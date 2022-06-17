@@ -143,8 +143,9 @@ pub(crate) fn constrain_state_transition<F: Field, P: PackedField<Scalar = F>>(
 
     // TMP_2 should be 1 if neither current nor next insn is dummy instruction, 0 otherwise
     // degree 2
+    let next_is_dummy_insn = next_row[FLAG_COLS[0]];
     constrainer.constraint_transition(
-        curr_row[TMP_2_COL] - is_not_dummy_insn * (-next_row[FLAG_COLS[0]] + F::ONE),
+        curr_row[TMP_2_COL] - is_not_dummy_insn * (-next_is_dummy_insn + F::ONE),
     );
     // constraint for all pc updates except for conditional jumps
     // ignored for dummy instructions or transition from non-dummy to dummy
@@ -212,13 +213,14 @@ pub(crate) fn constrain_state_transition<F: Field, P: PackedField<Scalar = F>>(
         is_not_dummy_insn * assert_dst_eq_res * (curr_row[DST_MEM_COL] - curr_row[RES_COL]),
     );
 
+    // assert CLK increments for each non-dummy-insn and stays the same for dummy insns
+    constrainer.constraint_transition(
+        is_not_dummy_insn * (next_row[CLK_COL] - curr_row[CLK_COL] - F::ONE)
+        + is_dummy_insn * (next_row[CLK_COL] - curr_row[CLK_COL])
+    );
+
     let is_dummy_access_insn = is_dummy_insn * curr_row[FLAG_COLS[15]];
     let is_dummy_padding_insn = is_dummy_insn * (-curr_row[FLAG_COLS[15]] + F::ONE);
-
-    // ensure clk increments unless it's a dummy padding insn
-    constrainer.constraint_transition(
-        (-is_dummy_padding_insn + F::ONE) * (next_row[CLK_COL] - curr_row[CLK_COL] - F::ONE),
-    );
 
     // make sure memory addresses and values are 0 for dummy access instructions
     constrainer.constraint(is_dummy_access_insn * curr_row[PC_COL]);
@@ -240,6 +242,7 @@ pub(crate) fn constrain_state_transition<F: Field, P: PackedField<Scalar = F>>(
     constrainer.constraint_transition(
         curr_row[TMP_1_COL] - next_row[FLAG_COLS[15]] * next_row[FLAG_COLS[0]],
     );
+
     // degree 3
     constrainer.constraint_transition(
         is_not_dummy_insn * curr_row[TMP_1_COL] * (next_row[RES_COL] - curr_row[PC_COL]),
@@ -273,7 +276,7 @@ pub(crate) fn constrain_boundary_constraints<F, P>(
     constrainer.constraint_first_row(-curr_row[SP_COL] + public_inputs[SP_INITIAL]);
     constrainer.constraint_first_row(curr_row[CLK_COL]);
 
-    // final pc, ap, clk
+    // // final pc, ap, clk
     constrainer.constraint_last_row(-curr_row[RES_COL] + public_inputs[PC_FINAL]);
     constrainer.constraint_last_row(-curr_row[AP_COL] + public_inputs[AP_FINAL]);
     constrainer.constraint_last_row(-curr_row[CLK_COL] + public_inputs[CLK_FINAL]);
