@@ -10,7 +10,7 @@ use crate::permutation::{
     eval_permutation_checks, eval_permutation_checks_circuit, PermutationCheckDataTarget,
     PermutationCheckVars,
 };
-use crate::public_memory::{PublicMemoryVars, eval_public_memory};
+use crate::public_memory::{eval_public_memory, PublicMemoryVars};
 use crate::stark::Stark;
 use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
 
