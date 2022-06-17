@@ -212,95 +212,90 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
     let next_row = next_values;
 
     // make sure sorted addresses are sequential
-    // for i in 1..width {
-    //     constrainer.constraint(
-    //         (curr_row[addr_sorted_cols_start + i] - curr_row[addr_sorted_cols_start + i - 1])
-    //             * (curr_row[addr_sorted_cols_start + i]
-    //                 - curr_row[addr_sorted_cols_start + i - 1]
-    //                 - FE::ONE),
-    //     );
-    // }
-    // constrainer.constraint_transition(
-    //     (next_row[*addr_sorted_cols_start]
-    //         - curr_row[addr_sorted_cols_start + width - 1])
-    //         * (next_row[*addr_sorted_cols_start]
-    //             - curr_row[addr_sorted_cols_start + width - 1]
-    //             - FE::ONE),
-    // );
+    for i in 1..width {
+        constrainer.constraint(
+            (curr_row[addr_sorted_cols_start + i] - curr_row[addr_sorted_cols_start + i - 1])
+                * (curr_row[addr_sorted_cols_start + i]
+                    - curr_row[addr_sorted_cols_start + i - 1]
+                    - FE::ONE),
+        );
+    }
+    constrainer.constraint_transition(
+        (next_row[*addr_sorted_cols_start] - curr_row[addr_sorted_cols_start + width - 1])
+            * (next_row[*addr_sorted_cols_start]
+                - curr_row[addr_sorted_cols_start + width - 1]
+                - FE::ONE),
+    );
 
     // // make sure sorted accesses are single-valued
-    // for i in 1..width {
-    //     constrainer.constraint(
-    //         (curr_row[mem_sorted_cols_start + i] - curr_row[mem_sorted_cols_start + i - 1])
-    //             * (curr_row[addr_sorted_cols_start + i]
-    //                 - curr_row[addr_sorted_cols_start + i - 1]
-    //                 - FE::ONE),
-    //     );
-    // }
-    // constrainer.constraint_transition(
-    //     (next_row[*mem_sorted_cols_start]
-    //         - curr_row[mem_sorted_cols_start + width - 1])
-    //         * (curr_row[*addr_sorted_cols_start]
-    //             - curr_row[addr_sorted_cols_start + width - 1]
-    //             - FE::ONE),
-    // );
+    for i in 1..width {
+        constrainer.constraint(
+            (curr_row[mem_sorted_cols_start + i] - curr_row[mem_sorted_cols_start + i - 1])
+                * (curr_row[addr_sorted_cols_start + i]
+                    - curr_row[addr_sorted_cols_start + i - 1]
+                    - FE::ONE),
+        );
+    }
+    constrainer.constraint_transition(
+        (next_row[*mem_sorted_cols_start] - curr_row[mem_sorted_cols_start + width - 1])
+            * (curr_row[*addr_sorted_cols_start]
+                - curr_row[addr_sorted_cols_start + width - 1]
+                - FE::ONE),
+    );
 
-    // // once for each challenge
-    // // TODO: rewrite using an iterator over cumulative products of size `publc_memory_vars.width()`
-    // for (i, challenge) in public_memory_challenges.iter().enumerate() {
-    //     let z = FE::from_basefield(challenge.z);
-    //     let alpha = FE::from_basefield(challenge.alpha);
-    //     let a = curr_row[*addr_cols_start];
-    //     let v = curr_row[*mem_cols_start];
-    //     let a_sorted = curr_row[*addr_sorted_cols_start];
-    //     let v_sorted = curr_row[*mem_sorted_cols_start];
-    //     let num = -(a + v * alpha) + z;
-    //     let denom = -(a_sorted + v_sorted * alpha) + z;
+    // once for each challenge
+    // TODO: rewrite using an iterator over cumulative products of size `publc_memory_vars.width()`
+    for (i, challenge) in public_memory_challenges.iter().enumerate() {
+        let z = FE::from_basefield(challenge.z);
+        let alpha = FE::from_basefield(challenge.alpha);
+        let a = curr_row[*addr_cols_start];
+        let v = curr_row[*mem_cols_start];
+        let a_sorted = curr_row[*addr_sorted_cols_start];
+        let v_sorted = curr_row[*mem_sorted_cols_start];
+        let num = -(a + v * alpha) + z;
+        let denom = -(a_sorted + v_sorted * alpha) + z;
 
-    //     // permutation / public memory argument
-    //     constrainer.constraint_first_row(local_cumulative_products[width * i] * denom - num);
-    //     for j in 1..width {
-    //         constrainer.constraint(prod_term_constraint!(
-    //             curr_row[addr_cols_start + j],
-    //             curr_row[mem_cols_start + j],
-    //             curr_row[addr_sorted_cols_start + j],
-    //             curr_row[mem_sorted_cols_start + j],
-    //             local_cumulative_products[i * width + j - 1],
-    //             local_cumulative_products[i * width + j],
-    //             FE::from_basefield(challenge.z),
-    //             FE::from_basefield(challenge.alpha)
-    //         ));
-    //     }
-    //     constrainer.constraint_transition(prod_term_constraint!(
-    //         next_row[*addr_cols_start],
-    //         next_row[*mem_cols_start],
-    //         next_row[*addr_sorted_cols_start],
-    //         next_row[*mem_sorted_cols_start],
-    //         local_cumulative_products[(i + 1) * width - 1],
-    //         next_cumulative_products[i * width],
-    //         z,
-    //         alpha
-    //     ));
-        
-    //     // check that product of final cumulative product and public input product is 1
-    //     let pi = vars.public_inputs[public_memory_pis[i]];
-    //     constrainer.constraint_last_row(
-    //         local_cumulative_products[(i + 1) * width - 1] * pi - FE::ONE,
-    //     );
-    // }
+        // permutation / public memory argument
+        constrainer.constraint_first_row(local_cumulative_products[width * i] * denom - num);
+        for j in 1..width {
+            constrainer.constraint(prod_term_constraint!(
+                curr_row[addr_cols_start + j],
+                curr_row[mem_cols_start + j],
+                curr_row[addr_sorted_cols_start + j],
+                curr_row[mem_sorted_cols_start + j],
+                local_cumulative_products[i * width + j - 1],
+                local_cumulative_products[i * width + j],
+                FE::from_basefield(challenge.z),
+                FE::from_basefield(challenge.alpha)
+            ));
+        }
+        constrainer.constraint_transition(prod_term_constraint!(
+            next_row[*addr_cols_start],
+            next_row[*mem_cols_start],
+            next_row[*addr_sorted_cols_start],
+            next_row[*mem_sorted_cols_start],
+            local_cumulative_products[(i + 1) * width - 1],
+            next_cumulative_products[i * width],
+            z,
+            alpha
+        ));
 
-    // // range checks - since we've verified that...
-    // // 1) the sorted addresses are a permutation of the non-sorted addresses
-    // // 2) the sorted addresses are sequential
-    // // we only need to check the first and last addresses correspond to the min and max address respectively.
-    // let rc_min_idx = public_memory_pis[public_memory_pis.len() - 3];
-    // let rc_max_idx = public_memory_pis[public_memory_pis.len() - 2];
-    // let rc_min = vars.public_inputs[rc_min_idx];
-    // let rc_max = vars.public_inputs[rc_max_idx];
-    // constrainer.constraint_first_row(curr_row[*addr_sorted_cols_start] - rc_min);
-    // constrainer.constraint_last_row(
-    //     curr_row[addr_sorted_cols_start + width - 1] - rc_max,
-    // );
+        // check that product of final cumulative product and public input product is 1
+        let pi = vars.public_inputs[public_memory_pis[i]];
+        constrainer
+            .constraint_last_row(local_cumulative_products[(i + 1) * width - 1] * pi - FE::ONE);
+    }
+
+    // range checks - since we've verified that...
+    // 1) the sorted addresses are a permutation of the non-sorted addresses
+    // 2) the sorted addresses are sequential
+    // we only need to check the first and last addresses correspond to the min and max address respectively.
+    let rc_min_idx = public_memory_pis[public_memory_pis.len() - 3];
+    let rc_max_idx = public_memory_pis[public_memory_pis.len() - 2];
+    let rc_min = vars.public_inputs[rc_min_idx];
+    let rc_max = vars.public_inputs[rc_max_idx];
+    constrainer.constraint_first_row(curr_row[*addr_sorted_cols_start] - rc_min);
+    constrainer.constraint_last_row(curr_row[addr_sorted_cols_start + width - 1] - rc_max);
 }
 
 pub(crate) fn check_public_memory_pis<
@@ -321,8 +316,7 @@ pub(crate) fn check_public_memory_pis<
     let num_extra_access_rows = trace_length - clk_final.to_canonical_u64();
 
     for (i, &PublicMemoryChallenge { z, alpha }) in public_memory_challenges.iter().enumerate() {
-        let denom =
-            z.exp_u64(num_extra_access_rows * S::public_memory_width() as u64);
+        let denom = z.exp_u64(num_extra_access_rows * S::public_memory_width() as u64);
         let num = public_memory_accesses
             .iter()
             .fold(F::ONE, |p, &(a, v)| p * (z - (a + alpha * v)));
@@ -331,6 +325,6 @@ pub(crate) fn check_public_memory_pis<
             "public memory PIs given in proof doesn't match public memory trace"
         );
     }
-    
+
     Ok(())
 }

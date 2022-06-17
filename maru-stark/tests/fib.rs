@@ -1,8 +1,8 @@
-use maru_stark::cpu::layout::*;
-use maru_stark::cpu::maru_stark::MaruSTARK;
 use maru_air::memory::MemorySegment;
 use maru_air::trace::{AIRTrace, ExecutionTrace, ExecutionTraceRow};
 use maru_stark::config::StarkConfig;
+use maru_stark::cpu::layout::*;
+use maru_stark::cpu::maru_stark::MaruSTARK;
 use maru_stark::proof::StarkProofWithPublicInputs;
 use maru_stark::prover::prove;
 use maru_stark::recursive_verifier::{
@@ -239,11 +239,8 @@ fn test_fib() -> Result<()> {
     )?;
 
     verify_stark_proof(
-        stark, 
-        proof,
-        &config, 
-        // Some(public_memory_trace.as_slice())
-        None
+        stark, proof, &config, // Some(public_memory_trace.as_slice())
+        None,
     )
 }
 

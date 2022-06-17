@@ -216,7 +216,7 @@ pub(crate) fn constrain_state_transition<F: Field, P: PackedField<Scalar = F>>(
     // assert CLK increments for each non-dummy-insn and stays the same for dummy insns
     constrainer.constraint_transition(
         is_not_dummy_insn * (next_row[CLK_COL] - curr_row[CLK_COL] - F::ONE)
-        + is_dummy_insn * (next_row[CLK_COL] - curr_row[CLK_COL])
+            + is_dummy_insn * (next_row[CLK_COL] - curr_row[CLK_COL]),
     );
 
     let is_dummy_access_insn = is_dummy_insn * curr_row[FLAG_COLS[15]];

@@ -101,5 +101,4 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MaruSTARK<F, 
     //         MEM_SORTED_COLS[0],
     //     ])
     // }
-
 }
