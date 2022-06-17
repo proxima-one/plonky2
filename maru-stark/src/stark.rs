@@ -202,7 +202,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
 
     /// return the PI index for a "public memory product" for each challenge,
     /// followed by the minimum and maximum addresses accessed by the VM
-    /// followed by a PI index for the number of non-padding trace rows,
+    /// followed by a PI index for the number of rows containing "real" accesses (i.e. final CLK of the VM)
     fn public_memory_pis(&self) -> Option<Vec<usize>> {
         None
     }
@@ -216,7 +216,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
 
     /// should only be true for the AIR
     fn uses_public_memory(&self) -> bool {
-        !self.public_memory_pis().is_none() && !Self::public_memory_cols().is_none()
+        self.public_memory_pis().is_some() && Self::public_memory_cols().is_some()
     }
 
     /// The number of permutation argument instances that can be combined into a single constraint.

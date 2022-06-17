@@ -78,4 +78,28 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MaruSTARK<F, 
         // total degree or single variable degree?
         3
     }
+
+    // fn public_memory_width() -> usize {
+    //     4
+    // }
+
+    // fn public_memory_pis(&self) -> Option<Vec<usize>> {
+    //     Some(vec![
+    //         PUBLIC_MEMORY_PRODUCT_0,
+    //         PUBLIC_MEMORY_PRODUCT_1,
+    //         RC_MIN,
+    //         RC_MAX,
+    //         CLK_FINAL
+    //     ])
+    // }
+
+    // fn public_memory_cols() -> Option<[usize; 4]> {
+    //     Some([
+    //         PC_COL,
+    //         PC_MEM_COL,
+    //         ADDR_SORTED_COLS[0],
+    //         MEM_SORTED_COLS[0],
+    //     ])
+    // }
+
 }

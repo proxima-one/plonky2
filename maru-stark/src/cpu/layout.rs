@@ -1,4 +1,4 @@
-pub const NUM_PUBLIC_INPUTS: usize = 8;
+pub const NUM_PUBLIC_INPUTS: usize = 10;
 pub const NUM_COLUMNS: usize =
     INSNS_NUM_COLS + REGISTERS_NUM_COLS + MEM_NUM_COLS + MEM_SORTED_NUM_COLS;
 pub const MAX_ROWS: usize = 1 << 16;
@@ -51,13 +51,13 @@ pub const INSNS_NUM_COLS: usize = FLAG_COLS[FLAG_NUM_COLS - 1] - START_INSNS + 1
 // Register columns
 
 pub const PC_COL: usize = START_REGISTERS;
-pub const SP_COL: usize = PC_COL + 1;
-pub const AP_COL: usize = SP_COL + 1;
-pub const OP0_COL: usize = AP_COL + 1;
+pub const OP0_COL: usize = PC_COL + 1;
 pub const OP1_COL: usize = OP0_COL + 1;
 pub const DST_COL: usize = OP1_COL + 1;
+pub const SP_COL: usize = DST_COL + 1;
+pub const AP_COL: usize = SP_COL + 1;
 // * when insn is a conditional relative jump, row[RES_COL] should contain inv(dst)
-pub const RES_COL: usize = DST_COL + 1;
+pub const RES_COL: usize = AP_COL + 1;
 // * used to reduce the degree of some constraints
 pub const TMP_0_COL: usize = RES_COL + 1;
 pub const TMP_1_COL: usize = TMP_0_COL + 1;
