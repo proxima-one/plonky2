@@ -173,6 +173,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
                 .local_values
                 .iter()
                 .chain(self.permutation_zs.iter().flatten())
+                .chain(self.public_memory_zs.iter().flatten())
                 .chain(&self.quotient_polys)
                 .copied()
                 .collect_vec(),
@@ -182,6 +183,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
                 .next_values
                 .iter()
                 .chain(self.permutation_zs_next.iter().flatten())
+                .chain(self.public_memory_zs_next.iter().flatten())
                 .copied()
                 .collect_vec(),
         };

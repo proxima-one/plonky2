@@ -50,6 +50,11 @@ where
     [(); <<F as Packable>::Packing>::WIDTH]:,
     [(); C::Hasher::HASH_SIZE]:,
 {
+    assert!(
+        stark.uses_public_memory() == public_memory_accesses.is_some(),
+        "`public_memory_accesses` should be `Some` iff `stark` uses public memory"
+    );
+    
     let degree = trace_poly_values[0].len();
     let degree_bits = log2_strict(degree);
     let fri_params = config.fri_params(degree_bits);
@@ -127,19 +132,23 @@ where
         let memory_access_vars = MemoryAccessVars {
             addr_columns: &trace_poly_values[public_memory_cols[0]..public_memory_cols[0] + width],
             value_columns: &trace_poly_values[public_memory_cols[1]..public_memory_cols[1] + width],
-            value_sorted_columns: &trace_poly_values
-                [public_memory_cols[2]..public_memory_cols[2] + width],
             addr_sorted_columns: &trace_poly_values
+                [public_memory_cols[2]..public_memory_cols[2] + width],
+            value_sorted_columns: &trace_poly_values
                 [public_memory_cols[3]..public_memory_cols[3] + width],
         };
 
+        let public_memory_z_polys = compute_public_memory_z_polys::<F, C, S, D>(
+            &stark,
+            config,
+            &memory_access_vars,
+            &public_memory_challenges,
+        );
+        
         // set PIs to public memory product for each challenge
         let public_memory_accesses = public_memory_accesses.unwrap();
         let public_memory_pis = stark.public_memory_pis().unwrap();
         assert!(public_memory_challenges.len() == public_memory_pis.len() - 3);
-        let trace_len = 1u64 << degree_bits;
-        let clk_final = public_inputs[public_memory_pis[public_memory_pis.len() - 1]];
-        let num_extra_access_rows = trace_len - clk_final.to_canonical_u64();
         public_memory_pis[..public_memory_pis.len() - 3]
             .iter()
             .zip(public_memory_challenges.iter())
@@ -148,16 +157,9 @@ where
                 let num = public_memory_accesses
                     .iter()
                     .fold(F::ONE, |p, &(a, v)| p * (z - (a + alpha * v)));
-                let denom = z.exp_u64(num_extra_access_rows * S::public_memory_width() as u64);
+                let denom = z.exp_u64(public_memory_accesses.len() as u64);
                 public_inputs[i] = num * denom.inverse()
             });
-
-        let public_memory_z_polys = compute_public_memory_z_polys::<F, C, S, D>(
-            &stark,
-            config,
-            &memory_access_vars,
-            &public_memory_challenges,
-        );
 
         let public_memory_zs_commitment = timed!(
             timing,
@@ -240,6 +242,7 @@ where
 
     let initial_merkle_trees = once(&trace_commitment)
         .chain(permutation_zs_commitment)
+        .chain(public_memory_zs_commitment)
         .chain(once(&quotient_commitment))
         .collect_vec();
 
