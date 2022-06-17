@@ -276,7 +276,7 @@ pub(crate) fn constrain_boundary_constraints<F, P>(
     constrainer.constraint_first_row(-curr_row[SP_COL] + public_inputs[SP_INITIAL]);
     constrainer.constraint_first_row(curr_row[CLK_COL]);
 
-    // // final pc, ap, clk
+    // final pc, ap, clk
     constrainer.constraint_last_row(-curr_row[RES_COL] + public_inputs[PC_FINAL]);
     constrainer.constraint_last_row(-curr_row[AP_COL] + public_inputs[AP_FINAL]);
     constrainer.constraint_last_row(-curr_row[CLK_COL] + public_inputs[CLK_FINAL]);

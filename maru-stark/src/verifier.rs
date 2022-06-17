@@ -159,6 +159,7 @@ where
 
     let merkle_caps = once(proof.trace_cap)
         .chain(proof.permutation_zs_cap)
+        .chain(proof.public_memory_zs_cap)
         .chain(once(proof.quotient_polys_cap))
         .collect_vec();
 

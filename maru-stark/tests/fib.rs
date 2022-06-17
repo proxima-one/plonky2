@@ -202,27 +202,12 @@ fn test_fib() -> Result<()> {
     type F = <C as GenericConfig<D>>::F;
     type S = MaruSTARK<F, D>;
 
-    let trace = fib_exec::<F, D>(16);
+    let trace = fib_exec::<F, D>(17);
     let trace = AIRTrace::<F, D>::from(trace);
-    let public_memory_trace = trace.get_public_memory_trace();
-
-    let last_row = trace.rows.last().unwrap();
-    // final PC should be in RES_COL. This is enforced because we constrain res <- pc when we add the dummy accesses
-    let final_pc = last_row[RES_COL];
-    // all dummy insns constrained such Athat ap stays the same, so ap at the end should be the same as the final ap
-    // before dummy rows were added
-    let final_ap = last_row[AP_COL];
-
-    let mut public_inputs = [F::ZERO; NUM_PUBLIC_INPUTS];
-    public_inputs[PC_INITIAL] = F::ZERO;
-    public_inputs[PC_FINAL] = final_pc;
-    // bytecode (0th segment) is 7 words long, and should start at the 3rd word of first segment
-    public_inputs[AP_INITIAL] = F::from_canonical_u16(9);
-    public_inputs[AP_FINAL] = final_ap;
-    public_inputs[SP_INITIAL] = F::ZERO;
-    public_inputs[RC_MIN] = F::ZERO;
-    public_inputs[RC_MAX] = last_row[ADDR_SORTED_COLS[3]];
-    public_inputs[CLK_FINAL] = last_row[CLK_COL];
+    let public_memory_trace = trace.get_public_memory();
+    println!("public memory trace: {:#?}", &public_memory_trace);
+    println!("full memory trace: {:#?}", &trace.get_full_memory());
+    let public_inputs = trace.get_public_inputs();
 
     let stark: MaruSTARK<F, D> = trace.to_stark();
     let trace_poly_values = trace_rows_to_poly_values(trace.rows);
@@ -233,14 +218,15 @@ fn test_fib() -> Result<()> {
         &config,
         trace_poly_values,
         public_inputs,
-        // Some(public_memory_trace.as_slice()),
-        None,
+        Some(public_memory_trace.as_slice()),
+        // None,
         &mut TimingTree::default(),
     )?;
 
     verify_stark_proof(
-        stark, proof, &config, // Some(public_memory_trace.as_slice())
-        None,
+        stark, proof, &config,
+        Some(public_memory_trace.as_slice()),
+        // None,
     )
 }
 

@@ -84,23 +84,25 @@ fn compute_public_memory_z_poly_group<F: Field>(
     challenge: &PublicMemoryChallenge<F>,
     memory_access_vars: &MemoryAccessVars<F>,
 ) -> Vec<PolynomialValues<F>> {
-    let &PublicMemoryChallenge { z, alpha } = challenge;
     let mut res = vec![
         PolynomialValues::new(vec![F::ZERO; memory_access_vars.len()]);
         memory_access_vars.width()
     ];
+    let &MemoryAccessVars { addr_columns, value_columns, addr_sorted_columns, value_sorted_columns } = memory_access_vars;
 
-    // public memory argument
-    res[0].values[0] = prod_term(memory_access_vars, 0, 0, challenge);
-    for j in 1..memory_access_vars.width() {
-        res[j].values[0] = prod_term(memory_access_vars, 0, j, challenge) * res[j - 1].values[0];
-    }
-    for i in 1..memory_access_vars.len() {
-        res[0].values[i] = prod_term(memory_access_vars, i, 0, challenge)
-            * res[memory_access_vars.width() - 1].values[i - 1];
-        for j in 1..memory_access_vars.width() {
-            res[j].values[i] =
-                prod_term(memory_access_vars, i, j, challenge) * res[j - 1].values[i - 1];
+    // cumulative products
+    let mut prev_product = F::ONE;
+    for i in 0..memory_access_vars.len() {
+        for j in 0..memory_access_vars.width() {
+            let product = prod_term(
+                addr_columns[j].values[i],
+                value_columns[j].values[i],
+                addr_sorted_columns[j].values[i],
+                value_sorted_columns[j].values[i],
+                challenge
+            ) * prev_product;
+            res[j].values[i] = product;
+            prev_product = product;
         }
     }
 
@@ -108,27 +110,6 @@ fn compute_public_memory_z_poly_group<F: Field>(
 }
 
 fn prod_term<F: Field>(
-    memory_access_vars: &MemoryAccessVars<F>,
-    i: usize,
-    j: usize,
-    challenge: &PublicMemoryChallenge<F>,
-) -> F {
-    let &MemoryAccessVars::<F> {
-        addr_columns,
-        value_columns,
-        addr_sorted_columns,
-        value_sorted_columns,
-    } = memory_access_vars;
-    prod_term_inner(
-        addr_columns[j].values[i],
-        value_columns[j].values[i],
-        addr_sorted_columns[j].values[i],
-        value_sorted_columns[j].values[i],
-        challenge,
-    )
-}
-
-fn prod_term_inner<F: Field>(
     a: F,
     v: F,
     a_sorted: F,
@@ -227,7 +208,7 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
                 - FE::ONE),
     );
 
-    // // make sure sorted accesses are single-valued
+    // make sure sorted accesses are single-valued
     for i in 1..width {
         constrainer.constraint(
             (curr_row[mem_sorted_cols_start + i] - curr_row[mem_sorted_cols_start + i - 1])
@@ -238,7 +219,7 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
     }
     constrainer.constraint_transition(
         (next_row[*mem_sorted_cols_start] - curr_row[mem_sorted_cols_start + width - 1])
-            * (curr_row[*addr_sorted_cols_start]
+            * (next_row[*addr_sorted_cols_start]
                 - curr_row[addr_sorted_cols_start + width - 1]
                 - FE::ONE),
     );
@@ -265,8 +246,8 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
                 curr_row[mem_sorted_cols_start + j],
                 local_cumulative_products[i * width + j - 1],
                 local_cumulative_products[i * width + j],
-                FE::from_basefield(challenge.z),
-                FE::from_basefield(challenge.alpha)
+                z,
+                alpha
             ));
         }
         constrainer.constraint_transition(prod_term_constraint!(
@@ -310,13 +291,10 @@ pub(crate) fn check_public_memory_pis<
     public_memory_accesses: &[(F, F)],
     public_memory_challenges: &[PublicMemoryChallenge<F>],
 ) -> anyhow::Result<()> {
-    let trace_length = 1u64 << proof_with_pis.proof.recover_degree_bits(config);
     let pis = stark.public_memory_pis().unwrap();
-    let clk_final = proof_with_pis.public_inputs[pis[pis.len() - 1]];
-    let num_extra_access_rows = trace_length - clk_final.to_canonical_u64();
 
     for (i, &PublicMemoryChallenge { z, alpha }) in public_memory_challenges.iter().enumerate() {
-        let denom = z.exp_u64(num_extra_access_rows * S::public_memory_width() as u64);
+        let denom = z.exp_u64(public_memory_accesses.len() as u64);
         let num = public_memory_accesses
             .iter()
             .fold(F::ONE, |p, &(a, v)| p * (z - (a + alpha * v)));

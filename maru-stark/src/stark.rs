@@ -100,6 +100,15 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             vec![]
         };
 
+        let public_memory_zs_info = if self.uses_public_memory() {
+            FriPolynomialInfo::from_range(
+                oracle_indices.next().unwrap(),
+                0..config.num_challenges * Self::public_memory_width()
+            )
+        } else {
+            vec![]
+        };
+
         let quotient_info = FriPolynomialInfo::from_range(
             oracle_indices.next().unwrap(),
             0..self.quotient_degree_factor() * config.num_challenges,
@@ -110,13 +119,14 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             polynomials: [
                 trace_info.clone(),
                 permutation_zs_info.clone(),
+                public_memory_zs_info.clone(),
                 quotient_info,
             ]
             .concat(),
         };
         let zeta_next_batch = FriBatchInfo {
             point: zeta.scalar_mul(g),
-            polynomials: [trace_info, permutation_zs_info].concat(),
+            polynomials: [trace_info, permutation_zs_info, public_memory_zs_info].concat(),
         };
         FriInstanceInfo {
             oracles: vec![no_blinding_oracle; oracle_indices.next().unwrap()],
@@ -147,6 +157,15 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             vec![]
         };
 
+        let public_memory_zs_info = if self.uses_public_memory() {
+            FriPolynomialInfo::from_range(
+                oracle_indices.next().unwrap(),
+                0..config.num_challenges * Self::public_memory_width()
+            )
+        } else {
+            vec![]
+        };
+
         let quotient_info = FriPolynomialInfo::from_range(
             oracle_indices.next().unwrap(),
             0..self.quotient_degree_factor() * config.num_challenges,
@@ -157,6 +176,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             polynomials: [
                 trace_info.clone(),
                 permutation_zs_info.clone(),
+                public_memory_zs_info.clone(),
                 quotient_info,
             ]
             .concat(),
@@ -164,7 +184,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         let zeta_next = builder.mul_const_extension(g, zeta);
         let zeta_next_batch = FriBatchInfoTarget {
             point: zeta_next,
-            polynomials: [trace_info, permutation_zs_info].concat(),
+            polynomials: [trace_info, permutation_zs_info, public_memory_zs_info].concat(),
         };
         FriInstanceInfoTarget {
             oracles: vec![no_blinding_oracle; oracle_indices.next().unwrap()],
