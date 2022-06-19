@@ -1,25 +1,18 @@
 //! Cairo's public memory argument in Maru
 use anyhow::ensure;
-use itertools::Itertools;
-use plonky2::field::batch_util::batch_multiply_inplace;
 use plonky2::field::extension_field::{Extendable, FieldExtension};
 use plonky2::field::field_types::Field;
 use plonky2::field::packed_field::PackedField;
 use plonky2::field::polynomial::PolynomialValues;
 use plonky2::hash::hash_types::RichField;
-use plonky2::iop::challenger::{Challenger, RecursiveChallenger};
-use plonky2::iop::ext_target::ExtensionTarget;
-use plonky2::iop::target::Target;
-use plonky2::plonk::circuit_builder::CircuitBuilder;
-use plonky2::plonk::config::{AlgebraicHasher, GenericConfig, Hasher};
-use plonky2::util::reducing::{ReducingFactor, ReducingFactorTarget};
+use plonky2::iop::challenger::Challenger;
+use plonky2::plonk::config::{GenericConfig, Hasher};
 use rayon::prelude::*;
 
-use crate::config::StarkConfig;
-use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
+use crate::constraint_consumer::ConstraintConsumer;
 use crate::proof::StarkProofWithPublicInputs;
 use crate::stark::Stark;
-use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
+use crate::vars::StarkEvaluationVars;
 
 #[derive(Copy, Clone)]
 pub(crate) struct PublicMemoryChallenge<F: Field + Copy> {
@@ -63,8 +56,6 @@ impl<'a, F: Field> MemoryAccessVars<'a, F> {
 
 /// Compute all Z polynomials (for public memory arguments).
 pub(crate) fn compute_public_memory_z_polys<F, C, S, const D: usize>(
-    stark: &S,
-    config: &StarkConfig,
     memory_access_vars: &MemoryAccessVars<F>,
     public_memory_challenges: &Vec<PublicMemoryChallenge<F>>,
 ) -> Vec<PolynomialValues<F>>
@@ -75,7 +66,7 @@ where
 {
     public_memory_challenges
         .into_par_iter()
-        .map(|challenge| compute_public_memory_z_poly_group(&challenge, memory_access_vars))
+        .map(|challenge| compute_public_memory_z_poly_group(challenge, memory_access_vars))
         .flatten_iter()
         .collect()
 }
@@ -157,8 +148,6 @@ where
 }
 
 pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize>(
-    stark: &S,
-    config: &StarkConfig,
     vars: StarkEvaluationVars<FE, P, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
     public_memory_vars: &PublicMemoryVars<F, FE, P, D2>,
     constrainer: &mut ConstraintConsumer<P>,
@@ -183,7 +172,7 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
     } = public_memory_vars;
 
     let StarkEvaluationVars {
-        public_inputs,
+        public_inputs: _,
         local_values,
         next_values,
     } = vars;
@@ -286,7 +275,6 @@ pub(crate) fn check_public_memory_pis<
     S: Stark<F, D>,
 >(
     stark: &S,
-    config: &StarkConfig,
     proof_with_pis: &StarkProofWithPublicInputs<F, C, D>,
     public_memory_accesses: &[(F, F)],
     public_memory_challenges: &[PublicMemoryChallenge<F>],

@@ -42,7 +42,6 @@ where
     if stark.uses_public_memory() {
         check_public_memory_pis(
             &stark,
-            config,
             &proof_with_pis,
             public_memory_accesses.as_ref().unwrap(),
             challenges.public_memory_challenges.as_ref().unwrap(),

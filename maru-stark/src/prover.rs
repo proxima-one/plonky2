@@ -139,8 +139,6 @@ where
         };
 
         let public_memory_z_polys = compute_public_memory_z_polys::<F, C, S, D>(
-            &stark,
-            config,
             &memory_access_vars,
             &public_memory_challenges,
         );
