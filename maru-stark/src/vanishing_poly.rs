@@ -41,11 +41,7 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
         );
     }
     if let Some(public_memory_data) = public_memory_data {
-        eval_public_memory::<F, FE, P, C, S, D, D2>(
-            vars,
-            &public_memory_data,
-            consumer,
-        );
+        eval_public_memory::<F, FE, P, C, S, D, D2>(vars, &public_memory_data, consumer);
     }
 }
 

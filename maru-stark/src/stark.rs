@@ -103,7 +103,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         let public_memory_zs_info = if self.uses_public_memory() {
             FriPolynomialInfo::from_range(
                 oracle_indices.next().unwrap(),
-                0..config.num_challenges * Self::public_memory_width()
+                0..config.num_challenges * Self::public_memory_width(),
             )
         } else {
             vec![]
@@ -160,7 +160,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         let public_memory_zs_info = if self.uses_public_memory() {
             FriPolynomialInfo::from_range(
                 oracle_indices.next().unwrap(),
-                0..config.num_challenges * Self::public_memory_width()
+                0..config.num_challenges * Self::public_memory_width(),
             )
         } else {
             vec![]

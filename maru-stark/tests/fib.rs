@@ -222,7 +222,9 @@ fn test_fib() -> Result<()> {
     )?;
 
     verify_stark_proof(
-        stark, proof, &config,
+        stark,
+        proof,
+        &config,
         Some(public_memory_trace.as_slice()),
         // None,
     )
