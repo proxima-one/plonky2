@@ -23,7 +23,6 @@ pub const START_MEM: usize = START_REGISTERS + REGISTERS_NUM_COLS;
 pub const START_MEM_SORTED: usize = START_MEM + MEM_NUM_COLS;
 
 // Instruction cols
-
 pub const OP0_OFFSET_COL: usize = START_INSNS;
 pub const OP1_OFFSET_COL: usize = OP0_OFFSET_COL + 1;
 pub const DST_OFFSET_COL: usize = OP1_OFFSET_COL + 1;

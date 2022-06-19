@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use plonky2::field::extension_field::{Extendable, FieldExtension};
 use plonky2::field::packed_field::PackedField;
 use plonky2::hash::hash_types::RichField;
@@ -16,16 +18,18 @@ use crate::vars::StarkEvaluationVars;
 
 #[derive(Clone, Debug)]
 pub struct MaruSTARK<F: RichField + Extendable<D>, const D: usize> {
-    public_mem: Vec<(F, F)>,
-    num_padding_insns: u64,
+    f: PhantomData<F>
 }
 
 impl<F: RichField + Extendable<D>, const D: usize> MaruSTARK<F, D> {
-    pub fn new(public_mem: Vec<(F, F)>, num_padding_insns: u64) -> Self {
-        Self {
-            public_mem,
-            num_padding_insns,
-        }
+    pub fn new() -> Self {
+        MaruSTARK { f: PhantomData }
+    }
+}
+
+impl<F: RichField + Extendable<D>, const D: usize> Default for MaruSTARK<F, D> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

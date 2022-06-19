@@ -353,48 +353,6 @@ pub(crate) fn constrain_state_transition_recursively<
     }
 }
 
-pub(crate) fn constrain_memory_trace_recursively<F: RichField + Extendable<D>, const D: usize>(
-    builder: &mut CircuitBuilder<F, D>,
-    curr_row: &[ExtensionTarget<D>; NUM_COLUMNS],
-    next_row: &[ExtensionTarget<D>; NUM_COLUMNS],
-    constrainer: &mut RecursiveConstraintConsumer<F, D>,
-) {
-    // make sure sorted addresses are sequential
-    let mut addr_different_targets = Vec::new();
-    for i in 0..3 {
-        let addr_difference = builder.sub_extension(
-            curr_row[ADDR_SORTED_COLS[i + 1]],
-            curr_row[ADDR_SORTED_COLS[i]],
-        );
-        let addr_different = builder.add_const_extension(addr_difference, -F::ONE);
-        addr_different_targets.push(addr_different);
-        let sorted_addrs_seq_constraint = builder.mul_extension(addr_difference, addr_different);
-        constrainer.constraint(builder, sorted_addrs_seq_constraint);
-    }
-    let addr_difference =
-        builder.sub_extension(next_row[ADDR_SORTED_COLS[0]], curr_row[ADDR_SORTED_COLS[3]]);
-    let addr_different = builder.add_const_extension(addr_difference, -F::ONE);
-    addr_different_targets.push(addr_different);
-    let sorted_addrs_seq_constraint = builder.mul_extension(addr_difference, addr_different);
-    constrainer.constraint(builder, sorted_addrs_seq_constraint);
-
-    // make sure sorted accesses are single-valued
-    for i in 0..3 {
-        let value_same = builder.sub_extension(
-            curr_row[MEM_SORTED_COLS[i + 1]],
-            curr_row[MEM_SORTED_COLS[i]],
-        );
-        let single_valued_constraint = builder.mul_extension(value_same, addr_different_targets[i]);
-        constrainer.constraint(builder, single_valued_constraint);
-    }
-    let value_same =
-        builder.sub_extension(next_row[MEM_SORTED_COLS[0]], curr_row[MEM_SORTED_COLS[3]]);
-    let single_valued_constraint = builder.mul_extension(value_same, addr_different_targets[3]);
-    constrainer.constraint(builder, single_valued_constraint);
-
-    // TODO: Permutation argument and public memory
-}
-
 pub(crate) fn constrain_boundary_constraints_recursively<
     F: RichField + Extendable<D>,
     const D: usize,

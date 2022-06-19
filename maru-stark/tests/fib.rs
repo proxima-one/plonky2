@@ -205,11 +205,9 @@ fn test_fib() -> Result<()> {
     let trace = fib_exec::<F, D>(17);
     let trace = AIRTrace::<F, D>::from(trace);
     let public_memory_trace = trace.get_public_memory();
-    println!("public memory trace: {:#?}", &public_memory_trace);
-    println!("full memory trace: {:#?}", &trace.get_full_memory());
     let public_inputs = trace.get_public_inputs();
 
-    let stark: MaruSTARK<F, D> = trace.to_stark();
+    let stark = MaruSTARK::<F, D>::new();
     let trace_poly_values = trace_rows_to_poly_values(trace.rows);
     let config = StarkConfig::standard_fast_config();
 
