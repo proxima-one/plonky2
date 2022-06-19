@@ -54,7 +54,7 @@ where
         stark.uses_public_memory() == public_memory_accesses.is_some(),
         "`public_memory_accesses` should be `Some` iff `stark` uses public memory"
     );
-    
+
     let degree = trace_poly_values[0].len();
     let degree_bits = log2_strict(degree);
     let fri_params = config.fri_params(degree_bits);
@@ -142,7 +142,7 @@ where
             &memory_access_vars,
             &public_memory_challenges,
         );
-        
+
         // set PIs to public memory product for each challenge
         let public_memory_accesses = public_memory_accesses.unwrap();
         let public_memory_pis = stark.public_memory_pis().unwrap();

@@ -79,7 +79,12 @@ fn compute_public_memory_z_poly_group<F: Field>(
         PolynomialValues::new(vec![F::ZERO; memory_access_vars.len()]);
         memory_access_vars.width()
     ];
-    let &MemoryAccessVars { addr_columns, value_columns, addr_sorted_columns, value_sorted_columns } = memory_access_vars;
+    let &MemoryAccessVars {
+        addr_columns,
+        value_columns,
+        addr_sorted_columns,
+        value_sorted_columns,
+    } = memory_access_vars;
 
     // cumulative products
     let mut prev_product = F::ONE;
@@ -90,7 +95,7 @@ fn compute_public_memory_z_poly_group<F: Field>(
                 value_columns[j].values[i],
                 addr_sorted_columns[j].values[i],
                 value_sorted_columns[j].values[i],
-                challenge
+                challenge,
             ) * prev_product;
             res[j].values[i] = product;
             prev_product = product;

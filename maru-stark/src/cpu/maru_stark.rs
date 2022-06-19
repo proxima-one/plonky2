@@ -18,7 +18,7 @@ use crate::vars::StarkEvaluationVars;
 
 #[derive(Clone, Debug)]
 pub struct MaruSTARK<F: RichField + Extendable<D>, const D: usize> {
-    f: PhantomData<F>
+    f: PhantomData<F>,
 }
 
 impl<F: RichField + Extendable<D>, const D: usize> MaruSTARK<F, D> {
@@ -93,16 +93,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MaruSTARK<F, 
             PUBLIC_MEMORY_PRODUCT_1,
             RC_MIN,
             RC_MAX,
-            CLK_FINAL
+            CLK_FINAL,
         ])
     }
 
     fn public_memory_cols() -> Option<[usize; 4]> {
-        Some([
-            PC_COL,
-            PC_MEM_COL,
-            ADDR_SORTED_COLS[0],
-            MEM_SORTED_COLS[0],
-        ])
+        Some([PC_COL, PC_MEM_COL, ADDR_SORTED_COLS[0], MEM_SORTED_COLS[0]])
     }
 }
