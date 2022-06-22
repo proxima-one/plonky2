@@ -146,8 +146,8 @@ where
         // set PIs to public memory product for each challenge
         let public_memory_accesses = public_memory_accesses.unwrap();
         let public_memory_pis = stark.public_memory_pis().unwrap();
-        assert!(public_memory_challenges.len() == public_memory_pis.len() - 3);
-        public_memory_pis[..public_memory_pis.len() - 3]
+        assert!(public_memory_challenges.len() == public_memory_pis.len() - 2);
+        public_memory_pis[..public_memory_pis.len() - 2]
             .iter()
             .zip(public_memory_challenges.iter())
             .for_each(|(&i, &challenge)| {

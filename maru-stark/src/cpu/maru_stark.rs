@@ -93,7 +93,6 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MaruSTARK<F, 
             PUBLIC_MEMORY_PRODUCT_1,
             RC_MIN,
             RC_MAX,
-            CLK_FINAL,
         ])
     }
 

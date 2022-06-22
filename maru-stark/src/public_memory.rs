@@ -265,8 +265,8 @@ pub(crate) fn eval_public_memory<F, FE, P, C, S, const D: usize, const D2: usize
     // 1) the sorted addresses are a permutation of the non-sorted addresses
     // 2) the sorted addresses are sequential
     // we only need to check the first and last addresses correspond to the min and max address respectively.
-    let rc_min_idx = public_memory_pis[public_memory_pis.len() - 3];
-    let rc_max_idx = public_memory_pis[public_memory_pis.len() - 2];
+    let rc_min_idx = public_memory_pis[public_memory_pis.len() - 2];
+    let rc_max_idx = public_memory_pis[public_memory_pis.len() - 1];
     let rc_min = vars.public_inputs[rc_min_idx];
     let rc_max = vars.public_inputs[rc_max_idx];
     constrainer.constraint_first_row(curr_row[*addr_sorted_cols_start] - rc_min);

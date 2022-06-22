@@ -9,9 +9,8 @@ pub const PC_FINAL: usize = PC_INITIAL + 1;
 pub const AP_INITIAL: usize = PC_FINAL + 1;
 pub const AP_FINAL: usize = AP_INITIAL + 1;
 pub const SP_INITIAL: usize = AP_FINAL + 1;
-pub const CLK_FINAL: usize = SP_INITIAL + 1;
 // ! Only works for a STARK config that uses 2 challenges
-pub const PUBLIC_MEMORY_PRODUCT_0: usize = CLK_FINAL + 1;
+pub const PUBLIC_MEMORY_PRODUCT_0: usize = SP_INITIAL + 1;
 pub const PUBLIC_MEMORY_PRODUCT_1: usize = PUBLIC_MEMORY_PRODUCT_0 + 1;
 pub const RC_MIN: usize = PUBLIC_MEMORY_PRODUCT_1 + 1;
 pub const RC_MAX: usize = RC_MIN + 1;
@@ -63,8 +62,7 @@ pub const TMP_1_COL: usize = TMP_0_COL + 1;
 pub const TMP_2_COL: usize = TMP_1_COL + 1;
 pub const TMP_3_COL: usize = TMP_2_COL + 1;
 pub const TMP_4_COL: usize = TMP_3_COL + 1;
-pub const CLK_COL: usize = TMP_4_COL + 1;
-pub const REGISTERS_NUM_COLS: usize = CLK_COL - START_REGISTERS + 1;
+pub const REGISTERS_NUM_COLS: usize = TMP_4_COL - START_REGISTERS + 1;
 
 // Memory columns for each calculated address
 pub const PC_MEM_COL: usize = START_MEM;

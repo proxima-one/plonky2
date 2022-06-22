@@ -212,13 +212,7 @@ pub(crate) fn constrain_state_transition<F: Field, P: PackedField<Scalar = F>>(
     constrainer.constraint(
         is_not_dummy_insn * assert_dst_eq_res * (curr_row[DST_MEM_COL] - curr_row[RES_COL]),
     );
-
-    // assert CLK increments for each non-dummy-insn and stays the same for dummy insns
-    constrainer.constraint_transition(
-        is_not_dummy_insn * (next_row[CLK_COL] - curr_row[CLK_COL] - F::ONE)
-            + is_dummy_insn * (next_row[CLK_COL] - curr_row[CLK_COL]),
-    );
-
+    
     let is_dummy_access_insn = is_dummy_insn * curr_row[FLAG_COLS[15]];
     let is_dummy_padding_insn = is_dummy_insn * (-curr_row[FLAG_COLS[15]] + F::ONE);
 
@@ -270,14 +264,12 @@ pub(crate) fn constrain_boundary_constraints<F, P>(
     F: Field,
     P: PackedField<Scalar = F>,
 {
-    // intitial pc, ap, sp, clk
+    // intitial pc, ap, sp
     constrainer.constraint_first_row(-curr_row[PC_COL] + public_inputs[PC_INITIAL]);
     constrainer.constraint_first_row(-curr_row[AP_COL] + public_inputs[AP_INITIAL]);
     constrainer.constraint_first_row(-curr_row[SP_COL] + public_inputs[SP_INITIAL]);
-    constrainer.constraint_first_row(curr_row[CLK_COL]);
 
-    // final pc, ap, clk
+    // final pc, ap
     constrainer.constraint_last_row(-curr_row[RES_COL] + public_inputs[PC_FINAL]);
     constrainer.constraint_last_row(-curr_row[AP_COL] + public_inputs[AP_FINAL]);
-    constrainer.constraint_last_row(-curr_row[CLK_COL] + public_inputs[CLK_FINAL]);
 }

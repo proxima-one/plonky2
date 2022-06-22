@@ -222,7 +222,6 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
 
     /// return the PI index for a "public memory product" for each challenge,
     /// followed by the minimum and maximum addresses accessed by the VM
-    /// followed by a PI index for the number of rows containing "real" accesses (i.e. final CLK of the VM)
     fn public_memory_pis(&self) -> Option<Vec<usize>> {
         None
     }
