@@ -12,8 +12,12 @@ pub trait RichField: PrimeField64 + Poseidon {}
 
 impl RichField for GoldilocksField {}
 
+#[cfg(feature = "solana")]
+use borsh::{BorshSerialize, BorshDeserialize, maybestd::io::{Write as BorshWrite, Result as BorshResult}};
+
 /// Represents a ~256 bit hash output.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[serde(bound = "")]
 pub struct HashOut<F: Field> {
     pub elements: [F; 4],
@@ -123,6 +127,23 @@ impl<const N: usize> BytesHash<N> {
 
     pub fn rand() -> Self {
         Self::rand_from_rng(&mut rand::thread_rng())
+    }
+}
+
+#[cfg(feature = "solana")]
+impl<const N: usize> BorshSerialize for BytesHash<N> {
+    fn serialize<W: BorshWrite>(&self, writer: &mut W) -> BorshResult<()> {
+        writer.write(&self.0[..]);
+        Ok(())
+    }
+}
+
+#[cfg(feature = "solana")]
+impl<const N: usize> BorshDeserialize for BytesHash<N> {
+    fn deserialize(buf: &mut &[u8]) -> BorshResult<Self> {
+        let mut res = [0u8; N];
+        res.copy_from_slice(&(*buf)[..N]);
+        Ok(BytesHash(res))
     }
 }
 

@@ -20,6 +20,10 @@ use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::verifier::verify_with_challenges;
 use crate::util::serialization::Buffer;
 
+#[cfg(feature = "solana")]
+use borsh::{BorshSerialize, BorshDeserialize};
+
+#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 #[serde(bound = "")]
 pub struct Proof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> {
@@ -277,6 +281,7 @@ pub struct ProofWithPublicInputsTarget<const D: usize> {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 /// The purported values of each polynomial at a single point.
 pub struct OpeningSet<F: RichField + Extendable<D>, const D: usize> {
     pub constants: Vec<F::Extension>,

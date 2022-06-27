@@ -13,6 +13,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::{Field, PrimeField};
 
+#[cfg(feature = "solana")]
+use borsh::{BorshSerialize, BorshDeserialize};
+
 /// The base field of the secp256k1 elliptic curve.
 ///
 /// Its order is
@@ -22,6 +25,7 @@ use crate::types::{Field, PrimeField};
 ///   = 2**256 - 432420386565659656852420866394968145599
 /// ```
 #[derive(Copy, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 pub struct Secp256K1Scalar(pub [u64; 4]);
 
 fn biguint_from_array(arr: [u64; 4]) -> BigUint {
