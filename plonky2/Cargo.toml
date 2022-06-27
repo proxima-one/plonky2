@@ -30,7 +30,7 @@ serde_cbor = "0.11.1"
 keccak-hash = "0.8.0"
 static_assertions = "1.1.0"
 solana-program = { path = "../../solana/sdk/program", optional = true }
-borsh = { version = "0.9.3", optional = true }
+borsh = { version = "0.9.3", features = ["const-generics"], optional = true }
 
 [dev-dependencies]
 criterion = "0.3.5"

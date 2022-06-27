@@ -116,6 +116,7 @@ pub struct MerkleCapTarget(pub Vec<HashOutTarget>);
 
 /// Hash consisting of a byte array.
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
+#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 pub struct BytesHash<const N: usize>(pub [u8; N]);
 
 impl<const N: usize> BytesHash<N> {
@@ -127,23 +128,6 @@ impl<const N: usize> BytesHash<N> {
 
     pub fn rand() -> Self {
         Self::rand_from_rng(&mut rand::thread_rng())
-    }
-}
-
-#[cfg(feature = "solana")]
-impl<const N: usize> BorshSerialize for BytesHash<N> {
-    fn serialize<W: BorshWrite>(&self, writer: &mut W) -> BorshResult<()> {
-        writer.write(&self.0[..]);
-        Ok(())
-    }
-}
-
-#[cfg(feature = "solana")]
-impl<const N: usize> BorshDeserialize for BytesHash<N> {
-    fn deserialize(buf: &mut &[u8]) -> BorshResult<Self> {
-        let mut res = [0u8; N];
-        res.copy_from_slice(&(*buf)[..N]);
-        Ok(BytesHash(res))
     }
 }
 
