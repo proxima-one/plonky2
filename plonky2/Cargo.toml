@@ -10,6 +10,9 @@ categories = ["cryptography"]
 edition = "2021"
 default-run = "generate_constants"
 
+[features]
+solana = ["dep:solana-program"]
+
 [dependencies]
 plonky2_field = { path = "../field" }
 plonky2_util = { path = "../util" }
@@ -26,6 +29,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_cbor = "0.11.1"
 keccak-hash = "0.8.0"
 static_assertions = "1.1.0"
+solana-program = { path = "../../solana/sdk/program", optional = true }
 
 [dev-dependencies]
 criterion = "0.3.5"

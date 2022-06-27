@@ -1,19 +1,17 @@
 //! Implementation of the Poseidon hash function, as described in
 //! https://eprint.iacr.org/2019/458.pdf
 
-use plonky2_field::extension::{Extendable, FieldExtension};
-use plonky2_field::types::{Field, PrimeField64};
+use plonky2_field::extension_field::{Extendable, FieldExtension};
+use plonky2_field::field_types::{Field, PrimeField64};
+use plonky2_field::goldilocks_field::GoldilocksField;
 use unroll::unroll_for_loops;
 
-use crate::gates::gate::Gate;
-use crate::gates::poseidon::PoseidonGate;
-use crate::gates::poseidon_mds::PoseidonMdsGate;
-use crate::hash::hash_types::{HashOut, RichField};
-use crate::hash::hashing::{compress, hash_n_to_hash_no_pad, PlonkyPermutation, SPONGE_WIDTH};
-use crate::iop::ext_target::ExtensionTarget;
-use crate::iop::target::{BoolTarget, Target};
-use crate::plonk::circuit_builder::CircuitBuilder;
-use crate::plonk::config::{AlgebraicHasher, Hasher};
+pub const SPONGE_WIDTH: usize = 12;
+
+/// A prime order field with the features we need to use it as a base field in our argument system.
+pub trait RichField: PrimeField64 + Poseidon {}
+
+impl RichField for GoldilocksField {}
 
 // The number of full rounds and partial rounds is given by the
 // calc_round_numbers.py script. They happen to be the same for both
@@ -206,30 +204,6 @@ pub trait Poseidon: PrimeField64 {
         res
     }
 
-    /// Recursive version of `mds_row_shf`.
-    fn mds_row_shf_circuit<const D: usize>(
-        builder: &mut CircuitBuilder<Self, D>,
-        r: usize,
-        v: &[ExtensionTarget<D>; WIDTH],
-    ) -> ExtensionTarget<D>
-    where
-        Self: RichField + Extendable<D>,
-    {
-        debug_assert!(r < WIDTH);
-        let mut res = builder.zero_extension();
-
-        for i in 0..WIDTH {
-            let c = Self::from_canonical_u64(<Self as Poseidon>::MDS_MATRIX_CIRC[i]);
-            res = builder.mul_const_add_extension(c, v[(i + r) % WIDTH], res);
-        }
-        {
-            let c = Self::from_canonical_u64(<Self as Poseidon>::MDS_MATRIX_DIAG[r]);
-            res = builder.mul_const_add_extension(c, v[r], res);
-        }
-
-        res
-    }
-
     #[inline(always)]
     #[unroll_for_loops]
     fn mds_layer(state_: &[Self; WIDTH]) -> [Self; WIDTH] {
@@ -266,41 +240,6 @@ pub trait Poseidon: PrimeField64 {
         result
     }
 
-    /// Recursive version of `mds_layer`.
-    fn mds_layer_circuit<const D: usize>(
-        builder: &mut CircuitBuilder<Self, D>,
-        state: &[ExtensionTarget<D>; WIDTH],
-    ) -> [ExtensionTarget<D>; WIDTH]
-    where
-        Self: RichField + Extendable<D>,
-    {
-        // If we have enough routed wires, we will use PoseidonMdsGate.
-        let mds_gate = PoseidonMdsGate::<Self, D>::new();
-        if builder.config.num_routed_wires >= mds_gate.num_wires() {
-            let index = builder.add_gate(mds_gate, vec![]);
-            for i in 0..WIDTH {
-                let input_wire = PoseidonMdsGate::<Self, D>::wires_input(i);
-                builder.connect_extension(state[i], ExtensionTarget::from_range(index, input_wire));
-            }
-            (0..WIDTH)
-                .map(|i| {
-                    let output_wire = PoseidonMdsGate::<Self, D>::wires_output(i);
-                    ExtensionTarget::from_range(index, output_wire)
-                })
-                .collect::<Vec<_>>()
-                .try_into()
-                .unwrap()
-        } else {
-            let mut result = [builder.zero_extension(); WIDTH];
-
-            for r in 0..WIDTH {
-                result[r] = Self::mds_row_shf_circuit(builder, r, state);
-            }
-
-            result
-        }
-    }
-
     #[inline(always)]
     #[unroll_for_loops]
     fn partial_first_constant_layer<F: FieldExtension<D, BaseField = Self>, const D: usize>(
@@ -310,21 +249,6 @@ pub trait Poseidon: PrimeField64 {
             if i < WIDTH {
                 state[i] += F::from_canonical_u64(Self::FAST_PARTIAL_FIRST_ROUND_CONSTANT[i]);
             }
-        }
-    }
-
-    /// Recursive version of `partial_first_constant_layer`.
-    fn partial_first_constant_layer_circuit<const D: usize>(
-        builder: &mut CircuitBuilder<Self, D>,
-        state: &mut [ExtensionTarget<D>; WIDTH],
-    ) where
-        Self: RichField + Extendable<D>,
-    {
-        for i in 0..WIDTH {
-            let c = <Self as Poseidon>::FAST_PARTIAL_FIRST_ROUND_CONSTANT[i];
-            let c = Self::Extension::from_canonical_u64(c);
-            let c = builder.constant_extension(c);
-            state[i] = builder.add_extension(state[i], c);
         }
     }
 
@@ -353,29 +277,6 @@ pub trait Poseidon: PrimeField64 {
                         result[c] += state[r] * t;
                     }
                 }
-            }
-        }
-        result
-    }
-
-    /// Recursive version of `mds_partial_layer_init`.
-    fn mds_partial_layer_init_circuit<const D: usize>(
-        builder: &mut CircuitBuilder<Self, D>,
-        state: &[ExtensionTarget<D>; WIDTH],
-    ) -> [ExtensionTarget<D>; WIDTH]
-    where
-        Self: RichField + Extendable<D>,
-    {
-        let mut result = [builder.zero_extension(); WIDTH];
-
-        result[0] = state[0];
-
-        for r in 1..WIDTH {
-            for c in 1..WIDTH {
-                let t = <Self as Poseidon>::FAST_PARTIAL_ROUND_INITIAL_MATRIX[r - 1][c - 1];
-                let t = Self::Extension::from_canonical_u64(t);
-                let t = builder.constant_extension(t);
-                result[c] = builder.mul_add_extension(t, state[r], result[c]);
             }
         }
         result
@@ -442,36 +343,6 @@ pub trait Poseidon: PrimeField64 {
         result
     }
 
-    /// Recursive version of `mds_partial_layer_fast`.
-    fn mds_partial_layer_fast_circuit<const D: usize>(
-        builder: &mut CircuitBuilder<Self, D>,
-        state: &[ExtensionTarget<D>; WIDTH],
-        r: usize,
-    ) -> [ExtensionTarget<D>; WIDTH]
-    where
-        Self: RichField + Extendable<D>,
-    {
-        let s0 = state[0];
-        let mds0to0 = Self::MDS_MATRIX_CIRC[0] + Self::MDS_MATRIX_DIAG[0];
-        let mut d = builder.mul_const_extension(Self::from_canonical_u64(mds0to0), s0);
-        for i in 1..WIDTH {
-            let t = <Self as Poseidon>::FAST_PARTIAL_ROUND_W_HATS[r][i - 1];
-            let t = Self::Extension::from_canonical_u64(t);
-            let t = builder.constant_extension(t);
-            d = builder.mul_add_extension(t, state[i], d);
-        }
-
-        let mut result = [builder.zero_extension(); WIDTH];
-        result[0] = d;
-        for i in 1..WIDTH {
-            let t = <Self as Poseidon>::FAST_PARTIAL_ROUND_VS[r][i - 1];
-            let t = Self::Extension::from_canonical_u64(t);
-            let t = builder.constant_extension(t);
-            result[i] = builder.mul_add_extension(t, state[0], state[i]);
-        }
-        result
-    }
-
     #[inline(always)]
     #[unroll_for_loops]
     fn constant_layer(state: &mut [Self; WIDTH], round_ctr: usize) {
@@ -495,22 +366,6 @@ pub trait Poseidon: PrimeField64 {
         }
     }
 
-    /// Recursive version of `constant_layer`.
-    fn constant_layer_circuit<const D: usize>(
-        builder: &mut CircuitBuilder<Self, D>,
-        state: &mut [ExtensionTarget<D>; WIDTH],
-        round_ctr: usize,
-    ) where
-        Self: RichField + Extendable<D>,
-    {
-        for i in 0..WIDTH {
-            let c = ALL_ROUND_CONSTANTS[i + WIDTH * round_ctr];
-            let c = Self::Extension::from_canonical_u64(c);
-            let c = builder.constant_extension(c);
-            state[i] = builder.add_extension(state[i], c);
-        }
-    }
-
     #[inline(always)]
     fn sbox_monomial<F: FieldExtension<D, BaseField = Self>, const D: usize>(x: F) -> F {
         // x |--> x^7
@@ -518,18 +373,6 @@ pub trait Poseidon: PrimeField64 {
         let x4 = x2.square();
         let x3 = x * x2;
         x3 * x4
-    }
-
-    /// Recursive version of `sbox_monomial`.
-    fn sbox_monomial_circuit<const D: usize>(
-        builder: &mut CircuitBuilder<Self, D>,
-        x: ExtensionTarget<D>,
-    ) -> ExtensionTarget<D>
-    where
-        Self: RichField + Extendable<D>,
-    {
-        // x |--> x^7
-        builder.exp_u64_extension(x, 7)
     }
 
     #[inline(always)]
@@ -548,18 +391,6 @@ pub trait Poseidon: PrimeField64 {
     ) {
         for i in 0..WIDTH {
             state[i] = Self::sbox_monomial(state[i]);
-        }
-    }
-
-    /// Recursive version of `sbox_layer`.
-    fn sbox_layer_circuit<const D: usize>(
-        builder: &mut CircuitBuilder<Self, D>,
-        state: &mut [ExtensionTarget<D>; WIDTH],
-    ) where
-        Self: RichField + Extendable<D>,
-    {
-        for i in 0..WIDTH {
-            state[i] = <Self as Poseidon>::sbox_monomial_circuit(builder, state[i]);
         }
     }
 
@@ -626,109 +457,3 @@ pub trait Poseidon: PrimeField64 {
     }
 }
 
-pub struct PoseidonPermutation;
-impl<F: RichField> PlonkyPermutation<F> for PoseidonPermutation {
-    #[cfg(not(all(target_os = "solana", feature="solana")))]
-    fn permute(input: [F; SPONGE_WIDTH]) -> [F; SPONGE_WIDTH] {
-        F::poseidon(input)
-    }
-
-    #[cfg(all(target_os = "solana", feature = "solana"))]
-    fn permute(input: [F; SPONGE_WIDTH]) -> [F; SPONGE_WIDTH] {
-       	// SAFETY: transmute is OK here because GoldilocksField is a repr(transparent) newtype over u64
-		// see https://github.com/mir-protocol/plonky2/blob/46df1bb6b202e9bc9b16bdb51ad4c8c81f1df16e/field/src/goldilocks_field.rs#L25-L27 
-        let input: [u64; SPONGE_WIDTH] = unsafe { std::mem::transmute(input) };
-        let res = solana_program::poseidon::poseidon_goldilocks(&input[..]);
-        unsafe { std::mem::transmute(res) }
-    }
-}
-
-/// Poseidon hash function.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct PoseidonHash;
-impl<F: RichField> Hasher<F> for PoseidonHash {
-    const HASH_SIZE: usize = 4 * 8;
-    type Hash = HashOut<F>;
-    type Permutation = PoseidonPermutation;
-    
-    fn hash_no_pad(input: &[F]) -> Self::Hash {
-        hash_n_to_hash_no_pad::<F, Self::Permutation>(input)
-    }
-    
-    fn two_to_one(left: Self::Hash, right: Self::Hash) -> Self::Hash {
-        compress::<F, Self::Permutation>(left, right)
-    }
-}
-
-impl<F: RichField> AlgebraicHasher<F> for PoseidonHash {
-    fn permute_swapped<const D: usize>(
-        inputs: [Target; SPONGE_WIDTH],
-        swap: BoolTarget,
-        builder: &mut CircuitBuilder<F, D>,
-    ) -> [Target; SPONGE_WIDTH]
-    where
-        F: RichField + Extendable<D>,
-    {
-        let gate_type = PoseidonGate::<F, D>::new();
-        let gate = builder.add_gate(gate_type, vec![]);
-
-        let swap_wire = PoseidonGate::<F, D>::WIRE_SWAP;
-        let swap_wire = Target::wire(gate, swap_wire);
-        builder.connect(swap.target, swap_wire);
-
-        // Route input wires.
-        for i in 0..SPONGE_WIDTH {
-            let in_wire = PoseidonGate::<F, D>::wire_input(i);
-            let in_wire = Target::wire(gate, in_wire);
-            builder.connect(inputs[i], in_wire);
-        }
-
-        // Collect output wires.
-        (0..SPONGE_WIDTH)
-            .map(|i| Target::wire(gate, PoseidonGate::<F, D>::wire_output(i)))
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap()
-    }
-}
-
-#[cfg(test)]
-pub(crate) mod test_helpers {
-    use plonky2_field::types::Field;
-
-    use crate::hash::hashing::SPONGE_WIDTH;
-    use crate::hash::poseidon::Poseidon;
-
-    pub(crate) fn check_test_vectors<F: Field>(
-        test_vectors: Vec<([u64; SPONGE_WIDTH], [u64; SPONGE_WIDTH])>,
-    ) where
-        F: Poseidon,
-    {
-        for (input_, expected_output_) in test_vectors.into_iter() {
-            let mut input = [F::ZERO; SPONGE_WIDTH];
-            for i in 0..SPONGE_WIDTH {
-                input[i] = F::from_canonical_u64(input_[i]);
-            }
-            let output = F::poseidon(input);
-            for i in 0..SPONGE_WIDTH {
-                let ex_output = F::from_canonical_u64(expected_output_[i]);
-                assert_eq!(output[i], ex_output);
-            }
-        }
-    }
-
-    pub(crate) fn check_consistency<F: Field>()
-    where
-        F: Poseidon,
-    {
-        let mut input = [F::ZERO; SPONGE_WIDTH];
-        for i in 0..SPONGE_WIDTH {
-            input[i] = F::from_canonical_u64(i as u64);
-        }
-        let output = F::poseidon(input);
-        let output_naive = F::poseidon_naive(input);
-        for i in 0..SPONGE_WIDTH {
-            assert_eq!(output[i], output_naive[i]);
-        }
-    }
-}
