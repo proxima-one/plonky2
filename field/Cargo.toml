@@ -5,7 +5,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-solana = ["dep:borsh"]
+solana = ["dep:borsh", "dep:borsh-derive"]
 
 [dependencies]
 plonky2_util = { path = "../util" }
@@ -16,4 +16,5 @@ rand = "0.8.4"
 serde = { version = "1.0", features = ["derive"] }
 unroll = "0.1.5"
 static_assertions = "1.1.0"
-borsh = { version = "0.9.3", optional = true }
+borsh = { version = "0.9.3", optional = true, features = ["const-generics"] }
+borsh-derive = { version = "0.9.3", optional = true }

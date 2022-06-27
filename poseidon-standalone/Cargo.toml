@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-plonky2_field = { path = "../field" }
+plonky2_field = { path = "../field", features = ["solana"] }
 unroll = "0.1.5"

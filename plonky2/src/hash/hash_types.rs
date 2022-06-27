@@ -13,7 +13,7 @@ pub trait RichField: PrimeField64 + Poseidon {}
 impl RichField for GoldilocksField {}
 
 #[cfg(feature = "solana")]
-use borsh::{BorshSerialize, BorshDeserialize, maybestd::io::{Write as BorshWrite, Result as BorshResult}};
+use borsh::{BorshSerialize, BorshDeserialize};
 
 /// Represents a ~256 bit hash output.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]

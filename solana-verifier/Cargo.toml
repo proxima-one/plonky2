@@ -3,6 +3,12 @@ name = "solana-verifier"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+no-entrypoint = []
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+plonky2 = { path = "../plonky2", features = ["solana"] }
+plonky2_field = { path = "../field", features = ["solana"] }
+solana-program = { path = "../../solana/sdk/program" }

@@ -18,8 +18,12 @@ use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::plonk_common::salt_size;
 use crate::plonk::proof::{FriInferredElements, ProofChallenges};
 
+#[cfg(feature = "solana")]
+use borsh::{BorshSerialize, BorshDeserialize};
+
 /// Evaluations and Merkle proof produced by the prover in a FRI query step.
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[serde(bound = "")]
 pub struct FriQueryStep<F: RichField + Extendable<D>, H: Hasher<F>, const D: usize> {
     pub evals: Vec<F::Extension>,
@@ -35,6 +39,7 @@ pub struct FriQueryStepTarget<const D: usize> {
 /// Evaluations and Merkle proofs of the original set of polynomials,
 /// before they are combined into a composition polynomial.
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[serde(bound = "")]
 pub struct FriInitialTreeProof<F: RichField, H: Hasher<F>> {
     pub evals_proofs: Vec<(Vec<F>, MerkleProof<F, H>)>,
@@ -74,6 +79,7 @@ impl FriInitialTreeProofTarget {
 
 /// Proof for a FRI query round.
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[serde(bound = "")]
 pub struct FriQueryRound<F: RichField + Extendable<D>, H: Hasher<F>, const D: usize> {
     pub initial_trees_proof: FriInitialTreeProof<F, H>,
@@ -99,6 +105,7 @@ pub struct CompressedFriQueryRounds<F: RichField + Extendable<D>, H: Hasher<F>, 
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[serde(bound = "")]
 pub struct FriProof<F: RichField + Extendable<D>, H: Hasher<F>, const D: usize> {
     /// A Merkle cap for each reduced polynomial in the commit phase.

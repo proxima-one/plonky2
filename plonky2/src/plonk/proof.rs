@@ -18,13 +18,13 @@ use crate::iop::target::Target;
 use crate::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData};
 use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::verifier::verify_with_challenges;
-use crate::util::serialization::Buffer;
+use crate::util::serialization::{RoBuffer, Buffer};
 
 #[cfg(feature = "solana")]
 use borsh::{BorshSerialize, BorshDeserialize};
 
-#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[serde(bound = "")]
 pub struct Proof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> {
     /// Merkle cap of LDEs of wire values.
@@ -70,6 +70,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> P
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[serde(bound = "")]
 pub struct ProofWithPublicInputs<
     F: RichField + Extendable<D>,
@@ -112,6 +113,15 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         common_data: &CommonCircuitData<F, C, D>,
     ) -> anyhow::Result<Self> {
         let mut buffer = Buffer::new(bytes);
+        let proof = buffer.read_proof_with_public_inputs(common_data)?;
+        Ok(proof)
+    }
+
+    pub fn from_bytes_slice(
+        bytes: &[u8],
+        common_data: &CommonCircuitData<F, C, D>
+    ) -> anyhow::Result<Self> {
+        let mut buffer = RoBuffer::new(bytes);
         let proof = buffer.read_proof_with_public_inputs(common_data)?;
         Ok(proof)
     }
