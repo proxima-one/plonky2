@@ -12,9 +12,6 @@ use serde::{Deserialize, Serialize};
 use crate::inversion::try_inverse_u64;
 use crate::types::{Field, Field64, PrimeField, PrimeField64};
 
-#[cfg(feature = "solana")]
-use borsh::{BorshSerialize, BorshDeserialize};
-
 const EPSILON: u64 = (1 << 32) - 1;
 
 /// A field selected to have fast reduction.
@@ -26,7 +23,6 @@ const EPSILON: u64 = (1 << 32) - 1;
 ///   = 2**32 * (2**32 - 1) + 1
 /// ```
 #[derive(Copy, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[repr(transparent)]
 pub struct GoldilocksField(pub u64);
 

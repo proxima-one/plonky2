@@ -20,11 +20,7 @@ use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::verifier::verify_with_challenges;
 use crate::util::serialization::{RoBuffer, Buffer};
 
-#[cfg(feature = "solana")]
-use borsh::{BorshSerialize, BorshDeserialize};
-
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[serde(bound = "")]
 pub struct Proof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> {
     /// Merkle cap of LDEs of wire values.
@@ -70,7 +66,6 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> P
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
-#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[serde(bound = "")]
 pub struct ProofWithPublicInputs<
     F: RichField + Extendable<D>,
@@ -291,7 +286,6 @@ pub struct ProofWithPublicInputsTarget<const D: usize> {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
-#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 /// The purported values of each polynomial at a single point.
 pub struct OpeningSet<F: RichField + Extendable<D>, const D: usize> {
     pub constants: Vec<F::Extension>,

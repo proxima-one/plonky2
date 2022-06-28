@@ -10,11 +10,7 @@ use crate::iop::target::{BoolTarget, Target};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::config::{AlgebraicHasher, Hasher};
 
-#[cfg(feature = "solana")]
-use borsh::{BorshSerialize, BorshDeserialize};
-
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
-#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[serde(bound = "")]
 pub struct MerkleProof<F: RichField, H: Hasher<F>> {
     /// The Merkle digest of each sibling subtree, staying from the bottommost layer.

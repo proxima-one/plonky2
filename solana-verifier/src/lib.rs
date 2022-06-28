@@ -28,6 +28,8 @@ pub fn process_instruction(
     // Iterating accounts is safer then indexing
     let accounts_iter = &mut accounts.iter();
 
+    // get circuit data account
+    let circuit_data_account = next_account_info(accounts_iter)?;
     // Get proof account
     let proof_account = next_account_info(accounts_iter)?;
 

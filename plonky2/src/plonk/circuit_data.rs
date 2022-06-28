@@ -12,7 +12,7 @@ use crate::fri::structure::{
     FriBatchInfo, FriBatchInfoTarget, FriInstanceInfo, FriInstanceInfoTarget, FriPolynomialInfo,
 };
 use crate::fri::{FriConfig, FriParams};
-use crate::gates::gate::GateRef;
+use crate::gates::gate::{GateRef, Gate};
 use crate::gates::selectors::SelectorsInfo;
 use crate::hash::hash_types::{MerkleCapTarget, RichField};
 use crate::hash::merkle_tree::MerkleCap;
@@ -281,6 +281,48 @@ pub struct CommonCircuitData<
     /// A digest of the "circuit" (i.e. the instance, minus public inputs), which can be used to
     /// seed Fiat-Shamir.
     pub(crate) circuit_digest: <<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash,
+}
+
+pub struct CommonCircuitDataOwned<
+    F: RichField + Extendable<D>,
+    C: GenericConfig<D, F = F>,
+    const D: usize,
+> {
+    pub config: CircuitConfig,
+
+    pub(crate) fri_params: FriParams,
+
+    pub degree_bits: usize,
+
+    /// The types of gates used in this circuit, along with their prefixes.
+    pub(crate) gates: Vec<Box<dyn Gate<F, D>>>,
+
+    /// Information on the circuit's selector polynomials.
+    pub(crate) selectors_info: SelectorsInfo,
+
+    /// The degree of the PLONK quotient polynomial.
+    pub(crate) quotient_degree_factor: usize,
+
+    /// The largest number of constraints imposed by any gate.
+    pub(crate) num_gate_constraints: usize,
+
+    /// The number of constant wires.
+    pub(crate) num_constants: usize,
+
+    pub(crate) num_virtual_targets: usize,
+
+    pub(crate) num_public_inputs: usize,
+
+    /// The `{k_i}` valued used in `S_ID_i` in Plonk's permutation argument.
+    pub(crate) k_is: Vec<F>,
+
+    /// The number of partial products needed to compute the `Z` polynomials.
+    pub(crate) num_partial_products: usize,
+
+    /// A digest of the "circuit" (i.e. the instance, minus public inputs), which can be used to
+    /// seed Fiat-Shamir.
+    pub(crate) circuit_digest: <<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash,
+        
 }
 
 impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>

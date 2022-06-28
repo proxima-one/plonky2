@@ -13,7 +13,6 @@ use crate::hash::poseidon::PoseidonHash;
 use crate::iop::target::{BoolTarget, Target};
 use crate::plonk::circuit_builder::CircuitBuilder;
 
-#[cfg(not(feature = "solana"))]
 pub trait GenericHashOut<F: RichField>:
     Copy + Clone + Debug + Eq + PartialEq + Send + Sync + Serialize + DeserializeOwned
 {
@@ -23,18 +22,6 @@ pub trait GenericHashOut<F: RichField>:
     fn to_vec(&self) -> Vec<F>;
 }
 
-#[cfg(feature = "solana")]
-use borsh::{BorshSerialize, BorshDeserialize};
-
-#[cfg(feature = "solana")]
-pub trait GenericHashOut<F: RichField>:
-    Copy + Clone + Debug + Eq + PartialEq + Send + Sync + Serialize + DeserializeOwned + BorshSerialize + BorshDeserialize
-{
-    fn to_bytes(&self) -> Vec<u8>;
-    fn from_bytes(bytes: &[u8]) -> Self;
-
-    fn to_vec(&self) -> Vec<F>;
-}
 
 /// Trait for hash functions.
 pub trait Hasher<F: RichField>: Sized + Clone + Debug + Eq + PartialEq {

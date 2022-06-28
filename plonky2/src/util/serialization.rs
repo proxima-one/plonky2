@@ -1337,6 +1337,27 @@ impl<'a> RoBuffer<'a> {
         })
     }
 
+    fn read_fri_proof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(
+        &mut self,
+        common_data: &CommonCircuitData<F, C, D>,
+    ) -> Result<FriProof<F, C::Hasher, D>> {
+        let config = &common_data.config;
+        let commit_phase_merkle_caps = (0..common_data.fri_params.reduction_arity_bits.len())
+            .map(|_| self.read_merkle_cap(config.fri_config.cap_height))
+            .collect::<Result<Vec<_>>>()?;
+        let query_round_proofs = self.read_fri_query_rounds(common_data)?;
+        let final_poly = PolynomialCoeffs::new(
+            self.read_field_ext_vec::<F, D>(common_data.fri_params.final_poly_len())?,
+        );
+        let pow_witness = self.read_field()?;
+        Ok(FriProof {
+            commit_phase_merkle_caps,
+            query_round_proofs,
+            final_poly,
+            pow_witness,
+        })
+    }
+
     fn read_compressed_fri_proof<
         F: RichField + Extendable<D>,
         C: GenericConfig<D, F = F>,

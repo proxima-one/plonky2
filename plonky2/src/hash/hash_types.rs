@@ -12,12 +12,8 @@ pub trait RichField: PrimeField64 + Poseidon {}
 
 impl RichField for GoldilocksField {}
 
-#[cfg(feature = "solana")]
-use borsh::{BorshSerialize, BorshDeserialize};
-
 /// Represents a ~256 bit hash output.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[serde(bound = "")]
 pub struct HashOut<F: Field> {
     pub elements: [F; 4],
@@ -116,7 +112,6 @@ pub struct MerkleCapTarget(pub Vec<HashOutTarget>);
 
 /// Hash consisting of a byte array.
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
-#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 pub struct BytesHash<const N: usize>(pub [u8; N]);
 
 impl<const N: usize> BytesHash<N> {

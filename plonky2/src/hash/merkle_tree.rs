@@ -10,13 +10,9 @@ use crate::hash::merkle_proofs::MerkleProof;
 use crate::plonk::config::GenericHashOut;
 use crate::plonk::config::Hasher;
 
-#[cfg(feature = "solana")]
-use borsh::{BorshSerialize, BorshDeserialize};
-
 /// The Merkle cap of height `h` of a Merkle tree is the `h`-th layer (from the root) of the tree.
 /// It can be used in place of the root to verify Merkle paths, which are `h` elements shorter.
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
-#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[serde(bound = "")]
 pub struct MerkleCap<F: RichField, H: Hasher<F>>(pub Vec<H::Hash>);
 

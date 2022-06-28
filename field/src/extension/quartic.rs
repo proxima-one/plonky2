@@ -12,11 +12,7 @@ use crate::extension::{Extendable, FieldExtension, Frobenius, OEF};
 use crate::ops::Square;
 use crate::types::Field;
 
-#[cfg(feature = "solana")]
-use borsh::{BorshSerialize, BorshDeserialize};
-
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[cfg_attr(feature = "solana", derive(BorshSerialize, BorshDeserialize))]
 #[serde(bound = "")]
 pub struct QuarticExtension<F: Extendable<4>>(pub [F; 4]);
 
