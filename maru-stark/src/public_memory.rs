@@ -1,8 +1,8 @@
 //! Cairo's public memory argument in Maru
 use anyhow::ensure;
-use plonky2::field::extension_field::{Extendable, FieldExtension};
-use plonky2::field::field_types::Field;
-use plonky2::field::packed_field::PackedField;
+use plonky2::field::extension::{Extendable, FieldExtension};
+use plonky2::field::types::Field;
+use plonky2::field::packed::PackedField;
 use plonky2::field::polynomial::PolynomialValues;
 use plonky2::hash::hash_types::RichField;
 use plonky2::iop::challenger::Challenger;
