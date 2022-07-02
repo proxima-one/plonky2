@@ -1094,7 +1094,7 @@ impl Buffer {
 }
 
 #[derive(Debug)]
-pub struct RoBuffer<'a>(Cursor<&'a[u8]>);
+pub struct RoBuffer<'a>(Cursor<&'a [u8]>);
 
 impl<'a> RoBuffer<'a> {
     pub fn new(buffer: &'a [u8]) -> Self {
@@ -1444,7 +1444,7 @@ impl<'a> RoBuffer<'a> {
             public_inputs,
         })
     }
-    
+
     pub fn read_proof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(
         &mut self,
         common_data: &CommonCircuitData<F, C, D>,

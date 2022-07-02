@@ -456,4 +456,3 @@ pub trait Poseidon: PrimeField64 {
         state
     }
 }
-

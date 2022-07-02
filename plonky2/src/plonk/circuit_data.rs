@@ -12,7 +12,7 @@ use crate::fri::structure::{
     FriBatchInfo, FriBatchInfoTarget, FriInstanceInfo, FriInstanceInfoTarget, FriPolynomialInfo,
 };
 use crate::fri::{FriConfig, FriParams};
-use crate::gates::gate::{GateRef, Gate};
+use crate::gates::gate::{Gate, GateRef};
 use crate::gates::selectors::SelectorsInfo;
 use crate::hash::hash_types::{MerkleCapTarget, RichField};
 use crate::hash::merkle_tree::MerkleCap;
@@ -322,7 +322,6 @@ pub struct CommonCircuitDataOwned<
     /// A digest of the "circuit" (i.e. the instance, minus public inputs), which can be used to
     /// seed Fiat-Shamir.
     pub(crate) circuit_digest: <<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash,
-        
 }
 
 impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>

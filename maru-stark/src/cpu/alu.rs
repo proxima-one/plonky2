@@ -1,5 +1,5 @@
-use plonky2::field::types::Field;
 use plonky2::field::packed::PackedField;
+use plonky2::field::types::Field;
 
 use super::layout::*;
 use crate::constraint_consumer::ConstraintConsumer;
@@ -212,7 +212,7 @@ pub(crate) fn constrain_state_transition<F: Field, P: PackedField<Scalar = F>>(
     constrainer.constraint(
         is_not_dummy_insn * assert_dst_eq_res * (curr_row[DST_MEM_COL] - curr_row[RES_COL]),
     );
-    
+
     let is_dummy_access_insn = is_dummy_insn * curr_row[FLAG_COLS[15]];
     let is_dummy_padding_insn = is_dummy_insn * (-curr_row[FLAG_COLS[15]] + F::ONE);
 

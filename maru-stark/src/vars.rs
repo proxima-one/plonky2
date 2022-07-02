@@ -1,5 +1,5 @@
-use plonky2::field::types::Field;
 use plonky2::field::packed::PackedField;
+use plonky2::field::types::Field;
 use plonky2::iop::ext_target::ExtensionTarget;
 
 #[derive(Debug, Copy, Clone)]

@@ -18,7 +18,7 @@ use crate::iop::target::Target;
 use crate::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData};
 use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::verifier::verify_with_challenges;
-use crate::util::serialization::{RoBuffer, Buffer};
+use crate::util::serialization::{Buffer, RoBuffer};
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 #[serde(bound = "")]
@@ -114,7 +114,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
 
     pub fn from_bytes_slice(
         bytes: &[u8],
-        common_data: &CommonCircuitData<F, C, D>
+        common_data: &CommonCircuitData<F, C, D>,
     ) -> anyhow::Result<Self> {
         let mut buffer = RoBuffer::new(bytes);
         let proof = buffer.read_proof_with_public_inputs(common_data)?;

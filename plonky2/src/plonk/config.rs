@@ -22,7 +22,6 @@ pub trait GenericHashOut<F: RichField>:
     fn to_vec(&self) -> Vec<F>;
 }
 
-
 /// Trait for hash functions.
 pub trait Hasher<F: RichField>: Sized + Clone + Debug + Eq + PartialEq {
     /// Size of `Hash` in bytes.

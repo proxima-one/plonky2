@@ -1,3 +1,5 @@
+use plonky2::plonk::{config::PoseidonGoldilocksConfig, proof::ProofWithPublicInputs};
+use plonky2_field::goldilocks_field::GoldilocksField;
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
     entrypoint,
@@ -6,11 +8,6 @@ use solana_program::{
     program_error::ProgramError,
     pubkey::Pubkey,
 };
-use plonky2::plonk::{
-    proof::ProofWithPublicInputs,
-    config::PoseidonGoldilocksConfig,
-};
-use plonky2_field::goldilocks_field::GoldilocksField;
 
 type GoldilocksProofWithPis = ProofWithPublicInputs<GoldilocksField, PoseidonGoldilocksConfig, 2>;
 
@@ -48,9 +45,11 @@ pub fn process_instruction(
 // Sanity tests
 #[cfg(test)]
 mod test {
-    use super::*;
-    use solana_program::clock::Epoch;
     use std::mem;
+
+    use solana_program::clock::Epoch;
+
+    use super::*;
 
     #[test]
     fn test_sanity() {

@@ -6,7 +6,7 @@
 
 use plonky2_field::goldilocks_field::GoldilocksField;
 
-use crate::poseidon::{N_PARTIAL_ROUNDS, Poseidon};
+use crate::poseidon::{Poseidon, N_PARTIAL_ROUNDS};
 
 #[rustfmt::skip]
 impl Poseidon for GoldilocksField {

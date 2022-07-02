@@ -12,6 +12,7 @@
 
 pub use plonky2_field as field;
 
+pub mod buf_verifier;
 pub mod fri;
 pub mod gadgets;
 pub mod gates;

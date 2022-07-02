@@ -628,15 +628,15 @@ pub trait Poseidon: PrimeField64 {
 
 pub struct PoseidonPermutation;
 impl<F: RichField> PlonkyPermutation<F> for PoseidonPermutation {
-    #[cfg(not(all(target_os = "solana", feature="solana")))]
+    #[cfg(not(all(target_os = "solana", feature = "solana")))]
     fn permute(input: [F; SPONGE_WIDTH]) -> [F; SPONGE_WIDTH] {
         F::poseidon(input)
     }
 
     #[cfg(all(target_os = "solana", feature = "solana"))]
     fn permute(input: [F; SPONGE_WIDTH]) -> [F; SPONGE_WIDTH] {
-       	// SAFETY: transmute is OK here because GoldilocksField is a repr(transparent) newtype over u64
-		// see https://github.com/mir-protocol/plonky2/blob/46df1bb6b202e9bc9b16bdb51ad4c8c81f1df16e/field/src/goldilocks_field.rs#L25-L27 
+        // SAFETY: transmute is OK here because GoldilocksField is a repr(transparent) newtype over u64
+        // see https://github.com/mir-protocol/plonky2/blob/46df1bb6b202e9bc9b16bdb51ad4c8c81f1df16e/field/src/goldilocks_field.rs#L25-L27
         let input: [u64; SPONGE_WIDTH] = unsafe { std::mem::transmute(input) };
         let res = solana_program::poseidon::poseidon_goldilocks(&input[..]);
         unsafe { std::mem::transmute(res) }
@@ -650,11 +650,11 @@ impl<F: RichField> Hasher<F> for PoseidonHash {
     const HASH_SIZE: usize = 4 * 8;
     type Hash = HashOut<F>;
     type Permutation = PoseidonPermutation;
-    
+
     fn hash_no_pad(input: &[F]) -> Self::Hash {
         hash_n_to_hash_no_pad::<F, Self::Permutation>(input)
     }
-    
+
     fn two_to_one(left: Self::Hash, right: Self::Hash) -> Self::Hash {
         compress::<F, Self::Permutation>(left, right)
     }
