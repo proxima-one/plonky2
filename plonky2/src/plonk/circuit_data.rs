@@ -12,7 +12,7 @@ use crate::fri::structure::{
     FriBatchInfo, FriBatchInfoTarget, FriInstanceInfo, FriInstanceInfoTarget, FriPolynomialInfo,
 };
 use crate::fri::{FriConfig, FriParams};
-use crate::gates::gate::{Gate, GateRef};
+use crate::gates::gate::{Gate, GateRef, GateBox};
 use crate::gates::selectors::SelectorsInfo;
 use crate::hash::hash_types::{MerkleCapTarget, RichField};
 use crate::hash::merkle_tree::MerkleCap;
@@ -283,6 +283,7 @@ pub struct CommonCircuitData<
     pub(crate) circuit_digest: <<C as GenericConfig<D>>::Hasher as Hasher<F>>::Hash,
 }
 
+#[cfg(feature = "buffer_verifier")]
 pub struct CommonCircuitDataOwned<
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
@@ -295,7 +296,7 @@ pub struct CommonCircuitDataOwned<
     pub degree_bits: usize,
 
     /// The types of gates used in this circuit, along with their prefixes.
-    pub(crate) gates: Vec<Box<dyn Gate<F, D>>>,
+    pub(crate) gates: Vec<GateBox<F, D>>,
 
     /// Information on the circuit's selector polynomials.
     pub(crate) selectors_info: SelectorsInfo,
@@ -327,18 +328,152 @@ pub struct CommonCircuitDataOwned<
 impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
     CommonCircuitData<F, C, D>
 {
-    pub fn to_bytes(&self) -> anyhow::Result<Vec<u8>> {
-        let mut buffer = Buffer::new(Vec::new());
-        buffer.write_common_circuit_data(self)?;
-        Ok(buffer.bytes())
+    pub fn degree(&self) -> usize {
+        1 << self.degree_bits
     }
 
-    pub fn from_bytes(bytes: Vec<u8>) -> anyhow::Result<CommonCircuitData<F, C, D>> {
-        let mut buffer = Buffer::new(bytes);
-        let cd = buffer.read_common_circuit_data()?;
-        Ok(cd)
+    pub fn lde_size(&self) -> usize {
+        1 << (self.degree_bits + self.config.fri_config.rate_bits)
     }
 
+    pub fn lde_generator(&self) -> F {
+        F::primitive_root_of_unity(self.degree_bits + self.config.fri_config.rate_bits)
+    }
+
+    pub fn constraint_degree(&self) -> usize {
+        self.gates
+            .iter()
+            .map(|g| g.0.degree())
+            .max()
+            .expect("No gates?")
+    }
+
+    pub fn quotient_degree(&self) -> usize {
+        self.quotient_degree_factor * self.degree()
+    }
+
+    /// Range of the constants polynomials in the `constants_sigmas_commitment`.
+    pub fn constants_range(&self) -> Range<usize> {
+        0..self.num_constants
+    }
+
+    /// Range of the sigma polynomials in the `constants_sigmas_commitment`.
+    pub fn sigmas_range(&self) -> Range<usize> {
+        self.num_constants..self.num_constants + self.config.num_routed_wires
+    }
+
+    /// Range of the `z`s polynomials in the `zs_partial_products_commitment`.
+    pub fn zs_range(&self) -> Range<usize> {
+        0..self.config.num_challenges
+    }
+
+    /// Range of the partial products polynomials in the `zs_partial_products_commitment`.
+    pub fn partial_products_range(&self) -> RangeFrom<usize> {
+        self.config.num_challenges..
+    }
+
+    pub(crate) fn get_fri_instance(&self, zeta: F::Extension) -> FriInstanceInfo<F, D> {
+        // All polynomials are opened at zeta.
+        let zeta_batch = FriBatchInfo {
+            point: zeta,
+            polynomials: self.fri_all_polys(),
+        };
+
+        // The Z polynomials are also opened at g * zeta.
+        let g = F::Extension::primitive_root_of_unity(self.degree_bits);
+        let zeta_next = g * zeta;
+        let zeta_next_batch = FriBatchInfo {
+            point: zeta_next,
+            polynomials: self.fri_zs_polys(),
+        };
+
+        let openings = vec![zeta_batch, zeta_next_batch];
+        FriInstanceInfo {
+            oracles: FRI_ORACLES.to_vec(),
+            batches: openings,
+        }
+    }
+
+    pub(crate) fn get_fri_instance_target(
+        &self,
+        builder: &mut CircuitBuilder<F, D>,
+        zeta: ExtensionTarget<D>,
+    ) -> FriInstanceInfoTarget<D> {
+        // All polynomials are opened at zeta.
+        let zeta_batch = FriBatchInfoTarget {
+            point: zeta,
+            polynomials: self.fri_all_polys(),
+        };
+
+        // The Z polynomials are also opened at g * zeta.
+        let g = F::primitive_root_of_unity(self.degree_bits);
+        let zeta_next = builder.mul_const_extension(g, zeta);
+        let zeta_next_batch = FriBatchInfoTarget {
+            point: zeta_next,
+            polynomials: self.fri_zs_polys(),
+        };
+
+        let openings = vec![zeta_batch, zeta_next_batch];
+        FriInstanceInfoTarget {
+            oracles: FRI_ORACLES.to_vec(),
+            batches: openings,
+        }
+    }
+
+    fn fri_preprocessed_polys(&self) -> Vec<FriPolynomialInfo> {
+        FriPolynomialInfo::from_range(
+            PlonkOracle::CONSTANTS_SIGMAS.index,
+            0..self.num_preprocessed_polys(),
+        )
+    }
+
+    pub(crate) fn num_preprocessed_polys(&self) -> usize {
+        self.sigmas_range().end
+    }
+
+    fn fri_wire_polys(&self) -> Vec<FriPolynomialInfo> {
+        let num_wire_polys = self.config.num_wires;
+        FriPolynomialInfo::from_range(PlonkOracle::WIRES.index, 0..num_wire_polys)
+    }
+
+    fn fri_zs_partial_products_polys(&self) -> Vec<FriPolynomialInfo> {
+        FriPolynomialInfo::from_range(
+            PlonkOracle::ZS_PARTIAL_PRODUCTS.index,
+            0..self.num_zs_partial_products_polys(),
+        )
+    }
+
+    pub(crate) fn num_zs_partial_products_polys(&self) -> usize {
+        self.config.num_challenges * (1 + self.num_partial_products)
+    }
+
+    fn fri_zs_polys(&self) -> Vec<FriPolynomialInfo> {
+        FriPolynomialInfo::from_range(PlonkOracle::ZS_PARTIAL_PRODUCTS.index, self.zs_range())
+    }
+
+    fn fri_quotient_polys(&self) -> Vec<FriPolynomialInfo> {
+        FriPolynomialInfo::from_range(PlonkOracle::QUOTIENT.index, 0..self.num_quotient_polys())
+    }
+
+    pub(crate) fn num_quotient_polys(&self) -> usize {
+        self.config.num_challenges * self.quotient_degree_factor
+    }
+
+    fn fri_all_polys(&self) -> Vec<FriPolynomialInfo> {
+        [
+            self.fri_preprocessed_polys(),
+            self.fri_wire_polys(),
+            self.fri_zs_partial_products_polys(),
+            self.fri_quotient_polys(),
+        ]
+        .concat()
+    }
+}
+
+#[cfg(feature = "buffer_verifier")]
+impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
+    CommonCircuitDataOwned<F, C, D>
+{
     pub fn degree(&self) -> usize {
         1 << self.degree_bits
     }

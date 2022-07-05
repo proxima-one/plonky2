@@ -11,8 +11,6 @@
 #![feature(stdsimd)]
 
 pub use plonky2_field as field;
-
-pub mod buf_verifier;
 pub mod fri;
 pub mod gadgets;
 pub mod gates;
@@ -20,3 +18,6 @@ pub mod hash;
 pub mod iop;
 pub mod plonk;
 pub mod util;
+
+#[cfg(feature = "buffer_verifier")]
+pub mod buffer_verifier;
