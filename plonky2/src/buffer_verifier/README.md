@@ -57,6 +57,7 @@ The challenges are zeroed initially and written by the first step of the verifie
 `circuit_digest_offset`
 `num_challenges_offset`
 `num_gate_constraints_offset`
+`num_gates_offset`
 `gates_offset`
 `selector_indicies_offset`
 `selector_groups_offset`
@@ -66,7 +67,6 @@ The challenges are zeroed initially and written by the first step of the verifie
 `num_partial_products_offset`
 `quotient_degree_factor_offset`
 `sigmas_cap_offset`
-`fri_instance_oracles_offset`
 `fri_instance_batches_offset`
 `common_data.circuit_digest`
 `common_data.config.num_challenges`
@@ -80,7 +80,6 @@ The challenges are zeroed initially and written by the first step of the verifie
 `common_data.num_partial_products`
 `common_data.quotient_degree_factor`
 `verifier_data.constants_sigmas_cap`
-`fri_instance_info.oracles`
 `fri_isntance_info.batches`
 
 

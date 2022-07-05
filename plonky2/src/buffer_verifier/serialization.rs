@@ -3,12 +3,11 @@ use std::ops::Range;
 use std::io::{
     Result as IoResult,
     Error as IoError,
-    ErrorKind as IoErrorKind,
+    ErrorKind as IoErrorKind, Write, Cursor, Read
 };
-
-use byteorder::{ByteOrder, LittleEndian};
-use plonky2_field::extension::FieldExtension;
-use plonky2_field::types::{Field, PrimeField64};
+use byteorder::{ByteOrder, LittleEndian, ReadBytesExt, WriteBytesExt};
+use plonky2_field::extension::{FieldExtension, Extendable};
+use plonky2_field::types::{Field, PrimeField64, Field64};
 
 use crate::fri::structure::{FriBatchInfo, FriInstanceInfo, FriOracleInfo, FriPolynomialInfo};
 use crate::gates::arithmetic_base::ArithmeticGate;
@@ -29,21 +28,18 @@ use crate::gates::random_access::RandomAccessGate;
 use crate::gates::reducing::ReducingGate;
 use crate::gates::reducing_extension::ReducingExtensionGate;
 use crate::gates::selectors::SelectorsInfo;
+use crate::hash::hash_types::RichField;
 use crate::hash::merkle_tree::MerkleCap;
+use crate::plonk::circuit_data::CommonCircuitData;
 use crate::plonk::config::{GenericConfig, GenericHashOut, Hasher};
+use crate::plonk::plonk_common::{FRI_ORACLES, PlonkOracle};
 
 #[allow(type_alias_bounds)]
 type HashForConfig<C: GenericConfig<D>, const D: usize> =
     <C::Hasher as Hasher<<C as GenericConfig<D>>::F>>::Hash;
 
-pub struct ProofBuf<'a, C: GenericConfig<D>, const D: usize> {
-    buf: &'a [u8],
-    offsets: ProofBufOffsets,
-    _phantom: PhantomData<C>,
-}
-
-pub struct ProofBufMut<'a, C: GenericConfig<D>, const D: usize> {
-    buf: &'a mut [u8],
+pub struct ProofBuf<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> {
+    buf: Buffer<R>,
     offsets: ProofBufOffsets,
     _phantom: PhantomData<C>,
 }
@@ -51,6 +47,7 @@ pub struct ProofBufMut<'a, C: GenericConfig<D>, const D: usize> {
 #[derive(Debug, Clone, Copy)]
 struct ProofBufOffsets {
     len: usize,
+    pis_hash_offset: usize,
     wires_cap_offset: usize,
     zs_pp_cap_offset: usize,
     quotient_polys_cap_offset: usize,
@@ -73,70 +70,32 @@ struct ProofBufOffsets {
     fri_query_indices_offset: usize,
 }
 
-// TODO: check to ensure offsets are valid and return a result
-fn get_proof_buf_offsets<'a>(buf: &'a [u8]) -> (ProofBufOffsets, usize) {
-    let original_len = buf.len();
+// TODO: check to ensure offsets are valid and return a IoResult
+fn get_proof_buf_offsets<R: AsRef<[u8]>>(buf: &mut Buffer<R>) -> IoResult<ProofBufOffsets> {
+    let len = buf.0.read_u64::<LittleEndian>()? as usize;
+    let wires_cap_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let zs_pp_cap_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let quotient_polys_cap_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let constants_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let plonk_sigmas_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let wires_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let plonk_zs_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let pps_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let quotient_polys_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let plonk_zs_next_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let challenge_betas_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let challenge_gammas_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let challenge_alphas_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let challenge_zeta_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_alpha_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_pow_response_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_betas_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_query_indices_offset = buf.0.read_u64::<LittleEndian>()? as usize;
 
-    let len = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let wires_cap_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let zs_pp_cap_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let quotient_polys_cap_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let constants_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let plonk_sigmas_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let wires_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let plonk_zs_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let pps_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let quotient_polys_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let plonk_zs_next_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let challenge_betas_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let challenge_gammas_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let challenge_alphas_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let challenge_zeta_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let fri_alpha_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let fri_pow_response_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let fri_betas_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let fri_query_indices_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    (
+    Ok(
         ProofBufOffsets {
             len,
+            pis_hash_offset: buf.0.position() as usize,
             wires_cap_offset,
             zs_pp_cap_offset,
             quotient_polys_cap_offset,
@@ -155,128 +114,114 @@ fn get_proof_buf_offsets<'a>(buf: &'a [u8]) -> (ProofBufOffsets, usize) {
             fri_pow_response_offset,
             fri_betas_offset,
             fri_query_indices_offset,
-        },
-        original_len - buf.len(),
+        }
     )
 }
 
-impl<'a, C: GenericConfig<D>, const D: usize> ProofBuf<'a, C, D> {
-    pub fn new(buf: &'a [u8]) -> Self {
-        let (offsets, start_offset) = get_proof_buf_offsets(buf);
-        ProofBuf {
-            buf: &buf[start_offset..],
-            offsets,
-            _phantom: PhantomData,
-        }
+impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
+    pub fn new(buf: R) -> IoResult<Self> {
+        let mut buf = Buffer::new(buf);
+        let offsets = get_proof_buf_offsets(&mut buf)?;
+        Ok(
+            ProofBuf {
+                buf,
+                offsets,
+                _phantom: PhantomData,
+            }
+        )
     }
 
-    pub fn read_pis_hash(&self) -> HashForConfig<C, D> {
-        let hash_bytes = &self.buf[..<C as GenericConfig<D>>::Hasher::HASH_SIZE];
-        HashForConfig::<C, D>::from_bytes(hash_bytes)
+    pub fn read_pis_hash(&mut self) -> IoResult<HashForConfig<C, D>> {
+        self.buf.0.set_position(self.offsets.pis_hash_offset as u64);
+        self.buf.read_hash::<C::F, C::Hasher>()
     }
 
-    pub fn read_wires_cap(&self) -> MerkleCap<C::F, C::Hasher> {
-        let width =
-            (self.offsets.zs_pp_cap_offset - self.offsets.wires_cap_offset) / C::Hasher::HASH_SIZE;
-        read_merkle_cap::<C, D>(self.buf, self.offsets.wires_cap_offset, width)
+    pub fn read_wires_cap(&mut self, cap_height: usize) -> IoResult<MerkleCap<C::F, C::Hasher>> {
+        self.buf.0.set_position(self.offsets.wires_cap_offset as u64);
+        self.buf.read_merkle_cap(cap_height)
     }
 
-    pub fn read_zs_pp_cap(&self) -> MerkleCap<C::F, C::Hasher> {
-        let width = (self.offsets.quotient_polys_cap_offset - self.offsets.zs_pp_cap_offset)
-            / C::Hasher::HASH_SIZE;
-        read_merkle_cap::<C, D>(self.buf, self.offsets.zs_pp_cap_offset, width)
+    pub fn read_zs_pp_cap(&mut self, cap_height: usize) -> IoResult<MerkleCap<C::F, C::Hasher>> {
+        self.buf.0.set_position(self.offsets.zs_pp_cap_offset as u64);
+        self.buf.read_merkle_cap(cap_height)
     }
 
-    pub fn read_quotient_polys_cap(&self) -> MerkleCap<C::F, C::Hasher> {
-        let width = (self.offsets.constants_offset - self.offsets.quotient_polys_cap_offset)
-            / C::Hasher::HASH_SIZE;
-        read_merkle_cap::<C, D>(self.buf, self.offsets.quotient_polys_cap_offset, width)
+    pub fn read_quotient_polys_cap(&mut self, cap_height: usize) -> IoResult<MerkleCap<C::F, C::Hasher>> {
+        self.buf.0.set_position(self.offsets.quotient_polys_cap_offset as u64);
+        self.buf.read_merkle_cap(cap_height)
     }
 
-    pub fn read_constants_openings(&self) -> Vec<C::FE> {
-        let len = (self.offsets.plonk_sigmas_offset - self.offsets.constants_offset)
-            / (std::mem::size_of::<u64>() * D);
-        read_field_ext_vec::<C, D>(self.buf, self.offsets.constants_offset, len)
+    pub fn read_constants_openings(&mut self, num_constants: usize) -> IoResult<Vec<C::FE>> {
+        self.buf.0.set_position(self.offsets.constants_offset as u64);
+        self.buf.read_field_ext_vec::<C::F, D>(num_constants)
     }
 
-    pub fn read_plonk_sigmas_openings(&self) -> Vec<C::FE> {
-        let len = (self.offsets.wires_offset - self.offsets.plonk_sigmas_offset)
-            / (std::mem::size_of::<u64>() * D);
-        read_field_ext_vec::<C, D>(self.buf, self.offsets.plonk_sigmas_offset, len)
+    pub fn read_plonk_sigmas_openings(&mut self, num_routed_wires: usize) -> IoResult<Vec<C::FE>> {
+        self.buf.0.set_position(self.offsets.plonk_sigmas_offset as u64);
+        self.buf.read_field_ext_vec::<C::F, D>(num_routed_wires)
     }
 
-    pub fn read_wires_openings(&self) -> Vec<C::FE> {
-        let len = (self.offsets.plonk_zs_offset - self.offsets.wires_offset)
-            / (std::mem::size_of::<u64>() * D);
-        read_field_ext_vec::<C, D>(self.buf, self.offsets.wires_offset, len)
+    pub fn read_wires_openings(&mut self, num_wires: usize) -> IoResult<Vec<C::FE>> {
+        self.buf.0.set_position(self.offsets.wires_offset as u64);
+        self.buf.read_field_ext_vec::<C::F, D>(num_wires)
     }
 
-    pub fn read_plonk_zs_openings(&self) -> Vec<C::FE> {
-        let len = (self.offsets.pps_offset - self.offsets.plonk_zs_offset)
-            / (std::mem::size_of::<u64>() * D);
-        read_field_ext_vec::<C, D>(self.buf, self.offsets.plonk_zs_offset, len)
+    pub fn read_plonk_zs_openings(&mut self, num_challenges: usize) -> IoResult<Vec<C::FE>> {
+        self.buf.0.set_position(self.offsets.plonk_zs_offset as u64);
+        self.buf.read_field_ext_vec::<C::F, D>(num_challenges)
     }
 
-    pub fn read_pps_openings(&self) -> Vec<C::FE> {
-        let len = (self.offsets.quotient_polys_offset - self.offsets.pps_offset)
-            / (std::mem::size_of::<u64>() * D);
-        read_field_ext_vec::<C, D>(self.buf, self.offsets.pps_offset, len)
+    pub fn read_plonk_zs_next_openings(&mut self, num_challenges: usize) -> IoResult<Vec<C::FE>> {
+        self.buf.0.set_position(self.offsets.plonk_zs_next_offset as u64);
+        self.buf.read_field_ext_vec::<C::F, D>(num_challenges)
     }
 
-    pub fn read_quotient_polys_openings(&self) -> Vec<C::FE> {
-        let len = (self.offsets.plonk_zs_next_offset - self.offsets.quotient_polys_offset)
-            / (std::mem::size_of::<u64>() * D);
-        read_field_ext_vec::<C, D>(self.buf, self.offsets.quotient_polys_offset, len)
+    pub fn read_pps_openings(&mut self, num_partial_products: usize, num_challenges: usize) -> IoResult<Vec<C::FE>> {
+        self.buf.0.set_position(self.offsets.pps_offset as u64);
+        self.buf.read_field_ext_vec::<C::F, D>(num_partial_products * num_challenges)
     }
 
-    pub fn read_plonk_zs_next_openings(&self) -> Vec<C::F> {
-        let len = (self.offsets.challenge_betas_offset - self.offsets.plonk_zs_next_offset)
-            / (std::mem::size_of::<u64>() * D);
-        read_field_vec::<C, D>(self.buf, self.offsets.plonk_zs_next_offset, len)
+    pub fn read_quotient_polys_openings(&mut self, quotient_degree_factor: usize, num_challenges: usize) -> IoResult<Vec<C::FE>> {
+        self.buf.0.set_position(self.offsets.quotient_polys_offset as u64);
+        self.buf.read_field_ext_vec::<C::F, D>(quotient_degree_factor * num_challenges)
     }
 
-    pub fn read_challenge_betas(&self) -> Vec<C::F> {
-        let len = (self.offsets.challenge_gammas_offset - self.offsets.challenge_betas_offset)
-            / std::mem::size_of::<u64>();
-        read_field_vec::<C, D>(self.buf, self.offsets.challenge_betas_offset, len)
+    pub fn read_challenge_betas(&mut self, num_challenges: usize) -> IoResult<Vec<C::F>> {
+        self.buf.0.set_position(self.offsets.challenge_betas_offset as u64);
+        self.buf.read_field_vec(num_challenges)
     }
 
-    pub fn read_challenge_gammas(&self) -> Vec<C::F> {
-        let len = (self.offsets.challenge_alphas_offset - self.offsets.challenge_gammas_offset)
-            / std::mem::size_of::<u64>();
-        read_field_vec::<C, D>(self.buf, self.offsets.challenge_gammas_offset, len)
+    pub fn read_challenge_gammas(&mut self, num_challenges: usize) -> IoResult<Vec<C::F>> {
+        self.buf.0.set_position(self.offsets.challenge_gammas_offset as u64);
+        self.buf.read_field_vec(num_challenges)
     }
 
-    pub fn read_challenge_alphas(&self) -> Vec<C::F> {
-        let len = (self.offsets.challenge_zeta_offset - self.offsets.challenge_alphas_offset)
-            / std::mem::size_of::<u64>();
-        read_field_vec::<C, D>(self.buf, self.offsets.challenge_alphas_offset, len)
+    pub fn read_challenge_alphas(&mut self, num_challenges: usize) -> IoResult<Vec<C::F>> {
+        self.buf.0.set_position(self.offsets.challenge_alphas_offset as u64);
+        self.buf.read_field_vec(num_challenges)
     }
 
-    pub fn read_challenge_zeta(&self) -> C::FE {
-        read_field_ext::<C, D>(self.buf, self.offsets.challenge_zeta_offset)
+    pub fn read_challenge_zeta(&mut self) -> IoResult<C::FE> {
+        self.buf.read_field_ext::<C::F, D>()
     }
 
-    pub fn read_fri_alpha(&self) -> C::FE {
-        read_field_ext::<C, D>(self.buf, self.offsets.fri_alpha_offset)
+    pub fn read_fri_alpha(&mut self) -> IoResult<C::FE> {
+        self.buf.0.set_position(self.offsets.fri_alpha_offset as u64);
+        self.buf.read_field_ext::<C::F, D>()
     }
 
-    pub fn read_fri_pow_response(&self) -> C::F {
-        C::F::from_canonical_u64(LittleEndian::read_u64(
-            &self.buf[self.offsets.fri_pow_response_offset..],
-        ))
+    pub fn read_fri_pow_response(&mut self) -> IoResult<C::F> {
+        self.buf.read_field()
     }
 
-    pub fn read_fri_betas(&self) -> Vec<C::FE> {
-        let len = (self.offsets.fri_query_indices_offset - self.offsets.fri_betas_offset)
-            / (std::mem::size_of::<u64>() * D);
-        read_field_ext_vec::<C, D>(self.buf, self.offsets.fri_betas_offset, len)
+    pub fn read_fri_betas(&mut self, fri_reduction_arity_bits_len: usize) -> IoResult<Vec<C::FE>> {
+        self.buf.0.set_position(self.offsets.fri_betas_offset as u64);
+        self.buf.read_field_ext_vec::<C::F, D>(fri_reduction_arity_bits_len)
     }
 
-    pub fn read_fri_query_indices(&self) -> Vec<usize> {
-        let len =
-            (self.offsets.len - self.offsets.fri_query_indices_offset) / std::mem::size_of::<u64>();
-        read_usize_vec(self.buf, self.offsets.fri_query_indices_offset, len)
+    pub fn read_fri_query_indices(&mut self, num_fri_queries: usize) -> IoResult<Vec<usize>> {
+        self.buf.0.set_position(self.offsets.fri_query_indices_offset as u64);
+        self.buf.read_usize_vec(num_fri_queries)
     }
 }
 
@@ -291,133 +236,67 @@ pub struct BufferVerifierChallenges<C: GenericConfig<D>, const D: usize> {
     fri_query_indices: Vec<usize>,
 }
 
-impl<'a, C: GenericConfig<D>, const D: usize> ProofBufMut<'a, C, D> {
-    pub fn new(buf: &'a mut [u8]) -> Self {
-        let (offsets, start_offset) = get_proof_buf_offsets(buf);
-        ProofBufMut {
-            buf: &mut buf[start_offset..],
-            offsets,
-            _phantom: PhantomData,
-        }
+impl<'a, C: GenericConfig<D>, const D: usize> ProofBuf<C, &'a mut [u8], D> {
+    pub fn write_challenges(&mut self, challenges: BufferVerifierChallenges<C, D>) -> IoResult<()> {
+        self.buf.0.set_position(self.offsets.challenge_betas_offset as u64);
+        self.buf.write_field_vec(challenges.betas.as_slice())?;
+
+        self.offsets.challenge_gammas_offset = self.buf.0.position() as usize;
+        self.buf.write_field_vec(challenges.gammas.as_slice())?;
+
+        self.offsets.challenge_alphas_offset = self.buf.0.position() as usize;
+        self.buf.write_field_vec(challenges.alphas.as_slice())?;
+
+        self.offsets.challenge_zeta_offset = self.buf.0.position() as usize;
+        self.buf.write_field_ext::<C::F, D>(challenges.zeta)?;
+
+        self.offsets.fri_alpha_offset = self.buf.0.position() as usize;
+        self.buf.write_field_ext::<C::F, D>(challenges.fri_alpha)?;
+
+        self.offsets.fri_pow_response_offset = self.buf.0.position() as usize;
+        self.buf.write_field(challenges.fri_pow_response)?;
+
+        self.offsets.fri_betas_offset = self.buf.0.position() as usize;
+        self.buf.write_field_ext_vec::<C::F, D>(challenges.fri_betas.as_slice())?;
+
+        self.offsets.fri_query_indices_offset = self.buf.0.position() as usize;
+        self.buf.write_usize_vec(challenges.fri_query_indices.as_slice())?;
+
+        self.offsets.len = self.buf.0.position() as usize;
+        self.set_offsets()?;
+
+        Ok(())
     }
 
-    pub fn as_readonly<'b>(&'a self) -> ProofBuf<'b, C, D>
-    where
-        'a: 'b,
-    {
-        ProofBuf {
-            buf: self.buf,
-            offsets: self.offsets,
-            _phantom: PhantomData,
-        }
-    }
+    pub fn set_offsets(&mut self) -> IoResult<()> {
+        self.buf.0.set_position(0);
 
-    pub fn write_challenges(&mut self, challenges: BufferVerifierChallenges<C, D>) {
-        self.write_challenge_betas(&challenges.betas);
-        self.write_challenge_gammas(&challenges.gammas);
-        self.write_challenge_alphas(&challenges.alphas);
-        self.write_challenge_zeta(challenges.zeta);
-        self.write_fri_alpha(challenges.fri_alpha);
-        self.write_fri_pow_response(challenges.fri_pow_response);
-        self.write_fri_betas(&challenges.fri_betas);
-        self.write_fri_query_indices(&challenges.fri_query_indices);
-    }
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.len as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.wires_cap_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.zs_pp_cap_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.quotient_polys_cap_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.constants_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.plonk_sigmas_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.wires_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.plonk_zs_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.pps_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.quotient_polys_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.plonk_zs_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.challenge_betas_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.challenge_gammas_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.challenge_alphas_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.challenge_zeta_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.fri_alpha_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.fri_pow_response_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.fri_betas_offset as u64)?;
+        self.buf.0.write_u64::<LittleEndian>(self.offsets.fri_query_indices_offset as u64)?;
 
-    fn write_challenge_betas(&mut self, betas: &[C::F]) {
-        self.write_field_vec(self.offsets.challenge_betas_offset, betas);
-        self.offsets.challenge_gammas_offset =
-            self.offsets.challenge_betas_offset + betas.len() * std::mem::size_of::<u64>();
-    }
-
-    fn write_challenge_gammas(&mut self, gammas: &[C::F]) {
-        self.write_field_vec(self.offsets.challenge_gammas_offset, gammas);
-        self.offsets.challenge_alphas_offset =
-            self.offsets.challenge_gammas_offset + gammas.len() * std::mem::size_of::<u64>();
-    }
-
-    fn write_challenge_alphas(&mut self, alphas: &[C::F]) {
-        self.write_field_vec(self.offsets.challenge_alphas_offset, alphas);
-        self.offsets.challenge_zeta_offset =
-            self.offsets.challenge_alphas_offset + alphas.len() * std::mem::size_of::<u64>();
-    }
-
-    fn write_challenge_zeta(&mut self, zeta: C::FE) {
-        self.write_field_ext(self.offsets.challenge_zeta_offset, zeta);
-        self.offsets.fri_alpha_offset =
-            self.offsets.challenge_zeta_offset + std::mem::size_of::<u64>() * D;
-    }
-
-    fn write_fri_alpha(&mut self, alpha: C::FE) {
-        self.write_field_ext(self.offsets.fri_alpha_offset, alpha);
-        self.offsets.fri_pow_response_offset =
-            self.offsets.fri_alpha_offset + std::mem::size_of::<u64>() * D;
-    }
-
-    fn write_fri_pow_response(&mut self, pow_response: C::F) {
-        let buf = &mut self.buf[self.offsets.fri_pow_response_offset..];
-        LittleEndian::write_u64(buf, pow_response.to_canonical_u64());
-        self.offsets.fri_betas_offset =
-            self.offsets.fri_pow_response_offset + std::mem::size_of::<u64>();
-    }
-
-    fn write_fri_betas(&mut self, fri_betas: &[C::FE]) {
-        self.write_field_ext_vec(self.offsets.fri_betas_offset, fri_betas);
-        self.offsets.fri_query_indices_offset =
-            self.offsets.fri_betas_offset + std::mem::size_of::<u64>() * D * fri_betas.len();
-    }
-
-    fn write_fri_query_indices(&mut self, fri_query_indices: &[usize]) {
-        self.write_usize_vec(self.offsets.fri_query_indices_offset, fri_query_indices);
-        self.offsets.len = self.offsets.fri_query_indices_offset
-            + std::mem::size_of::<u64>() * fri_query_indices.len();
-    }
-
-    fn write_field_ext_vec(&mut self, mut offset: usize, fri_betas: &[C::FE]) {
-        for i in 0..fri_betas.len() {
-            self.write_field_ext(offset, fri_betas[i]);
-            offset += std::mem::size_of::<u64>() * D;
-        }
-    }
-
-    fn write_field_vec(&mut self, offset: usize, elems: &[C::F]) {
-        let mut buf = &mut self.buf[offset..];
-        for elem in elems {
-            LittleEndian::write_u64(
-                &mut buf[0..std::mem::size_of::<u64>()],
-                elem.to_canonical_u64(),
-            );
-            buf = &mut buf[std::mem::size_of::<u64>()..];
-        }
-    }
-
-    fn write_usize_vec(&mut self, offset: usize, elems: &[usize]) {
-        let mut buf = &mut self.buf[offset..];
-        for elem in elems {
-            LittleEndian::write_u64(&mut buf[0..std::mem::size_of::<u64>()], *elem as u64);
-            buf = &mut buf[std::mem::size_of::<u64>()..];
-        }
-    }
-
-    fn write_field_ext(&mut self, offset: usize, elem: C::FE) {
-        let buf = &mut self.buf[offset..];
-        let basefield_arr = elem.to_basefield_array();
-        for i in 0..D {
-            LittleEndian::write_u64(
-                &mut buf[i * std::mem::size_of::<u64>()..],
-                basefield_arr[i].to_canonical_u64(),
-            );
-        }
+        Ok(())
     }
 }
 
-pub struct CircuitBuf<'a, C: GenericConfig<D>, const D: usize> {
-    buf: &'a [u8],
-    offsets: CircuitBufOffsets,
-    _phantom: PhantomData<C>,
-}
-
-pub struct CircuitBufMut<'a, C: GenericConfig<D>, const D: usize> {
-    buf: &'a mut [u8],
+pub struct CircuitBuf<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> {
+    buf: Buffer<R>,
     offsets: CircuitBufOffsets,
     _phantom: PhantomData<C>,
 }
@@ -437,59 +316,26 @@ pub struct CircuitBufOffsets {
     quotient_degree_factor_offset: usize,
     sigmas_cap_offset: usize,
     // these offsets are initially set to `sigmas_cap_offset` and is updated via "circuit initialization" method
-    fri_instance_oracles_offset: usize,
     fri_instance_batches_offset: usize,
 }
 
-fn get_circuit_buf_offsets<'a>(buf: &'a [u8]) -> (CircuitBufOffsets, usize) {
-    let original_len = buf.len();
+fn get_circuit_buf_offsets<R: AsRef<[u8]>>(buf: &mut Buffer<R>) -> IoResult<CircuitBufOffsets> {
+    let len = buf.0.read_u64::<LittleEndian>()? as usize;
+    let circuit_digest_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let num_challenges_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let num_gate_constraints_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let gates_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let selector_indices_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let selector_groups_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let degree_bits_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let num_routed_wires_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let k_is_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let num_partial_products_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let quotient_degree_factor_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let sigmas_cap_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_instance_batches_offset = buf.0.read_u64::<LittleEndian>()? as usize;
 
-    let len = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let circuit_digest_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let num_challenges_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let num_gate_constraints_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let gates_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let selector_indices_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let selector_groups_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let degree_bits_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let num_routed_wires_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let k_is_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let num_partial_products_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let quotient_degree_factor_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let sigmas_cap_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let fri_instance_oracles_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    let fri_instance_batches_offset = LittleEndian::read_u64(buf) as usize;
-    let buf = &buf[std::mem::size_of::<u64>()..];
-
-    (
+    Ok(
         CircuitBufOffsets {
             len,
             circuit_digest_offset,
@@ -504,139 +350,142 @@ fn get_circuit_buf_offsets<'a>(buf: &'a [u8]) -> (CircuitBufOffsets, usize) {
             num_partial_products_offset,
             quotient_degree_factor_offset,
             sigmas_cap_offset,
-            fri_instance_oracles_offset,
             fri_instance_batches_offset,
-        },
-        original_len - buf.len(),
+        }
     )
 }
 
-impl<'a, C: GenericConfig<D>, const D: usize> CircuitBuf<'a, C, D> {
-    pub fn new(buf: &'a [u8]) -> Self {
-        let (offsets, start_offset) = get_circuit_buf_offsets(buf);
-        CircuitBuf {
-            buf: &buf[start_offset..],
-            offsets,
-            _phantom: PhantomData,
-        }
-    }
-
-    pub fn read_circuit_digest(&self) -> HashForConfig<C, D> {
-        let hash_bytes = &self.buf[..<C as GenericConfig<D>>::Hasher::HASH_SIZE];
-        HashForConfig::<C, D>::from_bytes(hash_bytes)
-    }
-
-    pub fn read_num_challenges(&self) -> usize {
-        LittleEndian::read_u64(&self.buf[self.offsets.num_challenges_offset..]) as usize
-    }
-
-    pub fn read_num_gate_constraints(&self) -> usize {
-        LittleEndian::read_u64(&self.buf[self.offsets.num_gate_constraints_offset..]) as usize
-    }
-
-    pub fn read_selectors_info(&self) -> SelectorsInfo {
-        let len = (self.offsets.selector_groups_offset - self.offsets.selector_indices_offset)
-            / std::mem::size_of::<u64>();
-        let selector_indices = read_usize_vec(self.buf, self.offsets.selector_indices_offset, len);
-
-        let len = (self.offsets.degree_bits_offset - self.offsets.selector_groups_offset)
-            / (std::mem::size_of::<u64>() * 2);
-        let groups = read_range_vec(self.buf, self.offsets.selector_groups_offset, len);
-
-        SelectorsInfo {
-            selector_indices,
-            groups,
-        }
-    }
-
-    pub fn read_degree_bits(&self) -> usize {
-        LittleEndian::read_u64(&self.buf[self.offsets.degree_bits_offset..]) as usize
-    }
-
-    pub fn read_num_routed_wires(&self) -> usize {
-        LittleEndian::read_u64(&self.buf[self.offsets.num_routed_wires_offset..]) as usize
-    }
-
-    pub fn read_k_is(&self) -> Vec<C::F> {
-        let len = (self.offsets.num_partial_products_offset - self.offsets.k_is_offset)
-            / std::mem::size_of::<u64>();
-        read_field_vec::<C, D>(self.buf, self.offsets.k_is_offset, len)
-    }
-
-    pub fn read_num_partial_products(&self) -> usize {
-        LittleEndian::read_u64(&self.buf[self.offsets.num_partial_products_offset..]) as usize
-    }
-
-    pub fn read_quotient_degree_factor(&self) -> usize {
-        LittleEndian::read_u64(&self.buf[self.offsets.quotient_degree_factor_offset..]) as usize
-    }
-
-    pub fn read_sigmas_cap(&self) -> MerkleCap<C::F, C::Hasher> {
-        let len = (self.offsets.sigmas_cap_offset - self.offsets.quotient_degree_factor_offset)
-            / std::mem::size_of::<u64>();
-        read_merkle_cap::<C, D>(self.buf, self.offsets.quotient_degree_factor_offset, len)
-    }
-
-    pub fn read_fri_instance(&self) -> FriInstanceInfo<C::F, D> {
-        let len = (self.offsets.fri_instance_batches_offset
-            - self.offsets.fri_instance_oracles_offset)
-            / std::mem::size_of::<u8>();
-        let blinding_vec = read_bool_vec(self.buf, self.offsets.fri_instance_oracles_offset, len);
-        let oracles = blinding_vec
-            .into_iter()
-            .map(|blinding| FriOracleInfo { blinding })
-            .collect();
-
-        let num_batches =
-            LittleEndian::read_u64(&self.buf[self.offsets.fri_instance_batches_offset..]) as usize;
-        let mut offset = self.offsets.fri_instance_batches_offset + std::mem::size_of::<u64>();
-        let mut batches = Vec::with_capacity(num_batches);
-        for _ in 0..num_batches {
-            let point = read_field_ext::<C, D>(self.buf, offset);
-            offset += std::mem::size_of::<u64>() * D;
-
-            let num_polys = LittleEndian::read_u64(&self.buf[offset..]) as usize;
-            offset += std::mem::size_of::<u64>();
-
-            let mut polynomials = Vec::with_capacity(num_polys);
-            for _ in 0..num_polys {
-                let oracle_index = LittleEndian::read_u64(&self.buf[offset..]) as usize;
-                offset += std::mem::size_of::<u64>();
-
-                let polynomial_index = LittleEndian::read_u64(&self.buf[offset..]) as usize;
-                offset += std::mem::size_of::<u64>();
-
-                polynomials.push(FriPolynomialInfo {
-                    oracle_index,
-                    polynomial_index,
-                });
+impl<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> CircuitBuf<C, R, D> {
+    pub fn new(buf: R) -> IoResult<Self> {
+        let mut buf = Buffer::new(buf);
+        let offsets = get_circuit_buf_offsets(&mut buf)?;
+        Ok(
+            CircuitBuf {
+                buf,
+                offsets,
+                _phantom: PhantomData,
             }
-
-            batches.push(FriBatchInfo { point, polynomials });
-        }
-
-        FriInstanceInfo { oracles, batches }
+        )
     }
 
-    pub fn read_gates(&self) -> IoResult<Vec<GateBox<C::F, D>>> {
-        let mut offset = self.offsets.gates_offset;
-        let num_gates = LittleEndian::read_u64(&self.buf[offset..]) as usize;
-        offset += 1;
+    pub fn read_circuit_digest(&mut self) -> IoResult<HashForConfig<C, D>> {
+        self.buf.0.set_position(self.offsets.circuit_digest_offset as u64);
+        self.buf.read_hash::<C::F, C::Hasher>()
+    }
+
+    pub fn read_num_challenges(&mut self) -> IoResult<usize> {
+        self.buf.0.set_position(self.offsets.num_challenges_offset as u64);
+        Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
+    }
+
+    pub fn read_num_gate_constraints(&mut self) -> IoResult<usize> {
+        self.buf.0.set_position(self.offsets.num_gate_constraints_offset as u64);
+        Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
+    }
+
+    pub fn read_selectors_info(&mut self) -> IoResult<SelectorsInfo> {
+        self.buf.0.set_position(self.offsets.selector_indices_offset as u64);
+        let indices_len = self.buf.0.read_u64::<LittleEndian>()? as usize;
+        let selector_indices = self.buf.read_usize_vec(indices_len)?;
+
+        let groups_len = self.buf.0.read_u64::<LittleEndian>()? as usize;
+        let groups = self.buf.read_range_vec(groups_len)?;
+
+        Ok(
+            SelectorsInfo {
+                selector_indices,
+                groups,
+            }
+        )
+    }
+
+    pub fn read_gates(&mut self) -> IoResult<Vec<GateBox<C::F, D>>> {
+        self.buf.0.set_position(self.offsets.gates_offset as u64);
+        let num_gates = self.buf.0.read_u64::<LittleEndian>()? as usize;
 
         let mut gates = Vec::with_capacity(num_gates);
         for _ in 0..num_gates {
-            let tag = self.buf[offset];
-            offset += 1;
-
-            let len = LittleEndian::read_u64(&self.buf[offset..]) as usize; 
-            offset += std::mem::size_of::<u64>();
-            
-            let gate = read_gate::<C, D>(&self.buf[offset..len], tag)?;
-            offset += len;
+            let gate = self.buf.read_gate::<C, D>()?;
             gates.push(gate);
         }
 
         Ok(gates)
+    }
+
+    pub fn read_degree_bits(&mut self) -> IoResult<usize> {
+        self.buf.0.set_position(self.offsets.degree_bits_offset as u64);
+        Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
+    }
+
+    pub fn read_num_routed_wires(&mut self) -> IoResult<usize> {
+        self.buf.0.set_position(self.offsets.num_routed_wires_offset as u64);
+        Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
+    }
+
+    pub fn read_k_is(&mut self, num_routed_wires: usize) -> IoResult<Vec<C::F>> {
+        self.buf.0.set_position(self.offsets.k_is_offset as u64);
+        self.buf.read_field_vec(num_routed_wires)
+    }
+
+    pub fn read_num_partial_products(&mut self) -> IoResult<usize> {
+        self.buf.0.set_position(self.offsets.num_partial_products_offset as u64);
+        Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
+    }
+
+    pub fn read_quotient_degree_factor(&mut self) -> IoResult<usize> {
+        self.buf.0.set_position(self.offsets.quotient_degree_factor_offset as u64);
+        Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
+    }
+
+    pub fn read_sigmas_cap(&mut self, cap_height: usize) -> IoResult<MerkleCap<C::F, C::Hasher>> {
+        self.buf.0.set_position(self.offsets.sigmas_cap_offset as u64);
+        self.buf.read_merkle_cap(cap_height)
+    }
+
+    pub fn read_fri_instance(&mut self, num_constants: usize, num_wires: usize, num_routed_wires: usize, num_challenges: usize, num_partial_products: usize, quotient_degree_factor: usize, degree_bits: usize, plonk_zeta: C::FE) -> IoResult<FriInstanceInfo<C::F, D>> {
+        self.buf.0.set_position(self.offsets.fri_instance_batches_offset as u64);
+
+        let fri_preprocessed_polys = FriPolynomialInfo::from_range(
+            PlonkOracle::CONSTANTS_SIGMAS.index,
+            0..num_constants + num_routed_wires
+        );
+        let fri_wire_polys = FriPolynomialInfo::from_range(
+            PlonkOracle::WIRES.index,
+            0..num_wires
+        );
+        let fri_zs_partial_products_polys = FriPolynomialInfo::from_range(
+            PlonkOracle::ZS_PARTIAL_PRODUCTS.index,
+            0..num_challenges * (1 + num_partial_products)
+        );
+        let fri_quotient_polys = FriPolynomialInfo::from_range(
+            PlonkOracle::QUOTIENT.index,
+            0..num_challenges * quotient_degree_factor
+        );
+        let all_fri_polynomials = [
+            fri_preprocessed_polys,
+            fri_wire_polys,
+            fri_zs_partial_products_polys,
+            fri_quotient_polys
+        ].concat();
+        let zeta_batch = FriBatchInfo {
+            point: plonk_zeta,
+            polynomials: all_fri_polynomials
+        };
+
+        let g = C::FE::primitive_root_of_unity(degree_bits);
+        let zeta_next = g * plonk_zeta;
+        let fri_zs_polys = FriPolynomialInfo::from_range(
+            PlonkOracle::ZS_PARTIAL_PRODUCTS.index,
+            0..num_challenges
+        );
+        let zeta_next_batch = FriBatchInfo {
+            point: zeta_next,
+            polynomials: fri_zs_polys
+        };
+
+        let batches = vec![zeta_batch, zeta_next_batch];
+
+        Ok(FriInstanceInfo { oracles: FRI_ORACLES.to_vec(), batches })
     }
 }
 
@@ -670,75 +519,7 @@ pub fn read_field_ext<C: GenericConfig<D>, const D: usize>(buf: &[u8], offset: u
     C::FE::from_basefield_array(basefield_arr)
 }
 
-pub fn read_range(buf: &[u8], offset: usize) -> Range<usize> {
-    let start = LittleEndian::read_u64(&buf[offset..]) as usize;
-    let end = LittleEndian::read_u64(&buf[offset + std::mem::size_of::<u64>()..]) as usize;
-    Range { start, end }
-}
 
-pub fn read_bool(buf: &[u8], offset: usize) -> bool {
-    !(buf[offset] == 0)
-}
-
-pub fn read_field_ext_vec<C: GenericConfig<D>, const D: usize>(
-    buf: &[u8],
-    mut offset: usize,
-    len: usize,
-) -> Vec<C::FE> {
-    let mut res = Vec::with_capacity(len);
-    for _ in 0..len {
-        let field_ext = read_field_ext::<C, D>(buf, offset);
-        res.push(field_ext);
-        offset += std::mem::size_of::<u64>() * D;
-    }
-    res
-}
-
-pub fn read_field_vec<C: GenericConfig<D>, const D: usize>(
-    buf: &[u8],
-    offset: usize,
-    len: usize,
-) -> Vec<C::F> {
-    let mut res = Vec::with_capacity(len);
-    let buf = &buf[offset..];
-    for i in 0..len {
-        res.push(C::F::from_canonical_u64(LittleEndian::read_u64(
-            &buf[i * std::mem::size_of::<u64>()..],
-        )));
-    }
-
-    res
-}
-
-pub fn read_usize_vec(buf: &[u8], offset: usize, len: usize) -> Vec<usize> {
-    let mut res = Vec::with_capacity(len);
-    let buf = &buf[offset..];
-    for i in 0..len {
-        res.push(LittleEndian::read_u64(&buf[i * std::mem::size_of::<u64>()..]) as usize);
-    }
-
-    res
-}
-
-pub fn read_range_vec(buf: &[u8], offset: usize, len: usize) -> Vec<Range<usize>> {
-    let mut res = Vec::with_capacity(len);
-    let buf = &buf[offset..];
-    for i in 0..len {
-        res.push(read_range(buf, i * std::mem::size_of::<u64>() * 2));
-    }
-
-    res
-}
-
-pub fn read_bool_vec(buf: &[u8], offset: usize, len: usize) -> Vec<bool> {
-    let mut res = Vec::with_capacity(len);
-    let buf = &buf[offset..];
-    for i in 0..len {
-        res.push(read_bool(buf, i * std::mem::size_of::<u8>()));
-    }
-
-    res
-}
 
 macro_rules! base_sum_match_statement {
     ( $matched_base:expr, $buf:expr, $( $base:expr ),* ) => {
@@ -906,5 +687,175 @@ fn gate_kind_tag(gate_kind: GateKind) -> u8 {
         GateKind::RandomAccess => RANDOM_ACCESS_TAG,
         GateKind::ReducingExt => REDUCING_EXT_TAG,
         GateKind::Reducing => REDUCING_TAG,
+    }
+}
+
+pub struct Buffer<R: AsRef<[u8]>>(pub(crate) Cursor<R>);
+
+impl<R: AsRef<[u8]>> Buffer<R> {
+    pub fn new(buffer: R) -> Self {
+        Self(Cursor::new(buffer))
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.get_ref().as_ref().len()
+    }
+
+    pub fn bytes(&self) -> Vec<u8> {
+        self.0.get_ref().as_ref().to_vec()
+    }
+    
+    pub fn read_range(&mut self) -> IoResult<Range<usize>> {
+        let start = self.0.read_u64::<LittleEndian>()? as usize;
+        let end = self.0.read_u64::<LittleEndian>()? as usize;
+        Ok(Range { start, end })
+    }
+    
+    pub fn read_bool(&mut self) -> IoResult<bool> {
+        Ok(self.0.read_u8()? != 0)
+    }
+
+    fn read_field<F: Field64>(&mut self) -> IoResult<F> {
+        Ok(F::from_canonical_u64(self.0.read_u64::<LittleEndian>()?))
+    }
+
+    fn read_field_ext<F: RichField + Extendable<D>, const D: usize>(
+        &mut self,
+    ) -> IoResult<F::Extension> {
+        let mut arr = [F::ZERO; D];
+        for a in arr.iter_mut() {
+            *a = self.read_field()?;
+        }
+        Ok(<F::Extension as FieldExtension<D>>::from_basefield_array(
+            arr,
+        ))
+    }
+
+    fn read_hash<F: RichField, H: Hasher<F>>(&mut self) -> IoResult<H::Hash> {
+        let mut buf = vec![0; H::HASH_SIZE];
+        self.0.read_exact(&mut buf)?;
+        Ok(H::Hash::from_bytes(&buf))
+    }
+
+    fn read_merkle_cap<F: RichField, H: Hasher<F>>(
+        &mut self,
+        cap_height: usize,
+    ) -> IoResult<MerkleCap<F, H>> {
+        let cap_length = 1 << cap_height;
+        Ok(MerkleCap(
+            (0..cap_length)
+                .map(|_| self.read_hash::<F, H>())
+                .collect::<IoResult<Vec<_>>>()?,
+        ))
+    }
+
+    pub fn read_field_vec<F: Field64>(&mut self, length: usize) -> IoResult<Vec<F>> {
+        (0..length)
+            .map(|_| self.read_field())
+            .collect::<IoResult<Vec<_>>>()
+    }
+
+    fn read_field_ext_vec<F: RichField + Extendable<D>, const D: usize>(
+        &mut self,
+        length: usize,
+    ) -> IoResult<Vec<F::Extension>> {
+        (0..length)
+            .map(|_| self.read_field_ext::<F, D>())
+            .collect::<IoResult<Vec<_>>>()
+    }
+
+    pub fn read_bool_vec(&mut self, len: usize) -> IoResult<Vec<bool>> {
+        let mut res = Vec::with_capacity(len);
+        for i in 0..len {
+            res.push(self.read_bool()?);
+        }
+    
+        Ok(res)
+    }
+
+    pub fn read_usize_vec(&mut self, len: usize) -> IoResult<Vec<usize>> {
+        let mut res = Vec::with_capacity(len);
+        for i in 0..len {
+            res.push(self.0.read_u64::<LittleEndian>()? as usize);
+        }
+    
+        Ok(res)
+    }
+    
+    pub fn read_range_vec(&mut self, len: usize) -> IoResult<Vec<Range<usize>>> {
+        let mut res = Vec::with_capacity(len);
+        for i in 0..len {
+            res.push(self.read_range()?);
+        }
+   
+        Ok(res)
+    }
+
+    pub fn read_gate<C: GenericConfig<D>, const D: usize>(&mut self) -> IoResult<GateBox<C::F, D>> {
+        let tag = self.0.read_u8()?;
+        let len = self.0.read_u64::<LittleEndian>()? as usize;
+        let gate = read_gate::<C, D>(self.0.get_ref().as_ref(), tag)?;
+        self.0.set_position(len as u64 + self.0.position());
+
+        Ok(gate)
+    }
+
+}
+
+impl<'a> Buffer<&'a mut [u8]> {
+    fn write_field<F: PrimeField64>(&mut self, x: F) -> IoResult<()> {
+        self.0.write_u64::<LittleEndian>(x.to_canonical_u64())
+    }
+
+    fn write_field_ext<F: RichField + Extendable<D>, const D: usize>(
+        &mut self,
+        x: F::Extension,
+    ) -> IoResult<()> {
+        for &a in &x.to_basefield_array() {
+            self.write_field(a)?;
+        }
+        Ok(())
+    }
+
+    fn write_hash<F: RichField, H: Hasher<F>>(&mut self, h: H::Hash) -> IoResult<()> {
+        self.0.write_all(&h.to_bytes())
+    }
+
+    fn write_merkle_cap<F: RichField, H: Hasher<F>>(
+        &mut self,
+        cap: &MerkleCap<F, H>,
+    ) -> IoResult<()> {
+        for &a in &cap.0 {
+            self.write_hash::<F, H>(a)?;
+        }
+        Ok(())
+    }
+
+    pub fn write_field_vec<F: PrimeField64>(&mut self, v: &[F]) -> IoResult<()> {
+        for &a in v {
+            self.write_field(a)?;
+        }
+        Ok(())
+    }
+    
+    fn write_field_ext_vec<F: RichField + Extendable<D>, const D: usize>(
+        &mut self,
+        v: &[F::Extension],
+    ) -> IoResult<()> {
+        for &a in v {
+            self.write_field_ext::<F, D>(a)?;
+        }
+        Ok(())
+    }
+
+    fn write_usize_vec(
+        &mut self,
+        v: &[usize]
+    ) -> IoResult<()> {
+        for &a in v {
+            self.0.write_u64::<LittleEndian>(a as u64)?;
+        }
+
+        Ok(())
     }
 }

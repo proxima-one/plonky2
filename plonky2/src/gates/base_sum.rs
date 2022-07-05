@@ -10,6 +10,7 @@ use plonky2_field::types::{Field, Field64};
 use super::gate::GateBox;
 #[cfg(feature = "buffer_verifier")]
 use crate::buffer_verifier::serialization::GateKind;
+
 use crate::gates::gate::Gate;
 use crate::gates::packed_util::PackedEvaluableBase;
 use crate::gates::util::StridedConstraintConsumer;
