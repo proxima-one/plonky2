@@ -10,6 +10,8 @@ use crate::iop::generator::WitnessGenerator;
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBaseBatch};
 use crate::util::serialization::Buffer;
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
 
 /// A gate which does nothing.
 pub struct NoopGate;
@@ -23,12 +25,14 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for NoopGate {
         GateKind::Noop
     }
 
-    fn serialize(&self, _dst: &mut Buffer) -> IoResult<()> {
-        Ok(())
+    #[cfg(feature = "buffer_verifier")]
+    fn serialize(&self, _dst: &mut [u8]) -> IoResult<usize> {
+        Ok(0)
     }
 
-    fn deserialize(_src: &mut Buffer) -> IoResult<Self> {
-        Ok(Self)
+    #[cfg(feature = "buffer_verifier")]
+    fn deserialize(_src: &[u8]) -> IoResult<GateBox<F, D>> {
+        Ok(GateBox::new(Self))
     }
 
     fn eval_unfiltered(&self, _vars: EvaluationVars<F, D>) -> Vec<F::Extension> {

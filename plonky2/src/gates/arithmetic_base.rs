@@ -18,8 +18,11 @@ use crate::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
     EvaluationVarsBasePacked,
 };
-use crate::util::serialization::Buffer;
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
 
+#[cfg(feature = "buffer_verifier")]
+use byteorder::{ByteOrder, LittleEndian};
 /// A gate which can perform a weighted multiply-add, i.e. `result = c0 x y + c1 z`. If the config
 /// supports enough routed wires, it can support several such operations in one gate.
 #[derive(Debug, Clone)]
@@ -64,13 +67,16 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for ArithmeticGate
         GateKind::ArithmeticBase
     }
 
-    fn serialize(&self, dst: &mut Buffer) -> IoResult<()> {
-        dst.write_usize(self.num_ops)
+    #[cfg(feature = "buffer_verifier")]
+    fn serialize(&self, dst: &mut [u8]) -> IoResult<usize> {
+        let bytes = LittleEndian::write_u64(dst, self.num_ops as u64);
+        Ok(std::mem::size_of::<u64>())
     }
 
-    fn deserialize(src: &mut Buffer) -> IoResult<Self> {
-        let num_ops = src.read_usize()?;
-        Ok(Self { num_ops })
+    #[cfg(feature = "buffer_verifier")]
+    fn deserialize(src: &[u8]) -> IoResult<GateBox<F, D>> {
+        let num_ops = LittleEndian::read_u64(src) as usize;
+        Ok(GateBox::new(Self { num_ops }))
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {

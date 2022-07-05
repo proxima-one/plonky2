@@ -20,7 +20,11 @@ use crate::iop::wire::Wire;
 use crate::iop::witness::{PartitionWitness, Witness};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
-use crate::util::serialization::Buffer;
+
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
+#[cfg(feature = "buffer_verifier")]
+use byteorder::{ByteOrder, LittleEndian};
 
 /// Interpolation gate with constraints of degree at most `1<<subgroup_bits`.
 /// `eval_unfiltered_recursively` uses less gates than `LowDegreeInterpolationGate`.
@@ -95,13 +99,16 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D>
         GateKind::Interpolation
     }
 
-    fn serialize(&self, dst: &mut Buffer) -> IoResult<()> {
-        dst.write_usize(self.subgroup_bits)
+    #[cfg(feature = "buffer_verifier")]
+    fn serialize(&self, dst: &mut [u8]) -> IoResult<usize> {
+        LittleEndian::write_u64(dst, self.subgroup_bits as u64);
+        Ok(std::mem::size_of::<u64>())
     }
 
-    fn deserialize(src: &mut Buffer) -> IoResult<Self> {
-        let subgroup_bits = src.read_usize()?;
-        Ok(Self::new(subgroup_bits))
+    #[cfg(feature = "buffer_verifier")]
+    fn deserialize(src: &[u8]) -> IoResult<GateBox<F, D>> {
+        let subgroup_bits = LittleEndian::read_u64(src) as usize;
+        Ok(GateBox::new(Self::new(subgroup_bits)))
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {

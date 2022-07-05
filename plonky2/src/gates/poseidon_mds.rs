@@ -20,6 +20,8 @@ use crate::iop::witness::{PartitionWitness, Witness};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
 use crate::util::serialization::Buffer;
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
 
 #[derive(Debug)]
 pub struct PoseidonMdsGate<F: RichField + Extendable<D> + Poseidon, const D: usize> {
@@ -127,12 +129,14 @@ impl<F: RichField + Extendable<D> + Poseidon, const D: usize> Gate<F, D> for Pos
         GateKind::PoseidonMds
     }
 
-    fn serialize(&self, _dst: &mut Buffer) -> IoResult<()> {
-        Ok(())
+    #[cfg(feature = "buffer_verifier")]
+    fn serialize(&self, _dst: &mut [u8]) -> IoResult<usize> {
+        Ok(0)
     }
 
-    fn deserialize(_src: &mut Buffer) -> IoResult<Self> {
-        Ok(PoseidonMdsGate::new())
+    #[cfg(feature = "buffer_verifier")]
+    fn deserialize(_src: &[u8]) -> IoResult<GateBox<F, D>> {
+        Ok(GateBox::new(PoseidonMdsGate::new()))
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {

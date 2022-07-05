@@ -15,7 +15,11 @@ use crate::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
     EvaluationVarsBasePacked,
 };
-use crate::util::serialization::Buffer;
+
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
+#[cfg(feature = "buffer_verifier")]
+use byteorder::{ByteOrder, LittleEndian};
 
 /// A gate which takes a single constant parameter and outputs that value.
 #[derive(Copy, Clone, Debug)]
@@ -44,13 +48,16 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for ConstantGate {
         GateKind::Constant
     }
 
-    fn serialize(&self, dst: &mut Buffer) -> IoResult<()> {
-        dst.write_usize(self.num_consts)
+    #[cfg(feature = "buffer_verifier")]
+    fn serialize(&self, dst: &mut [u8]) -> IoResult<usize> {
+        LittleEndian::write_u64(dst, self.num_consts as u64);
+        Ok(std::mem::size_of::<u64>())
     }
 
-    fn deserialize(src: &mut Buffer) -> IoResult<Self> {
-        let num_consts = src.read_usize()?;
-        Ok(Self { num_consts })
+    #[cfg(feature = "buffer_verifier")]
+    fn deserialize(src: &[u8]) -> IoResult<GateBox<F, D>> {
+        let num_consts = LittleEndian::read_u64(src) as usize;
+        Ok(GateBox::new(ConstantGate { num_consts }))
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {

@@ -22,7 +22,11 @@ use crate::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
     EvaluationVarsBasePacked,
 };
-use crate::util::serialization::Buffer;
+
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
+#[cfg(feature = "buffer_verifier")]
+use byteorder::{ByteOrder, LittleEndian};
 
 // TODO: replace/merge this gate with `ComparisonGate`.
 
@@ -95,15 +99,18 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for AssertLessThan
         GateKind::AssertLe
     }
 
-    fn serialize(&self, dst: &mut Buffer) -> IoResult<()> {
-        dst.write_usize(self.num_bits)?;
-        dst.write_usize(self.num_chunks)
+    #[cfg(feature = "buffer_verifier")]
+    fn serialize(&self, dst: &mut [u8]) -> IoResult<usize> {
+        LittleEndian::write_u64(dst, self.num_bits as u64);
+        LittleEndian::write_u64(dst, self.num_chunks as u64);
+        Ok(std::mem::size_of::<u64>() * 2)
     }
 
-    fn deserialize(src: &mut Buffer) -> IoResult<Self> {
-        let num_bits = src.read_usize()?;
-        let num_chunks = src.read_usize()?;
-        Ok(Self::new(num_bits, num_chunks))
+    #[cfg(feature = "buffer_verifier")]
+    fn deserialize(src: &[u8]) -> IoResult<GateBox<F, D>> {
+        let num_bits = LittleEndian::read_u64(src) as usize;
+        let num_chunks = LittleEndian::read_u64(src) as usize;
+        Ok(GateBox::new(Self::new(num_bits, num_chunks)))
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {

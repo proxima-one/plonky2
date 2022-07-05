@@ -22,7 +22,11 @@ use crate::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
     EvaluationVarsBasePacked,
 };
-use crate::util::serialization::Buffer;
+
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
+#[cfg(feature = "buffer_verifier")]
+use byteorder::{ByteOrder, LittleEndian};
 
 /// A gate for checking that a particular element of a list matches a given value.
 #[derive(Copy, Clone, Debug)]
@@ -109,18 +113,20 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for RandomAccessGa
         GateKind::RandomAccess
     }
 
-    fn serialize(&self, dst: &mut Buffer) -> IoResult<()> {
-        dst.write_usize(self.bits)?;
-        dst.write_usize(self.num_copies)?;
-        dst.write_usize(self.num_extra_constants)?;
-        Ok(())
+    #[cfg(feature = "buffer_verifier")]
+    fn serialize(&self, dst: &mut [u8]) -> IoResult<usize> {
+        LittleEndian::write_u64(dst, self.bits as u64);
+        LittleEndian::write_u64(dst, self.num_copies as u64);
+        LittleEndian::write_u64(dst, self.num_extra_constants as u64);
+        Ok(std::mem::size_of::<u64>() * 3)
     }
 
-    fn deserialize(src: &mut Buffer) -> IoResult<Self> {
-        let bits = src.read_usize()?;
-        let num_copies = src.read_usize()?;
-        let num_extra_constants = src.read_usize()?;
-        Ok(Self::new(num_copies, bits, num_extra_constants))
+    #[cfg(feature = "buffer_verifier")]
+    fn deserialize(src: &[u8]) -> IoResult<GateBox<F, D>> {
+        let bits = LittleEndian::read_u64(src) as usize;
+        let num_copies = LittleEndian::read_u64(src) as usize;
+        let num_extra_constants = LittleEndian::read_u64(src) as usize;
+        Ok(GateBox::new(Self::new(num_copies, bits, num_extra_constants)))
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {

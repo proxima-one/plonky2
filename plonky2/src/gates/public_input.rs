@@ -17,6 +17,8 @@ use crate::plonk::vars::{
     EvaluationVarsBasePacked,
 };
 use crate::util::serialization::Buffer;
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
 
 /// A gate whose first four wires will be equal to a hash of public inputs.
 pub struct PublicInputGate;
@@ -36,12 +38,14 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for PublicInputGat
         GateKind::PublicInput
     }
 
-    fn serialize(&self, _dst: &mut Buffer) -> IoResult<()> {
-        Ok(())
+    #[cfg(feature = "buffer_verifier")]
+    fn serialize(&self, _dst: &mut [u8]) -> IoResult<usize> {
+        Ok(0)
     }
 
-    fn deserialize(_src: &mut Buffer) -> IoResult<Self> {
-        Ok(Self)
+    #[cfg(feature = "buffer_verifier")]
+    fn deserialize(_src: &[u8]) -> IoResult<GateBox<F, D>> {
+        Ok(GateBox::new(Self))
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {

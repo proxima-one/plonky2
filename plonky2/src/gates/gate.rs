@@ -18,7 +18,6 @@ use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
 };
-use crate::util::serialization::Buffer;
 
 pub enum GateKind {
     ArithmeticBase,
@@ -45,8 +44,12 @@ pub trait Gate<F: RichField + Extendable<D>, const D: usize>: 'static + Send + S
 
     fn kind(&self) -> GateKind;
 
-    fn serialize(&self, dst: &mut Buffer) -> IoResult<()>;
-    fn deserialize(src: &mut Buffer) -> IoResult<Self>
+    // return the number of bytes written
+    #[cfg(feature = "buffer_verifier")]
+    fn serialize(&self, dst: &mut [u8]) -> IoResult<usize>;
+
+    #[cfg(feature = "buffer_verifier")]
+    fn deserialize(src: &[u8]) -> IoResult<GateBox<F, D>>
     where
         Self: Sized;
 
@@ -215,6 +218,10 @@ pub trait Gate<F: RichField + Extendable<D>, const D: usize>: 'static + Send + S
     }
 }
 
+pub trait GateRefTrait<F: RichField + Extendable<D>, const D: usize>: AsRef<dyn Gate<F, D>> {
+    fn from_gate<G: Gate<F, D>>(gate: G) -> Self;
+}
+
 /// A wrapper around an `Rc<Gate>` which implements `PartialEq`, `Eq` and `Hash` based on gate IDs.
 #[derive(Clone)]
 pub struct GateRef<F: RichField + Extendable<D>, const D: usize>(pub(crate) Arc<dyn Gate<F, D>>);
@@ -242,6 +249,66 @@ impl<F: RichField + Extendable<D>, const D: usize> Eq for GateRef<F, D> {}
 impl<F: RichField + Extendable<D>, const D: usize> Debug for GateRef<F, D> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(f, "{}", self.0.id())
+    }
+}
+
+impl<F: RichField + Extendable<D>, const D: usize> AsRef<dyn Gate<F, D>> for GateRef<F, D> {
+    fn as_ref(&self) -> &(dyn Gate<F, D>) {
+        &*self.0
+    }
+}
+
+impl<F: RichField + Extendable<D>, const D: usize> GateRefTrait<F, D> for GateRef<F, D> {
+    fn from_gate<G: Gate<F, D>>(gate: G) -> Self {
+        GateRef::new(gate)
+    }
+}
+
+#[cfg(feature = "buffer_verifier")]
+pub struct GateBox<F: RichField + Extendable<D>, const D: usize>(pub(crate) Box<dyn Gate<F, D>>);
+
+#[cfg(feature = "buffer_verifier")]
+impl<F: RichField + Extendable<D>, const D: usize> GateBox<F, D> {
+    pub fn new<G: Gate<F, D>>(gate: G) -> GateBox<F, D> {
+        GateBox(Box::new(gate))
+    }
+}
+
+#[cfg(feature = "buffer_verifier")]
+impl<F: RichField + Extendable<D>, const D: usize> PartialEq for GateBox<F, D> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.id() == other.0.id()
+    }
+}
+
+#[cfg(feature = "buffer_verifier")]
+impl<F: RichField + Extendable<D>, const D: usize> Hash for GateBox<F, D> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.id().hash(state)
+    }
+}
+
+#[cfg(feature = "buffer_verifier")]
+impl<F: RichField + Extendable<D>, const D: usize> Eq for GateBox<F, D> {}
+
+#[cfg(feature = "buffer_verifier")]
+impl<F: RichField + Extendable<D>, const D: usize> Debug for GateBox<F, D> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        write!(f, "{}", self.0.id())
+    }
+}
+
+#[cfg(feature = "buffer_verifier")]
+impl<F: RichField + Extendable<D>, const D: usize> AsRef<dyn Gate<F, D>> for GateBox<F, D> {
+    fn as_ref(&self) -> &(dyn Gate<F, D>) {
+        &*self.0
+    }
+}
+
+#[cfg(feature = "buffer_verifier")]
+impl<F: RichField + Extendable<D>, const D: usize> GateRefTrait<F, D> for GateBox<F, D> {
+    fn from_gate<G: Gate<F, D>>(gate: G) -> Self {
+        GateBox::new(gate)
     }
 }
 

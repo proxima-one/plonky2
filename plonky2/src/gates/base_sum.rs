@@ -20,7 +20,13 @@ use crate::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
     EvaluationVarsBasePacked,
 };
+
+#[cfg(feature = "buffer_verifier")]
 use crate::util::serialization::Buffer;
+#[cfg(feature = "buffer_verifier")]
+use byteorder::{ByteOrder, LittleEndian};
+
+use super::gate::GateBox;
 
 /// A gate which can decompose a number into base B little-endian limbs.
 #[derive(Copy, Clone, Debug)]
@@ -56,13 +62,16 @@ impl<F: RichField + Extendable<D>, const D: usize, const B: usize> Gate<F, D> fo
         GateKind::BaseSum
     }
 
-    fn serialize(&self, dst: &mut Buffer) -> IoResult<()> {
-        dst.write_usize(self.num_limbs)
+    #[cfg(feature = "buffer_verifier")]
+    fn serialize(&self, dst: &mut [u8]) -> IoResult<usize> {
+        LittleEndian::write_u64(dst, self.num_limbs as u64);
+        Ok(std::mem::size_of::<u64>())
     }
 
-    fn deserialize(src: &mut Buffer) -> IoResult<Self> {
-        let num_limbs = src.read_usize()?;
-        Ok(Self { num_limbs })
+    #[cfg(feature = "buffer_verifier")]
+    fn deserialize(src: &[u8]) -> IoResult<GateBox<F, D>> {
+        let num_limbs = LittleEndian::read_u64(src) as usize;
+        Ok(GateBox::new(Self::new(num_limbs)))
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {
