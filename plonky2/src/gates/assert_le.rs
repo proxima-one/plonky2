@@ -1,12 +1,17 @@
 use std::io::Result as IoResult;
 use std::marker::PhantomData;
 
+#[cfg(feature = "buffer_verifier")]
+use byteorder::{ByteOrder, LittleEndian};
 use plonky2_field::extension::Extendable;
 use plonky2_field::packed::PackedField;
 use plonky2_field::types::{Field, Field64};
 use plonky2_util::{bits_u64, ceil_div_usize};
 
-use super::gate::GateKind;
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
+#[cfg(feature = "buffer_verifier")]
+use crate::buffer_verifier::serialization::GateKind;
 use crate::gates::gate::Gate;
 use crate::gates::packed_util::PackedEvaluableBase;
 use crate::gates::util::StridedConstraintConsumer;
@@ -22,11 +27,6 @@ use crate::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
     EvaluationVarsBasePacked,
 };
-
-#[cfg(feature = "buffer_verifier")]
-use super::gate::GateBox;
-#[cfg(feature = "buffer_verifier")]
-use byteorder::{ByteOrder, LittleEndian};
 
 // TODO: replace/merge this gate with `ComparisonGate`.
 
@@ -95,6 +95,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for AssertLessThan
         format!("{:?}<D={}>", self, D)
     }
 
+    #[cfg(feature = "buffer_verifier")]
     fn kind(&self) -> GateKind {
         GateKind::AssertLe
     }

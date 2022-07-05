@@ -2,7 +2,10 @@ use std::io::Result as IoResult;
 
 use plonky2_field::extension::Extendable;
 
-use super::gate::GateKind;
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
+#[cfg(feature = "buffer_verifier")]
+use crate::buffer_verifier::serialization::GateKind;
 use crate::gates::gate::Gate;
 use crate::hash::hash_types::RichField;
 use crate::iop::ext_target::ExtensionTarget;
@@ -10,8 +13,6 @@ use crate::iop::generator::WitnessGenerator;
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBaseBatch};
 use crate::util::serialization::Buffer;
-#[cfg(feature = "buffer_verifier")]
-use super::gate::GateBox;
 
 /// A gate which does nothing.
 pub struct NoopGate;
@@ -21,6 +22,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for NoopGate {
         "NoopGate".into()
     }
 
+    #[cfg(feature = "buffer_verifier")]
     fn kind(&self) -> GateKind {
         GateKind::Noop
     }

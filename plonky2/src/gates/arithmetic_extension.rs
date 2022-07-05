@@ -1,10 +1,15 @@
 use std::io::Result as IoResult;
 use std::ops::Range;
 
+#[cfg(feature = "buffer_verifier")]
+use byteorder::{ByteOrder, LittleEndian};
 use plonky2_field::extension::Extendable;
 use plonky2_field::extension::FieldExtension;
 
-use super::gate::GateKind;
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
+#[cfg(feature = "buffer_verifier")]
+use crate::buffer_verifier::serialization::GateKind;
 use crate::gates::gate::Gate;
 use crate::gates::util::StridedConstraintConsumer;
 use crate::hash::hash_types::RichField;
@@ -15,11 +20,6 @@ use crate::iop::witness::{PartitionWitness, Witness};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::circuit_data::CircuitConfig;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
-
-#[cfg(feature = "buffer_verifier")]
-use super::gate::GateBox;
-#[cfg(feature = "buffer_verifier")]
-use byteorder::{ByteOrder, LittleEndian};
 
 /// A gate which can perform a weighted multiply-add, i.e. `result = c0 x y + c1 z`. If the config
 /// supports enough routed wires, it can support several such operations in one gate.
@@ -61,6 +61,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for ArithmeticExte
         format!("{:?}", self)
     }
 
+    #[cfg(feature = "buffer_verifier")]
     fn kind(&self) -> GateKind {
         GateKind::ArithmeticExt
     }

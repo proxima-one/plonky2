@@ -4,7 +4,10 @@ use std::marker::PhantomData;
 use plonky2_field::extension::Extendable;
 use plonky2_field::types::Field;
 
-use super::gate::GateKind;
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
+#[cfg(feature = "buffer_verifier")]
+use crate::buffer_verifier::serialization::GateKind;
 use crate::gates::gate::Gate;
 use crate::gates::poseidon_mds::PoseidonMdsGate;
 use crate::gates::util::StridedConstraintConsumer;
@@ -20,8 +23,6 @@ use crate::iop::witness::{PartitionWitness, Witness};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
 use crate::util::serialization::Buffer;
-#[cfg(feature = "buffer_verifier")]
-use super::gate::GateBox;
 
 /// Evaluates a full Poseidon permutation with 12 state elements.
 ///
@@ -106,6 +107,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for PoseidonGate<F
         format!("{:?}<WIDTH={}>", self, SPONGE_WIDTH)
     }
 
+    #[cfg(feature = "buffer_verifier")]
     fn kind(&self) -> GateKind {
         GateKind::Poseidon
     }

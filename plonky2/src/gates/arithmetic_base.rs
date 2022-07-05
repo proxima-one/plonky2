@@ -1,9 +1,14 @@
 use std::io::Result as IoResult;
 
+#[cfg(feature = "buffer_verifier")]
+use byteorder::{ByteOrder, LittleEndian};
 use plonky2_field::extension::Extendable;
 use plonky2_field::packed::PackedField;
 
-use super::gate::GateKind;
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
+#[cfg(feature = "buffer_verifier")]
+use crate::buffer_verifier::serialization::GateKind;
 use crate::gates::gate::Gate;
 use crate::gates::packed_util::PackedEvaluableBase;
 use crate::gates::util::StridedConstraintConsumer;
@@ -18,11 +23,6 @@ use crate::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
     EvaluationVarsBasePacked,
 };
-#[cfg(feature = "buffer_verifier")]
-use super::gate::GateBox;
-
-#[cfg(feature = "buffer_verifier")]
-use byteorder::{ByteOrder, LittleEndian};
 /// A gate which can perform a weighted multiply-add, i.e. `result = c0 x y + c1 z`. If the config
 /// supports enough routed wires, it can support several such operations in one gate.
 #[derive(Debug, Clone)]
@@ -63,6 +63,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for ArithmeticGate
         format!("{:?}", self)
     }
 
+    #[cfg(feature = "buffer_verifier")]
     fn kind(&self) -> GateKind {
         GateKind::ArithmeticBase
     }

@@ -9,6 +9,8 @@ use plonky2_field::batch_util::batch_multiply_inplace;
 use plonky2_field::extension::{Extendable, FieldExtension};
 use plonky2_field::types::Field;
 
+#[cfg(feature = "buffer_verifier")]
+use crate::buffer_verifier::serialization::GateKind;
 use crate::gates::selectors::UNUSED_SELECTOR;
 use crate::gates::util::StridedConstraintConsumer;
 use crate::hash::hash_types::RichField;
@@ -19,29 +21,11 @@ use crate::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
 };
 
-pub enum GateKind {
-    ArithmeticBase,
-    ArithmeticExt,
-    AssertLe,
-    BaseSum,
-    Constant,
-    Exponentiation,
-    Interpolation,
-    LowDegreeInterpolation,
-    MulExt,
-    Noop,
-    PoseidonMds,
-    Poseidon,
-    PublicInput,
-    RandomAccess,
-    ReducingExt,
-    Reducing,
-}
-
 /// A custom gate.
 pub trait Gate<F: RichField + Extendable<D>, const D: usize>: 'static + Send + Sync {
     fn id(&self) -> String;
 
+    #[cfg(feature = "buffer_verifier")]
     fn kind(&self) -> GateKind;
 
     // return the number of bytes written
@@ -218,7 +202,9 @@ pub trait Gate<F: RichField + Extendable<D>, const D: usize>: 'static + Send + S
     }
 }
 
-pub trait GateRefTrait<F: RichField + Extendable<D>, const D: usize>: AsRef<dyn Gate<F, D>> {
+pub trait GateRefTrait<F: RichField + Extendable<D>, const D: usize>:
+    AsRef<dyn Gate<F, D>>
+{
     fn from_gate<G: Gate<F, D>>(gate: G) -> Self;
 }
 

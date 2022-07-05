@@ -4,7 +4,10 @@ use std::ops::Range;
 use plonky2_field::extension::Extendable;
 use plonky2_field::packed::PackedField;
 
-use super::gate::GateKind;
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
+#[cfg(feature = "buffer_verifier")]
+use crate::buffer_verifier::serialization::GateKind;
 use crate::gates::gate::Gate;
 use crate::gates::packed_util::PackedEvaluableBase;
 use crate::gates::util::StridedConstraintConsumer;
@@ -17,8 +20,6 @@ use crate::plonk::vars::{
     EvaluationVarsBasePacked,
 };
 use crate::util::serialization::Buffer;
-#[cfg(feature = "buffer_verifier")]
-use super::gate::GateBox;
 
 /// A gate whose first four wires will be equal to a hash of public inputs.
 pub struct PublicInputGate;
@@ -34,6 +35,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for PublicInputGat
         "PublicInputGate".into()
     }
 
+    #[cfg(feature = "buffer_verifier")]
     fn kind(&self) -> GateKind {
         GateKind::PublicInput
     }

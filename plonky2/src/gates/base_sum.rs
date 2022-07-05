@@ -1,11 +1,16 @@
 use std::io::Result as IoResult;
 use std::ops::Range;
 
+#[cfg(feature = "buffer_verifier")]
+use byteorder::{ByteOrder, LittleEndian};
 use plonky2_field::extension::Extendable;
 use plonky2_field::packed::PackedField;
 use plonky2_field::types::{Field, Field64};
 
-use crate::gates::gate::{Gate, GateKind};
+use super::gate::GateBox;
+#[cfg(feature = "buffer_verifier")]
+use crate::buffer_verifier::serialization::GateKind;
+use crate::gates::gate::Gate;
 use crate::gates::packed_util::PackedEvaluableBase;
 use crate::gates::util::StridedConstraintConsumer;
 use crate::hash::hash_types::RichField;
@@ -20,13 +25,8 @@ use crate::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
     EvaluationVarsBasePacked,
 };
-
 #[cfg(feature = "buffer_verifier")]
 use crate::util::serialization::Buffer;
-#[cfg(feature = "buffer_verifier")]
-use byteorder::{ByteOrder, LittleEndian};
-
-use super::gate::GateBox;
 
 /// A gate which can decompose a number into base B little-endian limbs.
 #[derive(Copy, Clone, Debug)]
@@ -58,6 +58,7 @@ impl<F: RichField + Extendable<D>, const D: usize, const B: usize> Gate<F, D> fo
         format!("{:?} + Base: {}", self, B)
     }
 
+    #[cfg(feature = "buffer_verifier")]
     fn kind(&self) -> GateKind {
         GateKind::BaseSum
     }

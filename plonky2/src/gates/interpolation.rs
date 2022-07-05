@@ -2,12 +2,17 @@ use std::io::Result as IoResult;
 use std::marker::PhantomData;
 use std::ops::Range;
 
+#[cfg(feature = "buffer_verifier")]
+use byteorder::{ByteOrder, LittleEndian};
 use plonky2_field::extension::algebra::PolynomialCoeffsAlgebra;
 use plonky2_field::extension::{Extendable, FieldExtension};
 use plonky2_field::interpolation::interpolant;
 use plonky2_field::polynomial::PolynomialCoeffs;
 
-use super::gate::GateKind;
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
+#[cfg(feature = "buffer_verifier")]
+use crate::buffer_verifier::serialization::GateKind;
 use crate::gadgets::interpolation::InterpolationGate;
 use crate::gadgets::polynomial::PolynomialCoeffsExtAlgebraTarget;
 use crate::gates::gate::Gate;
@@ -20,11 +25,6 @@ use crate::iop::wire::Wire;
 use crate::iop::witness::{PartitionWitness, Witness};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
-
-#[cfg(feature = "buffer_verifier")]
-use super::gate::GateBox;
-#[cfg(feature = "buffer_verifier")]
-use byteorder::{ByteOrder, LittleEndian};
 
 /// Interpolation gate with constraints of degree at most `1<<subgroup_bits`.
 /// `eval_unfiltered_recursively` uses less gates than `LowDegreeInterpolationGate`.
@@ -95,6 +95,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D>
         format!("{:?}<D={}>", self, D)
     }
 
+    #[cfg(feature = "buffer_verifier")]
     fn kind(&self) -> GateKind {
         GateKind::Interpolation
     }

@@ -1,12 +1,17 @@
 use std::io::Result as IoResult;
 use std::marker::PhantomData;
 
+#[cfg(feature = "buffer_verifier")]
+use byteorder::{ByteOrder, LittleEndian};
 use itertools::Itertools;
 use plonky2_field::extension::Extendable;
 use plonky2_field::packed::PackedField;
 use plonky2_field::types::Field;
 
-use super::gate::GateKind;
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
+#[cfg(feature = "buffer_verifier")]
+use crate::buffer_verifier::serialization::GateKind;
 use crate::gates::gate::Gate;
 use crate::gates::packed_util::PackedEvaluableBase;
 use crate::gates::util::StridedConstraintConsumer;
@@ -22,11 +27,6 @@ use crate::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
     EvaluationVarsBasePacked,
 };
-
-#[cfg(feature = "buffer_verifier")]
-use super::gate::GateBox;
-#[cfg(feature = "buffer_verifier")]
-use byteorder::{ByteOrder, LittleEndian};
 
 /// A gate for checking that a particular element of a list matches a given value.
 #[derive(Copy, Clone, Debug)]
@@ -109,6 +109,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for RandomAccessGa
         format!("{:?}<D={}>", self, D)
     }
 
+    #[cfg(feature = "buffer_verifier")]
     fn kind(&self) -> GateKind {
         GateKind::RandomAccess
     }
@@ -126,7 +127,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for RandomAccessGa
         let bits = LittleEndian::read_u64(src) as usize;
         let num_copies = LittleEndian::read_u64(src) as usize;
         let num_extra_constants = LittleEndian::read_u64(src) as usize;
-        Ok(GateBox::new(Self::new(num_copies, bits, num_extra_constants)))
+        Ok(GateBox::new(Self::new(
+            num_copies,
+            bits,
+            num_extra_constants,
+        )))
     }
 
     fn eval_unfiltered(&self, vars: EvaluationVars<F, D>) -> Vec<F::Extension> {

@@ -7,7 +7,10 @@ use plonky2_field::extension::Extendable;
 use plonky2_field::extension::FieldExtension;
 use plonky2_field::types::Field;
 
-use super::gate::GateKind;
+#[cfg(feature = "buffer_verifier")]
+use super::gate::GateBox;
+#[cfg(feature = "buffer_verifier")]
+use crate::buffer_verifier::serialization::GateKind;
 use crate::gates::gate::Gate;
 use crate::gates::util::StridedConstraintConsumer;
 use crate::hash::hash_types::RichField;
@@ -19,9 +22,6 @@ use crate::iop::target::Target;
 use crate::iop::witness::{PartitionWitness, Witness};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
-use crate::util::serialization::Buffer;
-#[cfg(feature = "buffer_verifier")]
-use super::gate::GateBox;
 
 #[derive(Debug)]
 pub struct PoseidonMdsGate<F: RichField + Extendable<D> + Poseidon, const D: usize> {
@@ -125,6 +125,7 @@ impl<F: RichField + Extendable<D> + Poseidon, const D: usize> Gate<F, D> for Pos
         format!("{:?}<WIDTH={}>", self, SPONGE_WIDTH)
     }
 
+    #[cfg(feature = "buffer_verifier")]
     fn kind(&self) -> GateKind {
         GateKind::PoseidonMds
     }
