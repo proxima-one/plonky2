@@ -177,7 +177,7 @@ where
         CompressedProofWithPublicInputs::from_bytes(compressed_proof_bytes, cd)?;
     assert_eq!(compressed_proof, compressed_proof_from_bytes);
 
-    let circuit_data_bytes = cd.to_bytes()?;
+    // let circuit_data_bytes = cd.to_bytes()?;
 
     Ok(())
 }
