@@ -617,6 +617,27 @@ impl<'a, C: GenericConfig<D>, const D: usize> CircuitBuf<'a, C, D> {
 
         FriInstanceInfo { oracles, batches }
     }
+
+    pub fn read_gates(&self) -> IoResult<Vec<GateBox<C::F, D>>> {
+        let mut offset = self.offsets.gates_offset;
+        let num_gates = LittleEndian::read_u64(&self.buf[offset..]) as usize;
+        offset += 1;
+
+        let mut gates = Vec::with_capacity(num_gates);
+        for _ in 0..num_gates {
+            let tag = self.buf[offset];
+            offset += 1;
+
+            let len = LittleEndian::read_u64(&self.buf[offset..]) as usize; 
+            offset += std::mem::size_of::<u64>();
+            
+            let gate = read_gate::<C, D>(&self.buf[offset..len], tag)?;
+            offset += len;
+            gates.push(gate);
+        }
+
+        Ok(gates)
+    }
 }
 
 // util functions
@@ -723,110 +744,111 @@ macro_rules! base_sum_match_statement {
     ( $matched_base:expr, $buf:expr, $( $base:expr ),* ) => {
         match $matched_base {
             $(
-                $base => Ok(BaseSumGate::<$base>::deserialize($buf)?),
+                $base => BaseSumGate::<$base>::deserialize($buf)?,
             )*
-            _ => Err(std::io::Error::from(std::io::ErrorKind::InvalidData))
+            _ => return Err(std::io::Error::from(std::io::ErrorKind::InvalidData))
         }
     }
 }
 
 pub fn read_gate<C: GenericConfig<D>, const D: usize>(
     buf: &[u8],
-    mut offset: usize,
+    tag: u8,
 ) -> IoResult<GateBox<C::F, D>> {
-    let tag = buf[offset];
-    offset += 1;
-    match tag {
-        ARITHMETIC_BASE_TAG => Ok(ArithmeticGate::deserialize(&buf[offset..])?),
-        ARITHMETIC_EXT_TAG => Ok(ArithmeticExtensionGate::deserialize(&buf[offset..])?),
-        ASSERT_LE_TAG => Ok(AssertLessThanGate::deserialize(&buf[offset..])?),
-        BASE_SUM_TAG => {
-            let base = buf[offset];
-            offset += 1;
+    Ok(
+        match tag {
+            ARITHMETIC_BASE_TAG => ArithmeticGate::deserialize(buf)?,
+            ARITHMETIC_EXT_TAG => ArithmeticExtensionGate::deserialize(buf)?,
+            ASSERT_LE_TAG => AssertLessThanGate::deserialize(buf)?,
+            // ! When serializing BaseSumGate, must prepend the limb base!
+            BASE_SUM_TAG => {
+                let base = buf[0];
+                let buf = &buf[1..];
 
-            base_sum_match_statement!(
-                base,
-                &buf[offset..],
-                1,
-                2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8,
-                9,
-                10,
-                11,
-                12,
-                13,
-                14,
-                15,
-                16,
-                17,
-                18,
-                19,
-                20,
-                21,
-                22,
-                23,
-                24,
-                25,
-                26,
-                27,
-                28,
-                29,
-                30,
-                31,
-                32,
-                33,
-                34,
-                35,
-                36,
-                37,
-                38,
-                39,
-                40,
-                41,
-                42,
-                43,
-                44,
-                45,
-                46,
-                47,
-                48,
-                49,
-                50,
-                51,
-                52,
-                53,
-                54,
-                55,
-                56,
-                57,
-                58,
-                59,
-                60,
-                61,
-                62,
-                63,
-                64
-            )
+                base_sum_match_statement!(
+                    base,
+                    buf,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10,
+                    11,
+                    12,
+                    13,
+                    14,
+                    15,
+                    16,
+                    17,
+                    18,
+                    19,
+                    20,
+                    21,
+                    22,
+                    23,
+                    24,
+                    25,
+                    26,
+                    27,
+                    28,
+                    29,
+                    30,
+                    31,
+                    32,
+                    33,
+                    34,
+                    35,
+                    36,
+                    37,
+                    38,
+                    39,
+                    40,
+                    41,
+                    42,
+                    43,
+                    44,
+                    45,
+                    46,
+                    47,
+                    48,
+                    49,
+                    50,
+                    51,
+                    52,
+                    53,
+                    54,
+                    55,
+                    56,
+                    57,
+                    58,
+                    59,
+                    60,
+                    61,
+                    62,
+                    63,
+                    64
+                )
+            }
+            CONSTANT_TAG => ConstantGate::deserialize(buf)?,
+            EXPONENTIATION_TAG => ExponentiationGate::deserialize(buf)?,
+            INTERPOLATION_TAG => HighDegreeInterpolationGate::deserialize(buf)?,
+            LOW_DEGREE_INTERPOLATION_TAG => LowDegreeInterpolationGate::deserialize(buf)?,
+            MUL_EXT_TAG => MulExtensionGate::deserialize(buf)?,
+            NOOP_TAG => NoopGate::deserialize(buf)?,
+            POSEIDON_MDS_TAG => PoseidonMdsGate::deserialize(buf)?,
+            POSEIDON_TAG => PoseidonGate::deserialize(buf)?,
+            PUBLIC_INPUT_TAG => PublicInputGate::deserialize(buf)?,
+            RANDOM_ACCESS_TAG => RandomAccessGate::deserialize(buf)?,
+            REDUCING_EXT_TAG => ReducingExtensionGate::deserialize(buf)?,
+            REDUCING_TAG => ReducingGate::deserialize(buf)?,
+            _ => return Err(IoError::from(IoErrorKind::InvalidData))
         }
-        CONSTANT_TAG => Ok(ConstantGate::deserialize(&buf[offset..])?),
-        EXPONENTIATION_TAG => Ok(ExponentiationGate::deserialize(&buf[offset..])?),
-        INTERPOLATION_TAG => Ok(HighDegreeInterpolationGate::deserialize(&buf[offset..])?),
-        LOW_DEGREE_INTERPOLATION_TAG => Ok(LowDegreeInterpolationGate::deserialize(&buf[offset..])?),
-        MUL_EXT_TAG => Ok(MulExtensionGate::deserialize(&buf[offset..])?),
-        NOOP_TAG => Ok(NoopGate::deserialize(&buf[offset..])?),
-        POSEIDON_MDS_TAG => Ok(PoseidonMdsGate::deserialize(&buf[offset..])?),
-        POSEIDON_TAG => Ok(PoseidonGate::deserialize(&buf[offset..])?),
-        PUBLIC_INPUT_TAG => Ok(PublicInputGate::deserialize(&buf[offset..])?),
-        RANDOM_ACCESS_TAG => Ok(RandomAccessGate::deserialize(&buf[offset..])?),
-        REDUCING_EXT_TAG => Ok(ReducingExtensionGate::deserialize(&buf[offset..])?),
-        REDUCING_TAG => Ok(ReducingGate::deserialize(&buf[offset..])?),
-        _ => Err(IoError::from(IoErrorKind::InvalidData))
-    }
+    )
 }
 
 // Gates supported by buffer verifier
