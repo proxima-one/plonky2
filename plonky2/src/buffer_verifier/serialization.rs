@@ -1085,3 +1085,8 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(buf: &'a 
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    // TODO: grab some dummy circuits and test the serialization the same way the tests do in the examples
+}
