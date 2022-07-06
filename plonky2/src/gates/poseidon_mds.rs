@@ -23,7 +23,7 @@ use crate::iop::witness::{PartitionWitness, Witness};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct PoseidonMdsGate<F: RichField + Extendable<D> + Poseidon, const D: usize> {
     _phantom: PhantomData<F>,
 }

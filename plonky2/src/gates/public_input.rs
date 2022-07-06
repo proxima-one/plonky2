@@ -22,6 +22,7 @@ use crate::plonk::vars::{
 use crate::util::serialization::Buffer;
 
 /// A gate whose first four wires will be equal to a hash of public inputs.
+#[derive(Copy, Clone, Debug)]
 pub struct PublicInputGate;
 
 impl PublicInputGate {

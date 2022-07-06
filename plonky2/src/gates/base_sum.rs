@@ -64,12 +64,20 @@ impl<F: RichField + Extendable<D>, const D: usize, const B: usize> Gate<F, D> fo
         GateKind::BaseSum
     }
 
+
+    /// This method prepends the base as a single `u8`, thus it assumes `B < 256` .
+    /// This is a bit of a hack - in principle, the base should be known given the Vec<Gate> in CommonCircuitData.
+    /// Unfortunately, they're trait objects, so we can't get the base from the trait object since we can't know
+    /// if the trait object is pointing to a BaseSumGate or not
     #[cfg(feature = "buffer_verifier")]
     fn serialize(&self, dst: &mut [u8]) -> IoResult<usize> {
-        LittleEndian::write_u64(dst, self.num_limbs as u64);
-        Ok(std::mem::size_of::<u64>())
+        dst[0] = B as u8;
+        LittleEndian::write_u64(&mut dst[1..], self.num_limbs as u64);
+        Ok(std::mem::size_of::<u64>() + 1)
     }
 
+    /// Unklike the `serialize` impl, this method assumes that the base has already been read by the caller
+    /// and the caller has chosen `B` accordingly.
     #[cfg(feature = "buffer_verifier")]
     fn deserialize(src: &[u8]) -> IoResult<GateBox<F, D>> {
         let num_limbs = LittleEndian::read_u64(src) as usize;
