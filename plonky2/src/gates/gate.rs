@@ -6,7 +6,6 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use dyn_clone::DynClone;
-
 use plonky2_field::batch_util::batch_multiply_inplace;
 use plonky2_field::extension::{Extendable, FieldExtension};
 use plonky2_field::types::Field;
@@ -24,7 +23,9 @@ use crate::plonk::vars::{
 };
 
 /// A custom gate.
-pub trait Gate<F: RichField + Extendable<D>, const D: usize>: 'static + Send + Sync + DynClone {
+pub trait Gate<F: RichField + Extendable<D>, const D: usize>:
+    'static + Send + Sync + DynClone
+{
     fn id(&self) -> String;
 
     #[cfg(feature = "buffer_verifier")]

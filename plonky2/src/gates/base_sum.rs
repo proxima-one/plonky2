@@ -10,7 +10,6 @@ use plonky2_field::types::{Field, Field64};
 use super::gate::GateBox;
 #[cfg(feature = "buffer_verifier")]
 use crate::buffer_verifier::serialization::GateKind;
-
 use crate::gates::gate::Gate;
 use crate::gates::packed_util::PackedEvaluableBase;
 use crate::gates::util::StridedConstraintConsumer;
@@ -63,7 +62,6 @@ impl<F: RichField + Extendable<D>, const D: usize, const B: usize> Gate<F, D> fo
     fn kind(&self) -> GateKind {
         GateKind::BaseSum
     }
-
 
     /// This method prepends the base as a single `u8`, thus it assumes `B < 256` .
     /// This is a bit of a hack - in principle, the base should be known given the Vec<Gate> in CommonCircuitData.
