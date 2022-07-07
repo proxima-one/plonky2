@@ -12,7 +12,7 @@ use plonky2_field::extension::{Extendable, FieldExtension};
 use plonky2_field::types::Field;
 
 #[cfg(feature = "buffer_verifier")]
-use crate::buffer_verifier::serialization::GateKind;
+use crate::buffer_verifier::buf::GateKind;
 use crate::gates::selectors::UNUSED_SELECTOR;
 use crate::gates::util::StridedConstraintConsumer;
 use crate::hash::hash_types::RichField;

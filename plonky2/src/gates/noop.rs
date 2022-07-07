@@ -6,7 +6,7 @@ use plonky2_field::extension::Extendable;
 #[cfg(feature = "buffer_verifier")]
 use super::gate::GateBox;
 #[cfg(feature = "buffer_verifier")]
-use crate::buffer_verifier::serialization::GateKind;
+use crate::buffer_verifier::buf::GateKind;
 use crate::gates::gate::Gate;
 use crate::hash::hash_types::RichField;
 use crate::iop::ext_target::ExtensionTarget;

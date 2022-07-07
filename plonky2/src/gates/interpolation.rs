@@ -13,7 +13,7 @@ use plonky2_field::polynomial::PolynomialCoeffs;
 #[cfg(feature = "buffer_verifier")]
 use super::gate::GateBox;
 #[cfg(feature = "buffer_verifier")]
-use crate::buffer_verifier::serialization::GateKind;
+use crate::buffer_verifier::buf::GateKind;
 use crate::gadgets::interpolation::InterpolationGate;
 use crate::gadgets::polynomial::PolynomialCoeffsExtAlgebraTarget;
 use crate::gates::gate::Gate;

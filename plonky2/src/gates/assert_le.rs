@@ -12,7 +12,7 @@ use plonky2_util::{bits_u64, ceil_div_usize};
 #[cfg(feature = "buffer_verifier")]
 use super::gate::GateBox;
 #[cfg(feature = "buffer_verifier")]
-use crate::buffer_verifier::serialization::GateKind;
+use crate::buffer_verifier::buf::GateKind;
 use crate::gates::gate::Gate;
 use crate::gates::packed_util::PackedEvaluableBase;
 use crate::gates::util::StridedConstraintConsumer;

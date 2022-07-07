@@ -2,37 +2,45 @@ use anyhow::{ensure, Result};
 use plonky2_field::extension::Extendable;
 use plonky2_field::types::Field;
 
+use super::circuit_buf::CircuitBuf;
+use super::proof_buf::ProofBuf;
 use crate::fri::verifier::verify_fri_proof;
 use crate::hash::hash_types::RichField;
 use crate::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData};
 use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::plonk_common::reduce_with_powers;
-use crate::plonk::proof::{Proof, ProofChallenges, ProofWithPublicInputs};
+use crate::plonk::proof::{Proof, ProofChallenges};
 use crate::plonk::vanishing_poly::eval_vanishing_poly;
 use crate::plonk::vars::EvaluationVars;
 
-pub(crate) fn verify<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(
-    proof_with_pis: ProofWithPublicInputs<F, C, D>,
-    verifier_data: &VerifierOnlyCircuitData<C, D>,
-    common_data: &CommonCircuitData<F, C, D>,
+pub(crate) fn verify<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize>(
+    proof_buf: &mut ProofBuf<C, R, D>,
+    circuit_buf: &mut CircuitBuf<C, R, D>,
 ) -> Result<()>
 where
     [(); C::Hasher::HASH_SIZE]:,
 {
+    let pis = proof_buf.read_pis()?;
+    let num_pis = circuit_buf.read_num_pis()?;
+
     ensure!(
-        proof_with_pis.public_inputs.len() == common_data.num_public_inputs,
+        pis.len() == num_pis,
         "Number of public inputs doesn't match circuit data."
     );
-    let public_inputs_hash = proof_with_pis.get_public_inputs_hash();
-    let challenges = proof_with_pis.get_challenges(public_inputs_hash, common_data)?;
 
-    verify_with_challenges(
-        proof_with_pis.proof,
-        public_inputs_hash,
-        challenges,
-        verifier_data,
-        common_data,
-    )
+    let public_inputs_hash =
+        <<C as GenericConfig<D>>::InnerHasher as Hasher<C::F>>::hash_no_pad(pis.as_slice());
+    // let challenges = proof_with_pis.get_challenges(public_inputs_hash, common_data)?;
+
+    // verify_with_challenges(
+    //     proof_with_pis.proof,
+    //     public_inputs_hash,
+    //     challenges,
+    //     verifier_data,
+    //     common_data,
+    // )
+
+    Ok(())
 }
 
 pub(crate) fn verify_with_challenges<
