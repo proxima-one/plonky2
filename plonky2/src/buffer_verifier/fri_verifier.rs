@@ -276,7 +276,7 @@ pub fn get_fri_instance<F: RichField + Extendable<D>, const D: usize>(
     num_partial_products: usize,
     quotient_degree_factor: usize,
     degree_bits: usize,
-    plonk_zeta: F::Extension
+    plonk_zeta: F::Extension,
 ) -> FriInstanceInfo<F, D> {
     let fri_preprocessed_polys = FriPolynomialInfo::from_range(
         PlonkOracle::CONSTANTS_SIGMAS.index,
@@ -305,10 +305,8 @@ pub fn get_fri_instance<F: RichField + Extendable<D>, const D: usize>(
 
     let g = F::Extension::primitive_root_of_unity(degree_bits);
     let zeta_next = g * plonk_zeta;
-    let fri_zs_polys = FriPolynomialInfo::from_range(
-        PlonkOracle::ZS_PARTIAL_PRODUCTS.index,
-        0..num_challenges,
-    );
+    let fri_zs_polys =
+        FriPolynomialInfo::from_range(PlonkOracle::ZS_PARTIAL_PRODUCTS.index, 0..num_challenges);
     let zeta_next_batch = FriBatchInfo {
         point: zeta_next,
         polynomials: fri_zs_polys,

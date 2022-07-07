@@ -6,7 +6,7 @@ use std::ops::Range;
 
 use byteorder::{ByteOrder, LittleEndian, ReadBytesExt, WriteBytesExt};
 use plonky2_field::extension::{Extendable, FieldExtension};
-use plonky2_field::types::{Field, Field64, PrimeField64};
+use plonky2_field::types::{Field64, PrimeField64};
 
 use crate::fri::reduction_strategies::FriReductionStrategy;
 use crate::fri::structure::{FriBatchInfo, FriInstanceInfo, FriOracleInfo, FriPolynomialInfo};
@@ -32,8 +32,7 @@ use crate::hash::hash_types::RichField;
 use crate::hash::merkle_tree::MerkleCap;
 use crate::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData};
 use crate::plonk::config::{GenericConfig, GenericHashOut, Hasher};
-use crate::plonk::plonk_common::{PlonkOracle, FRI_ORACLES};
-use crate::plonk::proof::{Proof, ProofWithPublicInputs, ProofChallenges};
+use crate::plonk::proof::{Proof, ProofChallenges, ProofWithPublicInputs};
 
 #[allow(type_alias_bounds)]
 type HashForConfig<C: GenericConfig<D>, const D: usize> =
@@ -148,7 +147,7 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
 
     pub fn len(&mut self) -> usize {
         self.offsets.len
-    } 
+    }
 
     pub fn read_pis_hash(&mut self) -> IoResult<InnerHashForConfig<C, D>> {
         self.buf.0.set_position(self.offsets.pis_hash_offset as u64);
@@ -290,7 +289,9 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
     }
 
     pub fn read_fri_instance(&mut self) -> IoResult<FriInstanceInfo<C::F, D>> {
-        self.buf.0.set_position(self.offsets.fri_instance_offset as u64);
+        self.buf
+            .0
+            .set_position(self.offsets.fri_instance_offset as u64);
 
         let num_oracles = self.buf.0.read_u64::<LittleEndian>()? as usize;
         let mut oracles = Vec::with_capacity(num_oracles);
@@ -300,7 +301,7 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
         }
 
         let num_batches = self.buf.0.read_u64::<LittleEndian>()? as usize;
-        let mut batches = Vec::with_capacity(num_batches); 
+        let mut batches = Vec::with_capacity(num_batches);
         for _ in 0..num_batches {
             let batch = self.buf.read_fri_batch_info::<C::F, D>()?;
             batches.push(batch);
@@ -310,28 +311,32 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
     }
 }
 
-
 impl<'a, C: GenericConfig<D>, const D: usize> ProofBuf<C, &'a mut [u8], D> {
     pub fn write_challenges(&mut self, challenges: &ProofChallenges<C::F, D>) -> IoResult<()> {
         self.buf
             .0
             .set_position(self.offsets.challenge_betas_offset as u64);
-        self.buf.write_field_vec(challenges.plonk_betas.as_slice())?;
+        self.buf
+            .write_field_vec(challenges.plonk_betas.as_slice())?;
 
         self.offsets.challenge_gammas_offset = self.buf.0.position() as usize;
-        self.buf.write_field_vec(challenges.plonk_gammas.as_slice())?;
+        self.buf
+            .write_field_vec(challenges.plonk_gammas.as_slice())?;
 
         self.offsets.challenge_alphas_offset = self.buf.0.position() as usize;
-        self.buf.write_field_vec(challenges.plonk_alphas.as_slice())?;
+        self.buf
+            .write_field_vec(challenges.plonk_alphas.as_slice())?;
 
         self.offsets.challenge_zeta_offset = self.buf.0.position() as usize;
         self.buf.write_field_ext::<C::F, D>(challenges.plonk_zeta)?;
 
         self.offsets.fri_alpha_offset = self.buf.0.position() as usize;
-        self.buf.write_field_ext::<C::F, D>(challenges.fri_challenges.fri_alpha)?;
+        self.buf
+            .write_field_ext::<C::F, D>(challenges.fri_challenges.fri_alpha)?;
 
         self.offsets.fri_pow_response_offset = self.buf.0.position() as usize;
-        self.buf.write_field(challenges.fri_challenges.fri_pow_response)?;
+        self.buf
+            .write_field(challenges.fri_challenges.fri_pow_response)?;
 
         self.offsets.fri_betas_offset = self.buf.0.position() as usize;
         self.buf
@@ -411,19 +416,28 @@ impl<'a, C: GenericConfig<D>, const D: usize> ProofBuf<C, &'a mut [u8], D> {
         Ok(())
     }
 
-    pub fn write_pis_hash(&mut self, pis_hash: <<C as GenericConfig<D>>::InnerHasher as Hasher<C::F>>::Hash) -> IoResult<()> {
+    pub fn write_pis_hash(
+        &mut self,
+        pis_hash: <<C as GenericConfig<D>>::InnerHasher as Hasher<C::F>>::Hash,
+    ) -> IoResult<()> {
         self.buf.0.set_position(self.offsets.pis_hash_offset as u64);
         self.buf.write_hash::<C::F, C::InnerHasher>(pis_hash)
     }
 
     pub fn write_fri_instance(&mut self, fri_instance: &FriInstanceInfo<C::F, D>) -> IoResult<()> {
-        self.buf.0.set_position(self.offsets.fri_instance_offset as u64);
-        self.buf.0.write_u64::<LittleEndian>(fri_instance.oracles.len() as u64)?;
+        self.buf
+            .0
+            .set_position(self.offsets.fri_instance_offset as u64);
+        self.buf
+            .0
+            .write_u64::<LittleEndian>(fri_instance.oracles.len() as u64)?;
         for oracle in &fri_instance.oracles {
             self.buf.write_fri_oracle_info(oracle)?;
         }
 
-        self.buf.0.write_u64::<LittleEndian>(fri_instance.batches.len() as u64)?;
+        self.buf
+            .0
+            .write_u64::<LittleEndian>(fri_instance.batches.len() as u64)?;
         for batch in &fri_instance.batches {
             self.buf.write_fri_batch_info(batch)?;
         }
@@ -516,7 +530,7 @@ fn get_circuit_buf_offsets<R: AsRef<[u8]>>(buf: &mut Buffer<R>) -> IoResult<Circ
         fri_num_query_rounds_offset,
         fri_reduction_arity_bits_offset,
         fri_reduction_strategy_offset,
-    }) 
+    })
 }
 
 impl<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> CircuitBuf<C, R, D> {
@@ -532,7 +546,7 @@ impl<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> CircuitBuf<C, R, D> {
 
     pub fn len(&mut self) -> usize {
         self.offsets.len
-    } 
+    }
 
     pub fn read_circuit_digest(&mut self) -> IoResult<HashForConfig<C, D>> {
         self.buf
@@ -597,7 +611,7 @@ impl<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> CircuitBuf<C, R, D> {
             .set_position(self.offsets.degree_bits_offset as u64);
         Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
     }
-    
+
     pub fn read_num_wires(&mut self) -> IoResult<usize> {
         self.buf
             .0
@@ -639,7 +653,9 @@ impl<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> CircuitBuf<C, R, D> {
     }
 
     pub fn read_cap_height(&mut self) -> IoResult<usize> {
-        self.buf.0.set_position(self.offsets.cap_height_offset as u64);
+        self.buf
+            .0
+            .set_position(self.offsets.cap_height_offset as u64);
         Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
     }
 
@@ -647,7 +663,7 @@ impl<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> CircuitBuf<C, R, D> {
         self.buf
             .0
             .set_position(self.offsets.fri_is_hiding_offset as u64);
-    
+
         self.buf.read_bool()
     }
 
@@ -689,7 +705,9 @@ impl<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> CircuitBuf<C, R, D> {
     }
 
     pub fn read_fri_reduction_strategy(&mut self) -> IoResult<FriReductionStrategy> {
-        self.buf.0.set_position(self.offsets.fri_reduction_strategy_offset as u64);
+        self.buf
+            .0
+            .set_position(self.offsets.fri_reduction_strategy_offset as u64);
         self.buf.read_fri_reduction_strategy()
     }
 }
@@ -930,13 +948,16 @@ impl<R: AsRef<[u8]>> Buffer<R> {
                 let arity_bitses_len = self.0.read_u64::<LittleEndian>()? as usize;
                 let arity_bitses = self.read_usize_vec(arity_bitses_len)?;
                 Ok(FriReductionStrategy::Fixed(arity_bitses))
-            },
+            }
             // ConstantArityBits
             1 => {
                 let arity_bits = self.0.read_u64::<LittleEndian>()? as usize;
                 let final_poly_bits = self.0.read_u64::<LittleEndian>()? as usize;
-                Ok(FriReductionStrategy::ConstantArityBits(arity_bits, final_poly_bits))
-            },
+                Ok(FriReductionStrategy::ConstantArityBits(
+                    arity_bits,
+                    final_poly_bits,
+                ))
+            }
             // MinSize
             2 => {
                 let is_some_tag = self.0.read_u8()?;
@@ -945,14 +966,14 @@ impl<R: AsRef<[u8]>> Buffer<R> {
                     1 => {
                         let min_size = self.0.read_u64::<LittleEndian>()? as usize;
                         Ok(FriReductionStrategy::MinSize(Some(min_size)))
-                    },
-                    _ => Err(IoError::from(IoErrorKind::InvalidData))
+                    }
+                    _ => Err(IoError::from(IoErrorKind::InvalidData)),
                 }
             }
-            _ => Err(IoError::from(IoErrorKind::InvalidData))
+            _ => Err(IoError::from(IoErrorKind::InvalidData)),
         }
     }
-   
+
     fn read_fri_oracle_info(&mut self) -> IoResult<FriOracleInfo> {
         let blinding = self.read_bool()?;
         Ok(FriOracleInfo { blinding })
@@ -961,10 +982,15 @@ impl<R: AsRef<[u8]>> Buffer<R> {
     fn read_fri_polynomial_info(&mut self) -> IoResult<FriPolynomialInfo> {
         let oracle_index = self.0.read_u64::<LittleEndian>()? as usize;
         let polynomial_index = self.0.read_u64::<LittleEndian>()? as usize;
-        Ok(FriPolynomialInfo { oracle_index, polynomial_index })
+        Ok(FriPolynomialInfo {
+            oracle_index,
+            polynomial_index,
+        })
     }
 
-    fn read_fri_batch_info<F: RichField + Extendable<D>, const D: usize>(&mut self) -> IoResult<FriBatchInfo<F, D>> {
+    fn read_fri_batch_info<F: RichField + Extendable<D>, const D: usize>(
+        &mut self,
+    ) -> IoResult<FriBatchInfo<F, D>> {
         let point = self.read_field_ext::<F, D>()?;
 
         let len = self.0.read_u64::<LittleEndian>()? as usize;
@@ -1065,11 +1091,15 @@ impl<'a> Buffer<&'a mut [u8]> {
         Ok(())
     }
 
-    pub fn write_fri_reduction_strategy(&mut self, strategy: &FriReductionStrategy) -> IoResult<()> {
+    pub fn write_fri_reduction_strategy(
+        &mut self,
+        strategy: &FriReductionStrategy,
+    ) -> IoResult<()> {
         match strategy {
-            FriReductionStrategy::Fixed(arity_bitses)=> {
+            FriReductionStrategy::Fixed(arity_bitses) => {
                 self.0.write_u8(0)?;
-                self.0.write_u64::<LittleEndian>(arity_bitses.len() as u64)?;
+                self.0
+                    .write_u64::<LittleEndian>(arity_bitses.len() as u64)?;
                 self.write_usize_vec(arity_bitses)?;
             }
             FriReductionStrategy::ConstantArityBits(arity_bits, final_poly_bits) => {
@@ -1082,12 +1112,13 @@ impl<'a> Buffer<&'a mut [u8]> {
                 match opt_max_arity_bits {
                     Some(opt_max_arity_bits) => {
                         self.0.write_u8(1)?;
-                        self.0.write_u64::<LittleEndian>(*opt_max_arity_bits as u64)?;
-                    },
+                        self.0
+                            .write_u64::<LittleEndian>(*opt_max_arity_bits as u64)?;
+                    }
                     None => {
                         self.0.write_u8(0)?;
                     }
-                } 
+                }
             }
         }
         Ok(())
@@ -1099,13 +1130,18 @@ impl<'a> Buffer<&'a mut [u8]> {
 
     fn write_fri_polynomial_info(&mut self, info: &FriPolynomialInfo) -> IoResult<()> {
         self.0.write_u64::<LittleEndian>(info.oracle_index as u64)?;
-        self.0.write_u64::<LittleEndian>(info.polynomial_index as u64)
+        self.0
+            .write_u64::<LittleEndian>(info.polynomial_index as u64)
     }
 
-    fn write_fri_batch_info<F: RichField + Extendable<D>, const D: usize>(&mut self, info: &FriBatchInfo<F, D>) -> IoResult<()> {
+    fn write_fri_batch_info<F: RichField + Extendable<D>, const D: usize>(
+        &mut self,
+        info: &FriBatchInfo<F, D>,
+    ) -> IoResult<()> {
         self.write_field_ext::<F, D>(info.point)?;
-        
-        self.0.write_u64::<LittleEndian>(info.polynomials.len() as u64)?;
+
+        self.0
+            .write_u64::<LittleEndian>(info.polynomials.len() as u64)?;
         for poly_info in info.polynomials.iter() {
             self.write_fri_polynomial_info(poly_info)?;
         }
@@ -1243,7 +1279,7 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
     val_offset += std::mem::size_of::<u64>();
 
-    // write num_constants_offset 
+    // write num_constants_offset
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
     val_offset += std::mem::size_of::<u64>();
 
@@ -1352,7 +1388,8 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
     // write fri_reduction_arity_bits
     let fri_reduction_strategy_offset_offset = buf.0.position();
     buf.0.set_position(val_offset as u64);
-    buf.0.write_u64::<LittleEndian>(common_data.fri_params.reduction_arity_bits.len() as u64)?;
+    buf.0
+        .write_u64::<LittleEndian>(common_data.fri_params.reduction_arity_bits.len() as u64)?;
     buf.write_usize_vec(common_data.fri_params.reduction_arity_bits.as_slice())?;
     val_offset = buf.0.position() as usize;
     buf.0.set_position(fri_reduction_strategy_offset_offset);
@@ -1362,7 +1399,7 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
 
     // write fri_reduction_strategy
     let fri_instance_offset_offset = buf.0.position();
-    buf.0.set_position(val_offset as u64); 
+    buf.0.set_position(val_offset as u64);
     buf.write_fri_reduction_strategy(&common_data.fri_params.config.reduction_strategy)?;
     val_offset = buf.0.position() as usize;
     buf.0.set_position(fri_instance_offset_offset);
@@ -1400,16 +1437,20 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
         .write_u64::<LittleEndian>(common_data.num_partial_products as u64)?;
     buf.0
         .write_u64::<LittleEndian>(common_data.quotient_degree_factor as u64)?;
-    buf.0.write_u64::<LittleEndian>(common_data.fri_params.config.cap_height as u64)?;
+    buf.0
+        .write_u64::<LittleEndian>(common_data.fri_params.config.cap_height as u64)?;
     buf.0.write_u8(common_data.fri_params.hiding as u8)?;
-   
+
     // skip over sigmas_cap
     buf.0.set_position(fri_hiding_offset);
-    buf.0.write_u64::<LittleEndian>(common_data.fri_params.degree_bits as u64)?;
-    buf.0.write_u64::<LittleEndian>(common_data.fri_params.config.rate_bits as u64)?;
-    buf.0.write_u32::<LittleEndian>(common_data.fri_params.config.proof_of_work_bits)?;
-    buf.0.write_u64::<LittleEndian>(common_data.fri_params.config.num_query_rounds as u64)?;
-
+    buf.0
+        .write_u64::<LittleEndian>(common_data.fri_params.degree_bits as u64)?;
+    buf.0
+        .write_u64::<LittleEndian>(common_data.fri_params.config.rate_bits as u64)?;
+    buf.0
+        .write_u32::<LittleEndian>(common_data.fri_params.config.proof_of_work_bits)?;
+    buf.0
+        .write_u64::<LittleEndian>(common_data.fri_params.config.num_query_rounds as u64)?;
 
     inspect(&mut buf);
 
@@ -1427,19 +1468,26 @@ fn inspect<R: AsRef<[u8]>>(buf: &mut Buffer<R>) {
 
 #[cfg(test)]
 mod tests {
-    use crate::{plonk::{circuit_data::CircuitConfig, circuit_builder::CircuitBuilder, prover::prove, config::PoseidonGoldilocksConfig}, iop::witness::PartialWitness, util::timing::TimingTree};
-    use super::super::fri_verifier::get_fri_instance;
     use anyhow::{anyhow, Result};
     use log::{info, Level};
 
+    use super::super::fri_verifier::get_fri_instance;
     use super::*;
+    use crate::{
+        iop::witness::PartialWitness,
+        plonk::{
+            circuit_builder::CircuitBuilder, circuit_data::CircuitConfig,
+            config::PoseidonGoldilocksConfig, prover::prove,
+        },
+        util::timing::TimingTree,
+    };
 
     type ProofTuple<F, C, const D: usize> = (
         ProofWithPublicInputs<F, C, D>,
         VerifierOnlyCircuitData<C, D>,
         CommonCircuitData<F, C, D>,
     );
-    
+
     /// Creates a dummy proof which should have `2 ** log2_size` rows.
     fn dummy_proof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(
         config: &CircuitConfig,
@@ -1473,19 +1521,19 @@ mod tests {
         Ok((proof, data.verifier_only, data.common))
     }
 
-
     #[test]
     fn test_circuit_data_serialization() -> Result<()> {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        
+
         let mut circuit_bytes = vec![0u8; 200_000];
 
-        let (_proof, verifier_only, common) = dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
+        let (_proof, verifier_only, common) =
+            dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
 
         serialize_circuit_data(circuit_bytes.as_mut_slice(), &common, &verifier_only)?;
-        let mut circuit_buf = CircuitBuf::<C, &[u8], D>::new(circuit_bytes.as_slice())?; 
+        let mut circuit_buf = CircuitBuf::<C, &[u8], D>::new(circuit_bytes.as_slice())?;
 
         let circuit_digest = circuit_buf.read_circuit_digest()?;
         assert_eq!(circuit_digest, common.circuit_digest);
@@ -1504,7 +1552,7 @@ mod tests {
 
         let num_routed_wires = circuit_buf.read_num_routed_wires()?;
         assert_eq!(num_routed_wires, common.config.num_routed_wires);
-        
+
         let k_is = circuit_buf.read_k_is(num_routed_wires)?;
         assert_eq!(k_is, common.k_is);
 
@@ -1524,25 +1572,39 @@ mod tests {
         assert_eq!(fri_degree_bits, common.fri_params.degree_bits);
 
         let fri_proof_of_work_bits = circuit_buf.read_fri_proof_of_work_bits()?;
-        assert_eq!(fri_proof_of_work_bits, common.fri_params.config.proof_of_work_bits);
-
+        assert_eq!(
+            fri_proof_of_work_bits,
+            common.fri_params.config.proof_of_work_bits
+        );
 
         let fri_num_query_rounds = circuit_buf.read_fri_num_query_rounds()?;
-        assert_eq!(fri_num_query_rounds, common.fri_params.config.num_query_rounds);
- 
+        assert_eq!(
+            fri_num_query_rounds,
+            common.fri_params.config.num_query_rounds
+        );
+
         let constants_sigmas_cap = circuit_buf.read_sigmas_cap(cap_height)?;
         assert_eq!(constants_sigmas_cap, verifier_only.constants_sigmas_cap);
 
         let fri_reduction_arity_bits = circuit_buf.read_fri_reduction_arity_bits()?;
-        assert_eq!(fri_reduction_arity_bits, common.fri_params.reduction_arity_bits);
+        assert_eq!(
+            fri_reduction_arity_bits,
+            common.fri_params.reduction_arity_bits
+        );
 
         let fri_reduction_strategy = circuit_buf.read_fri_reduction_strategy()?;
-        assert_eq!(fri_reduction_strategy, common.fri_params.config.reduction_strategy);
+        assert_eq!(
+            fri_reduction_strategy,
+            common.fri_params.config.reduction_strategy
+        );
 
         let selectors_info = circuit_buf.read_selectors_info()?;
-        assert_eq!(selectors_info.selector_indices, common.selectors_info.selector_indices);
+        assert_eq!(
+            selectors_info.selector_indices,
+            common.selectors_info.selector_indices
+        );
         assert_eq!(selectors_info.groups, common.selectors_info.groups);
- 
+
         let gates = circuit_buf.read_gates()?;
         for (g1, g2) in gates.iter().zip(common.gates.iter()) {
             assert_eq!(g1.as_ref().id(), g2.as_ref().id())
@@ -1556,14 +1618,15 @@ mod tests {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        
+
         let mut proof_bytes = vec![0u8; 200_000];
 
-        let (proof, _verifier_only, common) = dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
+        let (proof, _verifier_only, common) =
+            dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
 
         serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
         let mut proof_buf = ProofBuf::<C, &[u8], D>::new(proof_bytes.as_slice())?;
-        
+
         let cap_height = common.fri_params.config.cap_height;
         let wires_cap = proof_buf.read_wires_cap(cap_height)?;
         assert_eq!(wires_cap, proof.proof.wires_cap);
@@ -1589,12 +1652,19 @@ mod tests {
         let plonk_zs_next = proof_buf.read_plonk_zs_next_openings(common.config.num_challenges)?;
         assert_eq!(plonk_zs_next, proof.proof.openings.plonk_zs_next);
 
-        let plonk_zs_partial_products = proof_buf.read_pps_openings(common.num_partial_products, common.config.num_challenges)?;
-        assert_eq!(plonk_zs_partial_products, proof.proof.openings.partial_products);
+        let plonk_zs_partial_products = proof_buf
+            .read_pps_openings(common.num_partial_products, common.config.num_challenges)?;
+        assert_eq!(
+            plonk_zs_partial_products,
+            proof.proof.openings.partial_products
+        );
 
-        let quotient_polys = proof_buf.read_quotient_polys_openings(common.quotient_degree_factor, common.config.num_challenges)?;
+        let quotient_polys = proof_buf.read_quotient_polys_openings(
+            common.quotient_degree_factor,
+            common.config.num_challenges,
+        )?;
         assert_eq!(quotient_polys, proof.proof.openings.quotient_polys);
-        
+
         Ok(())
     }
 
@@ -1605,14 +1675,16 @@ mod tests {
         type F = <C as GenericConfig<D>>::F;
 
         let mut proof_bytes = vec![0u8; 200_000];
-        let (proof, _verifier_only, common) = dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
+        let (proof, _verifier_only, common) =
+            dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
         serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
         let mut proof_buf = ProofBuf::<C, &mut [u8], D>::new(proof_bytes.as_mut_slice())?;
 
         let pis = proof_buf.read_pis()?;
         assert_eq!(&pis, &proof.public_inputs);
 
-        let pis_hash = <<C as GenericConfig<D>>::InnerHasher as Hasher<F>>::hash_no_pad(pis.as_slice());
+        let pis_hash =
+            <<C as GenericConfig<D>>::InnerHasher as Hasher<F>>::hash_no_pad(pis.as_slice());
         assert_eq!(pis_hash, proof.get_public_inputs_hash());
 
         proof_buf.write_pis_hash(pis_hash)?;
@@ -1627,7 +1699,8 @@ mod tests {
         let fri_alpha = proof_buf.read_fri_alpha()?;
         let fri_pow_response = proof_buf.read_fri_pow_response()?;
         let fri_betas = proof_buf.read_fri_betas(common.fri_params.reduction_arity_bits.len())?;
-        let fri_query_indices = proof_buf.read_fri_query_indices(common.fri_params.config.num_query_rounds)?;
+        let fri_query_indices =
+            proof_buf.read_fri_query_indices(common.fri_params.config.num_query_rounds)?;
 
         assert_eq!(plonk_betas, challenges.plonk_betas);
         assert_eq!(plonk_gammas, challenges.plonk_gammas);
@@ -1637,8 +1710,11 @@ mod tests {
         assert_eq!(fri_alpha, challenges.fri_challenges.fri_alpha);
         assert_eq!(fri_pow_response, challenges.fri_challenges.fri_pow_response);
         assert_eq!(fri_betas, challenges.fri_challenges.fri_betas);
-        assert_eq!(fri_query_indices, challenges.fri_challenges.fri_query_indices);
-        
+        assert_eq!(
+            fri_query_indices,
+            challenges.fri_challenges.fri_query_indices
+        );
+
         Ok(())
     }
 
@@ -1649,7 +1725,8 @@ mod tests {
         type F = <C as GenericConfig<D>>::F;
 
         let mut proof_bytes = vec![0u8; 200_000];
-        let (proof, _verifier_only, common) = dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
+        let (proof, _verifier_only, common) =
+            dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
         serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
         let mut proof_buf = ProofBuf::<C, &mut [u8], D>::new(proof_bytes.as_mut_slice())?;
 
@@ -1660,11 +1737,19 @@ mod tests {
         proof_buf.write_fri_instance(&fri_instance)?;
 
         let fri_instance_read = proof_buf.read_fri_instance()?;
-        for (a, b) in fri_instance_read.oracles.iter().zip(fri_instance.oracles.iter()) {
+        for (a, b) in fri_instance_read
+            .oracles
+            .iter()
+            .zip(fri_instance.oracles.iter())
+        {
             assert_eq!(a.blinding, b.blinding);
         }
 
-        for (a, b) in fri_instance_read.batches.iter().zip(fri_instance.batches.iter()) {
+        for (a, b) in fri_instance_read
+            .batches
+            .iter()
+            .zip(fri_instance.batches.iter())
+        {
             assert_eq!(a.point, b.point);
             for (a, b) in a.polynomials.iter().zip(b.polynomials.iter()) {
                 assert_eq!(a.oracle_index, b.oracle_index);
@@ -1674,5 +1759,4 @@ mod tests {
 
         Ok(())
     }
-
 }
