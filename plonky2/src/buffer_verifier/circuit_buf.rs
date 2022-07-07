@@ -288,6 +288,8 @@ mod tests {
 
     use super::*;
     use crate::{
+        buffer_verifier::serialization::serialize_circuit_data,
+        gates::noop::NoopGate,
         hash::hash_types::RichField,
         iop::witness::PartialWitness,
         plonk::{
@@ -297,7 +299,7 @@ mod tests {
             proof::ProofWithPublicInputs,
             prover::prove,
         },
-        util::timing::TimingTree, gates::noop::NoopGate, buffer_verifier::serialization::serialize_circuit_data,
+        util::timing::TimingTree,
     };
 
     type ProofTuple<F, C, const D: usize> = (

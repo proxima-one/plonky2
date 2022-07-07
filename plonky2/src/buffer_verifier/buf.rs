@@ -28,9 +28,8 @@ use crate::gates::reducing::ReducingGate;
 use crate::gates::reducing_extension::ReducingExtensionGate;
 use crate::hash::hash_types::RichField;
 use crate::hash::merkle_tree::MerkleCap;
-use crate::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData};
 use crate::plonk::config::{GenericConfig, GenericHashOut, Hasher};
-use crate::plonk::proof::{Proof, ProofWithPublicInputs};
+
 pub struct Buffer<R: AsRef<[u8]>>(pub(crate) Cursor<R>);
 
 impl<R: AsRef<[u8]>> Buffer<R> {
@@ -107,7 +106,7 @@ impl<R: AsRef<[u8]>> Buffer<R> {
 
     pub(crate) fn read_bool_vec(&mut self, len: usize) -> IoResult<Vec<bool>> {
         let mut res = Vec::with_capacity(len);
-        for i in 0..len {
+        for _ in 0..len {
             res.push(self.read_bool()?);
         }
 
@@ -116,7 +115,7 @@ impl<R: AsRef<[u8]>> Buffer<R> {
 
     pub(crate) fn read_usize_vec(&mut self, len: usize) -> IoResult<Vec<usize>> {
         let mut res = Vec::with_capacity(len);
-        for i in 0..len {
+        for _ in 0..len {
             res.push(self.0.read_u64::<LittleEndian>()? as usize);
         }
 
@@ -125,7 +124,7 @@ impl<R: AsRef<[u8]>> Buffer<R> {
 
     pub(crate) fn read_range_vec(&mut self, len: usize) -> IoResult<Vec<Range<usize>>> {
         let mut res = Vec::with_capacity(len);
-        for i in 0..len {
+        for _ in 0..len {
             res.push(self.read_range()?);
         }
 

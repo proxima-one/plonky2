@@ -426,6 +426,7 @@ mod tests {
 
     use super::*;
     use crate::{
+        buffer_verifier::serialization::serialize_proof_with_pis,
         gates::noop::NoopGate,
         hash::hash_types::RichField,
         iop::witness::PartialWitness,
@@ -436,7 +437,7 @@ mod tests {
             proof::ProofWithPublicInputs,
             prover::prove,
         },
-        util::timing::TimingTree, buffer_verifier::serialization::serialize_proof_with_pis,
+        util::timing::TimingTree,
     };
 
     type ProofTuple<F, C, const D: usize> = (
