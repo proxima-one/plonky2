@@ -1,3 +1,4 @@
+#[cfg(feature = "buffer_verifier")]
 use std::io::Result as IoResult;
 use std::ops::Range;
 
@@ -19,7 +20,6 @@ use crate::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
     EvaluationVarsBasePacked,
 };
-use crate::util::serialization::Buffer;
 
 /// A gate whose first four wires will be equal to a hash of public inputs.
 #[derive(Copy, Clone, Debug)]

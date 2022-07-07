@@ -1,3 +1,4 @@
+#[cfg(feature = "buffer_verifier")]
 use std::io::Result as IoResult;
 use std::ops::Range;
 

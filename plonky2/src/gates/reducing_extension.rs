@@ -1,3 +1,4 @@
+#[cfg(feature = "buffer_verifier")]
 use std::io::Result as IoResult;
 use std::ops::Range;
 
@@ -19,7 +20,6 @@ use crate::iop::target::Target;
 use crate::iop::witness::{PartitionWitness, Witness};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
-use crate::util::serialization::Buffer;
 
 /// Computes `sum alpha^i c_i` for a vector `c_i` of `num_coeffs` elements of the extension field.
 #[derive(Debug, Clone)]

@@ -1,3 +1,4 @@
+#[cfg(feature = "buffer_verifier")]
 use std::io::Result as IoResult;
 use std::ops::Range;
 
@@ -26,8 +27,6 @@ use crate::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
     EvaluationVarsBasePacked,
 };
-#[cfg(feature = "buffer_verifier")]
-use crate::util::serialization::Buffer;
 
 /// A gate which can decompose a number into base B little-endian limbs.
 #[derive(Copy, Clone, Debug)]

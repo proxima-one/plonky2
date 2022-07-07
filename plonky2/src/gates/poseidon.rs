@@ -1,3 +1,4 @@
+#[cfg(feature = "buffer_verifier")]
 use std::io::Result as IoResult;
 use std::marker::PhantomData;
 
@@ -22,7 +23,6 @@ use crate::iop::wire::Wire;
 use crate::iop::witness::{PartitionWitness, Witness};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
-use crate::util::serialization::Buffer;
 
 /// Evaluates a full Poseidon permutation with 12 state elements.
 ///

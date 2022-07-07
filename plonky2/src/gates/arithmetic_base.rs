@@ -1,3 +1,4 @@
+#[cfg(feature = "buffer_verifier")]
 use std::io::Result as IoResult;
 
 #[cfg(feature = "buffer_verifier")]
@@ -23,6 +24,7 @@ use crate::plonk::vars::{
     EvaluationTargets, EvaluationVars, EvaluationVarsBase, EvaluationVarsBaseBatch,
     EvaluationVarsBasePacked,
 };
+
 /// A gate which can perform a weighted multiply-add, i.e. `result = c0 x y + c1 z`. If the config
 /// supports enough routed wires, it can support several such operations in one gate.
 #[derive(Debug, Clone)]

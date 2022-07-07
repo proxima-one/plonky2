@@ -1,3 +1,4 @@
+#[cfg(feature = "buffer_verifier")]
 use std::io::Result as IoResult;
 use std::ops::Range;
 
@@ -20,7 +21,6 @@ use crate::iop::witness::{PartitionWitness, Witness};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::circuit_data::CircuitConfig;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBase};
-use crate::util::serialization::Buffer;
 
 /// A gate which can perform a weighted multiplication, i.e. `result = c0 x y`. If the config
 /// supports enough routed wires, it can support several such operations in one gate.

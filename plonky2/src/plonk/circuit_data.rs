@@ -12,7 +12,7 @@ use crate::fri::structure::{
     FriBatchInfo, FriBatchInfoTarget, FriInstanceInfo, FriInstanceInfoTarget, FriPolynomialInfo,
 };
 use crate::fri::{FriConfig, FriParams};
-use crate::gates::gate::{Gate, GateRef};
+use crate::gates::gate::GateRef;
 use crate::gates::selectors::SelectorsInfo;
 use crate::hash::hash_types::{MerkleCapTarget, RichField};
 use crate::hash::merkle_tree::MerkleCap;
@@ -26,7 +26,6 @@ use crate::plonk::plonk_common::{PlonkOracle, FRI_ORACLES};
 use crate::plonk::proof::{CompressedProofWithPublicInputs, ProofWithPublicInputs};
 use crate::plonk::prover::prove;
 use crate::plonk::verifier::verify;
-use crate::util::serialization::Buffer;
 use crate::util::timing::TimingTree;
 
 #[derive(Clone, Debug)]

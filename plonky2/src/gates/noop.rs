@@ -1,3 +1,4 @@
+#[cfg(feature = "buffer_verifier")]
 use std::io::Result as IoResult;
 
 use plonky2_field::extension::Extendable;
@@ -12,7 +13,6 @@ use crate::iop::ext_target::ExtensionTarget;
 use crate::iop::generator::WitnessGenerator;
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBaseBatch};
-use crate::util::serialization::Buffer;
 
 /// A gate which does nothing.
 #[derive(Copy, Clone, Debug)]
