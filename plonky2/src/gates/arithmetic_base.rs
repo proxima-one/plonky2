@@ -70,7 +70,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Gate<F, D> for ArithmeticGate
 
     #[cfg(feature = "buffer_verifier")]
     fn serialize(&self, dst: &mut [u8]) -> IoResult<usize> {
-        let bytes = LittleEndian::write_u64(dst, self.num_ops as u64);
+        LittleEndian::write_u64(dst, self.num_ops as u64);
         Ok(std::mem::size_of::<u64>())
     }
 

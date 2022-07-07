@@ -8,6 +8,7 @@ use byteorder::{ByteOrder, LittleEndian, ReadBytesExt, WriteBytesExt};
 use plonky2_field::extension::{Extendable, FieldExtension};
 use plonky2_field::types::{Field, Field64, PrimeField64};
 
+use crate::fri::reduction_strategies::FriReductionStrategy;
 use crate::fri::structure::{FriBatchInfo, FriInstanceInfo, FriOracleInfo, FriPolynomialInfo};
 use crate::gates::arithmetic_base::ArithmeticGate;
 use crate::gates::arithmetic_extension::ArithmeticExtensionGate;
@@ -140,6 +141,10 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
             _phantom: PhantomData,
         })
     }
+
+    pub fn len(&mut self) -> usize {
+        self.offsets.len
+    } 
 
     pub fn read_pis_hash(&mut self) -> IoResult<InnerHashForConfig<C, D>> {
         self.buf.0.set_position(self.offsets.pis_hash_offset as u64);
@@ -412,12 +417,20 @@ pub struct CircuitBufOffsets {
     k_is_offset: usize,
     num_partial_products_offset: usize,
     quotient_degree_factor_offset: usize,
+    cap_height_offset: usize,
+    fri_is_hiding_offset: usize,
     sigmas_cap_offset: usize,
+    fri_degree_bits_offset: usize,
+    fri_rate_bits_offset: usize,
+    fri_proof_of_work_bits_offset: usize,
+    fri_num_query_rounds_offset: usize,
+    fri_reduction_arity_bits_offset: usize,
+    fri_reduction_strategy_offset: usize,
     // these offsets are initially set to `sigmas_cap_offset` and is updated via "circuit initialization" method
     fri_instance_offset: usize,
 }
 
-const NUM_CIRCUIT_BUF_OFFSETS: usize = 14;
+const NUM_CIRCUIT_BUF_OFFSETS: usize = 21;
 
 fn get_circuit_buf_offsets<R: AsRef<[u8]>>(buf: &mut Buffer<R>) -> IoResult<CircuitBufOffsets> {
     let len = buf.0.read_u64::<LittleEndian>()? as usize;
@@ -431,7 +444,15 @@ fn get_circuit_buf_offsets<R: AsRef<[u8]>>(buf: &mut Buffer<R>) -> IoResult<Circ
     let k_is_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let num_partial_products_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let quotient_degree_factor_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let cap_height_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_is_hiding_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let sigmas_cap_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_degree_bits_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_rate_bits_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_proof_of_work_bits_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_num_query_rounds_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_reduction_arity_bits_offset: usize = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_reduction_strategy_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let fri_instance_offset = buf.0.read_u64::<LittleEndian>()? as usize;
 
     Ok(CircuitBufOffsets {
@@ -446,9 +467,17 @@ fn get_circuit_buf_offsets<R: AsRef<[u8]>>(buf: &mut Buffer<R>) -> IoResult<Circ
         k_is_offset,
         num_partial_products_offset,
         quotient_degree_factor_offset,
+        cap_height_offset,
+        fri_is_hiding_offset,
         sigmas_cap_offset,
+        fri_degree_bits_offset,
+        fri_rate_bits_offset,
+        fri_proof_of_work_bits_offset,
+        fri_num_query_rounds_offset,
+        fri_reduction_arity_bits_offset,
+        fri_reduction_strategy_offset,
         fri_instance_offset,
-    })
+    }) 
 }
 
 impl<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> CircuitBuf<C, R, D> {
@@ -461,6 +490,10 @@ impl<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> CircuitBuf<C, R, D> {
             _phantom: PhantomData,
         })
     }
+
+    pub fn len(&mut self) -> usize {
+        self.offsets.len
+    } 
 
     pub fn read_circuit_digest(&mut self) -> IoResult<HashForConfig<C, D>> {
         self.buf
@@ -550,6 +583,61 @@ impl<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> CircuitBuf<C, R, D> {
             .0
             .set_position(self.offsets.sigmas_cap_offset as u64);
         self.buf.read_merkle_cap(cap_height)
+    }
+
+    pub fn read_cap_height(&mut self) -> IoResult<usize> {
+        self.buf.0.set_position(self.offsets.cap_height_offset as u64);
+        Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
+    }
+
+    pub fn read_fri_is_hiding(&mut self) -> IoResult<bool> {
+        self.buf
+            .0
+            .set_position(self.offsets.fri_is_hiding_offset as u64);
+    
+        self.buf.read_bool()
+    }
+
+    pub fn read_fri_degree_bits(&mut self) -> IoResult<usize> {
+        self.buf
+            .0
+            .set_position(self.offsets.fri_degree_bits_offset as u64);
+        Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
+    }
+
+    pub fn read_fri_rate_bits(&mut self) -> IoResult<usize> {
+        self.buf
+            .0
+            .set_position(self.offsets.fri_rate_bits_offset as u64);
+
+        Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
+    }
+
+    pub fn read_fri_proof_of_work_bits(&mut self) -> IoResult<u32> {
+        self.buf
+            .0
+            .set_position(self.offsets.fri_proof_of_work_bits_offset as u64);
+        self.buf.0.read_u32::<LittleEndian>()
+    }
+
+    pub fn read_fri_num_query_rounds(&mut self) -> IoResult<usize> {
+        self.buf
+            .0
+            .set_position(self.offsets.fri_num_query_rounds_offset as u64);
+        Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
+    }
+
+    pub fn read_fri_reduction_arity_bits(&mut self) -> IoResult<Vec<usize>> {
+        self.buf
+            .0
+            .set_position(self.offsets.fri_reduction_arity_bits_offset as u64);
+        let len = self.buf.0.read_u64::<LittleEndian>()? as usize;
+        self.buf.read_usize_vec(len)
+    }
+
+    pub fn read_fri_reduction_strategy(&mut self) -> IoResult<FriReductionStrategy> {
+        self.buf.0.set_position(self.offsets.fri_reduction_strategy_offset as u64);
+        self.buf.read_fri_reduction_strategy()
     }
 
     pub fn read_fri_instance(
@@ -830,13 +918,47 @@ impl<R: AsRef<[u8]>> Buffer<R> {
     }
 
     pub fn read_gate<C: GenericConfig<D>, const D: usize>(&mut self) -> IoResult<GateBox<C::F, D>> {
-        let tag = self.0.read_u8()?;
         let len = self.0.read_u64::<LittleEndian>()? as usize;
-        let gate = read_gate::<C, D>(self.0.get_ref().as_ref(), tag)?;
-        self.0.set_position(len as u64 + self.0.position());
+        let tag = self.0.read_u8()?;
+        let position = self.0.position() as usize;
+        let buf = self.0.get_ref().as_ref();
+        let gate = read_gate::<C, D>(&buf[position..], tag)?;
+        self.0.set_position(len as u64 + self.0.position() - 1);
 
         Ok(gate)
     }
+
+    pub fn read_fri_reduction_strategy(&mut self) -> IoResult<FriReductionStrategy> {
+        let enum_tag = self.0.read_u8()?;
+        match enum_tag {
+            // Fixed
+            0 => {
+                let arity_bitses_len = self.0.read_u64::<LittleEndian>()? as usize;
+                let arity_bitses = self.read_usize_vec(arity_bitses_len)?;
+                Ok(FriReductionStrategy::Fixed(arity_bitses))
+            },
+            // ConstantArityBits
+            1 => {
+                let arity_bits = self.0.read_u64::<LittleEndian>()? as usize;
+                let final_poly_bits = self.0.read_u64::<LittleEndian>()? as usize;
+                Ok(FriReductionStrategy::ConstantArityBits(arity_bits, final_poly_bits))
+            },
+            // MinSize
+            2 => {
+                let is_some_tag = self.0.read_u8()?;
+                match is_some_tag {
+                    0 => Ok(FriReductionStrategy::MinSize(None)),
+                    1 => {
+                        let min_size = self.0.read_u64::<LittleEndian>()? as usize;
+                        Ok(FriReductionStrategy::MinSize(Some(min_size)))
+                    },
+                    _ => Err(IoError::from(IoErrorKind::InvalidData))
+                }
+            }
+            _ => Err(IoError::from(IoErrorKind::InvalidData))
+        }
+    }
+    
 }
 
 impl<'a> Buffer<&'a mut [u8]> {
@@ -904,8 +1026,12 @@ impl<'a> Buffer<&'a mut [u8]> {
         &mut self,
         gate: &GateBox<C::F, D>,
     ) -> IoResult<()> {
-        let gate_len = write_gate::<C, D>(self.0.get_mut().as_mut(), gate.as_ref())? as u64;
-        self.0.set_position(self.0.position() + gate_len);
+        let position = self.0.position() as usize;
+        let buf: &mut [u8] = self.0.get_mut().as_mut();
+        let gate_start = position + std::mem::size_of::<u64>();
+        let gate_len = write_gate::<C, D>(&mut buf[gate_start..], gate.as_ref())? as u64;
+        LittleEndian::write_u64(&mut buf[position..gate_start], gate_len as u64);
+        self.0.set_position(gate_start as u64 + gate_len);
 
         Ok(())
     }
@@ -914,11 +1040,39 @@ impl<'a> Buffer<&'a mut [u8]> {
         &mut self,
         gates: &[GateBox<C::F, D>],
     ) -> IoResult<()> {
-        self.0.write_u64::<LittleEndian>(gates.len() as u64);
+        self.0.write_u64::<LittleEndian>(gates.len() as u64)?;
         for gate in gates {
             self.write_gate::<C, D>(gate)?;
         }
 
+        Ok(())
+    }
+
+    pub fn write_fri_reduction_strategy(&mut self, strategy: &FriReductionStrategy) -> IoResult<()> {
+        match strategy {
+            FriReductionStrategy::Fixed(arity_bitses)=> {
+                self.0.write_u8(0)?;
+                self.0.write_u64::<LittleEndian>(arity_bitses.len() as u64)?;
+                self.write_usize_vec(arity_bitses)?;
+            }
+            FriReductionStrategy::ConstantArityBits(arity_bits, final_poly_bits) => {
+                self.0.write_u8(1)?;
+                self.0.write_u64::<LittleEndian>(*arity_bits as u64)?;
+                self.0.write_u64::<LittleEndian>(*final_poly_bits as u64)?;
+            }
+            FriReductionStrategy::MinSize(opt_max_arity_bits) => {
+                self.0.write_u8(2)?;
+                match opt_max_arity_bits {
+                    Some(opt_max_arity_bits) => {
+                        self.0.write_u8(1)?;
+                        self.0.write_u64::<LittleEndian>(*opt_max_arity_bits as u64)?;
+                    },
+                    None => {
+                        self.0.write_u8(0)?;
+                    }
+                } 
+            }
+        }
         Ok(())
     }
 }
@@ -1041,7 +1195,6 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
     buf.0.set_position(std::mem::size_of::<u64>() as u64);
     let mut val_offset = NUM_CIRCUIT_BUF_OFFSETS * std::mem::size_of::<u64>() as usize;
 
-    // write ciruit_digest_offset
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
     val_offset += C::Hasher::HASH_SIZE;
 
@@ -1085,6 +1238,7 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
     // write degree_bits_offset
     buf.0.set_position(degree_bits_offset_offset);
     buf.0.write_u64::<LittleEndian>(degree_bits_offset)?;
+
     val_offset = degree_bits_offset as usize + std::mem::size_of::<u64>();
 
     // write_num_routed_wires_offset
@@ -1103,9 +1257,65 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
     val_offset += std::mem::size_of::<u64>();
 
+    // write cap_height_offset
+    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
+    val_offset += std::mem::size_of::<u64>();
+
+    // write fri_is_hiding_offset
+    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
+    val_offset += std::mem::size_of::<u8>();
+
+    inspect(&mut buf);
+
     // write sigmas_cap_offset
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
-    val_offset += verifier_data.constants_sigmas_cap.len() * C::Hasher::HASH_SIZE;
+
+    // write sigmas_cap
+    let fri_rate_bits_offset_offset = buf.0.position();
+    buf.0.set_position(val_offset as u64);
+    buf.write_merkle_cap::<C::F, C::Hasher>(&verifier_data.constants_sigmas_cap)?;
+    let fri_hiding_offset = buf.0.position();
+    val_offset = fri_hiding_offset as usize;
+    buf.0.set_position(fri_rate_bits_offset_offset);
+
+    // write fri_degree_bits_offset
+    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
+    val_offset += std::mem::size_of::<u64>();
+
+    inspect(&mut buf);
+
+    // write fri_rate_bits_offset
+    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
+    val_offset += std::mem::size_of::<u64>();
+
+    // write fri_proof_of_work_bits_offset
+    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
+    val_offset += std::mem::size_of::<u32>();
+
+    // write fri_num_query_rounds_offset
+    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
+    val_offset += std::mem::size_of::<u64>();
+
+    // write fri_reduction_arity_bits_offset
+    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
+
+    // write fri_reduction_arity_bits
+    let fri_reduction_strategy_offset_offset = buf.0.position();
+    buf.0.set_position(val_offset as u64);
+    buf.0.write_u64::<LittleEndian>(common_data.fri_params.reduction_arity_bits.len() as u64)?;
+    buf.write_usize_vec(common_data.fri_params.reduction_arity_bits.as_slice())?;
+    val_offset = buf.0.position() as usize;
+    buf.0.set_position(fri_reduction_strategy_offset_offset);
+
+    // write fri_reduction_strategy_offset
+    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
+
+    // write fri_reduction_strategy
+    let fri_instance_offset_offset = buf.0.position();
+    buf.0.set_position(val_offset as u64); 
+    buf.write_fri_reduction_strategy(&common_data.fri_params.config.reduction_strategy)?;
+    val_offset = buf.0.position() as usize;
+    buf.0.set_position(fri_instance_offset_offset);
 
     // write fri_instance_offset
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
@@ -1114,7 +1324,7 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
     buf.0.set_position(0);
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
 
-    // write non-gate, non-selector values
+    // write non-gate, non-selector, non-fri_reduction_strategy values
     buf.0
         .set_position((NUM_CIRCUIT_BUF_OFFSETS * std::mem::size_of::<u64>()) as u64);
 
@@ -1136,12 +1346,150 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
         .write_u64::<LittleEndian>(common_data.num_partial_products as u64)?;
     buf.0
         .write_u64::<LittleEndian>(common_data.quotient_degree_factor as u64)?;
-    buf.write_merkle_cap::<C::F, C::Hasher>(&verifier_data.constants_sigmas_cap)?;
+    buf.0.write_u64::<LittleEndian>(common_data.fri_params.config.cap_height as u64)?;
+    buf.0.write_u8(common_data.fri_params.hiding as u8)?;
+   
+    // skip over sigmas_cap
+    buf.0.set_position(fri_hiding_offset);
+    buf.0.write_u64::<LittleEndian>(common_data.fri_params.degree_bits as u64)?;
+    buf.0.write_u64::<LittleEndian>(common_data.fri_params.config.rate_bits as u64)?;
+    buf.0.write_u32::<LittleEndian>(common_data.fri_params.config.proof_of_work_bits)?;
+    buf.0.write_u64::<LittleEndian>(common_data.fri_params.config.num_query_rounds as u64)?;
+
+
+    inspect(&mut buf);
 
     Ok(())
 }
 
+fn inspect<R: AsRef<[u8]>>(buf: &mut Buffer<R>) {
+    let tmp = buf.0.position();
+    buf.0.set_position(13 * std::mem::size_of::<u64>() as u64);
+    let offset = buf.0.read_u64::<LittleEndian>().unwrap();
+    buf.0.set_position(offset);
+    let val = buf.0.read_u8().unwrap();
+    buf.0.set_position(tmp)
+}
+
 #[cfg(test)]
 mod tests {
-    // TODO: grab some dummy circuits and test the serialization the same way the tests do in the examples
+    use crate::{plonk::{circuit_data::CircuitConfig, circuit_builder::CircuitBuilder, prover::prove, config::PoseidonGoldilocksConfig}, iop::witness::PartialWitness, util::timing::TimingTree};
+    use anyhow::{anyhow, Result};
+    use log::{info, Level};
+
+    use super::*;
+
+    type ProofTuple<F, C, const D: usize> = (
+        ProofWithPublicInputs<F, C, D>,
+        VerifierOnlyCircuitData<C, D>,
+        CommonCircuitData<F, C, D>,
+    );
+    
+    /// Creates a dummy proof which should have `2 ** log2_size` rows.
+    fn dummy_proof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(
+        config: &CircuitConfig,
+        log2_size: usize,
+    ) -> Result<ProofTuple<F, C, D>>
+    where
+        [(); C::Hasher::HASH_SIZE]:,
+    {
+        // 'size' is in degree, but we want number of noop gates. A non-zero amount of padding will be added and size will be rounded to the next power of two. To hit our target size, we go just under the previous power of two and hope padding is less than half the proof.
+        let num_dummy_gates = match log2_size {
+            0 => return Err(anyhow!("size must be at least 1")),
+            1 => 0,
+            2 => 1,
+            n => (1 << (n - 1)) + 1,
+        };
+        info!("Constructing inner proof with {} gates", num_dummy_gates);
+        let mut builder = CircuitBuilder::<F, D>::new(config.clone());
+        for _ in 0..num_dummy_gates {
+            builder.add_gate(NoopGate, vec![]);
+        }
+        builder.print_gate_counts(0);
+
+        let data = builder.build::<C>();
+        let inputs = PartialWitness::new();
+
+        let mut timing = TimingTree::new("prove", Level::Debug);
+        let proof = prove(&data.prover_only, &data.common, inputs, &mut timing)?;
+        timing.print();
+        data.verify(proof.clone())?;
+
+        Ok((proof, data.verifier_only, data.common))
+    }
+
+
+    #[test]
+    fn test_circuit_data_serialization() -> Result<()> {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+        
+        let mut circuit_bytes = vec![0u8; 200_000];
+
+        let (_proof, verifier_only, common) = dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
+
+        serialize_circuit_data(circuit_bytes.as_mut_slice(), &common, &verifier_only)?;
+        let mut circuit_buf = CircuitBuf::<C, &[u8], D>::new(circuit_bytes.as_slice())?; 
+
+        let circuit_digest = circuit_buf.read_circuit_digest()?;
+        assert_eq!(circuit_digest, common.circuit_digest);
+
+        let num_challenges = circuit_buf.read_num_challenges()?;
+        assert_eq!(num_challenges, common.config.num_challenges);
+
+        let num_gate_constraints = circuit_buf.read_num_gate_constraints()?;
+        assert_eq!(num_gate_constraints, common.num_gate_constraints);
+
+        let degree_bits = circuit_buf.read_degree_bits()?;
+        assert_eq!(degree_bits, common.degree_bits);
+
+        let num_routed_wires = circuit_buf.read_num_routed_wires()?;
+        assert_eq!(num_routed_wires, common.config.num_routed_wires);
+        
+        let k_is = circuit_buf.read_k_is(num_routed_wires)?;
+        assert_eq!(k_is, common.k_is);
+
+        let num_partial_products = circuit_buf.read_num_partial_products()?;
+        assert_eq!(num_partial_products, common.num_partial_products);
+
+        let quotient_degree_factor = circuit_buf.read_quotient_degree_factor()?;
+        assert_eq!(quotient_degree_factor, common.quotient_degree_factor);
+
+        let cap_height = circuit_buf.read_cap_height()?;
+        assert_eq!(cap_height, common.fri_params.config.cap_height);
+
+        let fri_is_hiding = circuit_buf.read_fri_is_hiding()?;
+        assert_eq!(fri_is_hiding, common.fri_params.hiding);
+
+        let fri_degree_bits = circuit_buf.read_fri_degree_bits()?;
+        assert_eq!(fri_degree_bits, common.fri_params.degree_bits);
+
+        let fri_proof_of_work_bits = circuit_buf.read_fri_proof_of_work_bits()?;
+        assert_eq!(fri_proof_of_work_bits, common.fri_params.config.proof_of_work_bits);
+
+
+        let fri_num_query_rounds = circuit_buf.read_fri_num_query_rounds()?;
+        assert_eq!(fri_num_query_rounds, common.fri_params.config.num_query_rounds);
+ 
+        let constants_sigmas_cap = circuit_buf.read_sigmas_cap(cap_height)?;
+        assert_eq!(constants_sigmas_cap, verifier_only.constants_sigmas_cap);
+
+        let fri_reduction_arity_bits = circuit_buf.read_fri_reduction_arity_bits()?;
+        assert_eq!(fri_reduction_arity_bits, common.fri_params.reduction_arity_bits);
+
+        let fri_reduction_strategy = circuit_buf.read_fri_reduction_strategy()?;
+        assert_eq!(fri_reduction_strategy, common.fri_params.config.reduction_strategy);
+
+        let selectors_info = circuit_buf.read_selectors_info()?;
+        assert_eq!(selectors_info.selector_indices, common.selectors_info.selector_indices);
+        assert_eq!(selectors_info.groups, common.selectors_info.groups);
+ 
+        let gates = circuit_buf.read_gates()?;
+        for (g1, g2) in gates.iter().zip(common.gates.iter()) {
+            assert_eq!(g1.as_ref().id(), g2.as_ref().id())
+        }
+
+        Ok(())
+    }
 }
