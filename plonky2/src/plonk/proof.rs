@@ -250,7 +250,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
     }
 }
 
-pub(crate) struct ProofChallenges<F: RichField + Extendable<D>, const D: usize> {
+pub struct ProofChallenges<F: RichField + Extendable<D>, const D: usize> {
     /// Random values used in Plonk's permutation argument.
     pub plonk_betas: Vec<F>,
 

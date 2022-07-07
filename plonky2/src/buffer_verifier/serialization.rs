@@ -33,7 +33,7 @@ use crate::hash::merkle_tree::MerkleCap;
 use crate::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData};
 use crate::plonk::config::{GenericConfig, GenericHashOut, Hasher};
 use crate::plonk::plonk_common::{PlonkOracle, FRI_ORACLES};
-use crate::plonk::proof::{Proof, ProofWithPublicInputs};
+use crate::plonk::proof::{Proof, ProofWithPublicInputs, ProofChallenges};
 
 #[allow(type_alias_bounds)]
 type HashForConfig<C: GenericConfig<D>, const D: usize> =
@@ -52,7 +52,7 @@ pub struct ProofBuf<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> {
 #[derive(Debug, Clone, Copy)]
 struct ProofBufOffsets {
     len: usize,
-    // this offset is set, but the hash is written by the verifier the first time around
+    // this offset is set, but the hash is written by the verifier during the first step
     pis_hash_offset: usize,
     pis_offset: usize,
     wires_cap_offset: usize,
@@ -75,15 +75,17 @@ struct ProofBufOffsets {
     fri_pow_response_offset: usize,
     fri_betas_offset: usize,
     fri_query_indices_offset: usize,
+    fri_instance_offset: usize,
 }
 
-const NUM_PROOF_BUF_OFFSETS: usize = 21;
+const NUM_PROOF_BUF_OFFSETS: usize = 22;
 
 // TODO: check to ensure offsets are valid and return a IoResult
 fn get_proof_buf_offsets<R: AsRef<[u8]>>(buf: &mut Buffer<R>) -> IoResult<ProofBufOffsets> {
     let len = buf.0.read_u64::<LittleEndian>()? as usize;
-    let wires_cap_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let pis_hash_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let pis_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let wires_cap_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let zs_pp_cap_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let quotient_polys_cap_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let constants_offset = buf.0.read_u64::<LittleEndian>()? as usize;
@@ -101,10 +103,11 @@ fn get_proof_buf_offsets<R: AsRef<[u8]>>(buf: &mut Buffer<R>) -> IoResult<ProofB
     let fri_pow_response_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let fri_betas_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let fri_query_indices_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_instance_offset = buf.0.read_u64::<LittleEndian>()? as usize;
 
     Ok(ProofBufOffsets {
         len,
-        pis_hash_offset: buf.0.position() as usize,
+        pis_hash_offset,
         pis_offset,
         wires_cap_offset,
         zs_pp_cap_offset,
@@ -124,6 +127,7 @@ fn get_proof_buf_offsets<R: AsRef<[u8]>>(buf: &mut Buffer<R>) -> IoResult<ProofB
         fri_pow_response_offset,
         fri_betas_offset,
         fri_query_indices_offset,
+        fri_instance_offset,
     })
 }
 
@@ -149,6 +153,12 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
     pub fn read_pis_hash(&mut self) -> IoResult<InnerHashForConfig<C, D>> {
         self.buf.0.set_position(self.offsets.pis_hash_offset as u64);
         self.buf.read_hash::<C::F, C::InnerHasher>()
+    }
+
+    pub fn read_pis(&mut self) -> IoResult<Vec<C::F>> {
+        self.buf.0.set_position(self.offsets.pis_offset as u64);
+        let len = self.buf.0.read_u64::<LittleEndian>()? as usize;
+        self.buf.read_field_vec::<C::F>(len)
     }
 
     pub fn read_wires_cap(&mut self, cap_height: usize) -> IoResult<MerkleCap<C::F, C::Hasher>> {
@@ -272,54 +282,64 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
             .read_field_ext_vec::<C::F, D>(fri_reduction_arity_bits_len)
     }
 
-    pub fn read_fri_query_indices(&mut self, num_fri_queries: usize) -> IoResult<Vec<usize>> {
+    pub fn read_fri_query_indices(&mut self, num_query_rounds: usize) -> IoResult<Vec<usize>> {
         self.buf
             .0
             .set_position(self.offsets.fri_query_indices_offset as u64);
-        self.buf.read_usize_vec(num_fri_queries)
+        self.buf.read_usize_vec(num_query_rounds)
+    }
+
+    pub fn read_fri_instance(&mut self) -> IoResult<FriInstanceInfo<C::F, D>> {
+        self.buf.0.set_position(self.offsets.fri_instance_offset as u64);
+
+        let num_oracles = self.buf.0.read_u64::<LittleEndian>()? as usize;
+        let mut oracles = Vec::with_capacity(num_oracles);
+        for _ in 0..num_oracles {
+            let oracle = self.buf.read_fri_oracle_info()?;
+            oracles.push(oracle);
+        }
+
+        let num_batches = self.buf.0.read_u64::<LittleEndian>()? as usize;
+        let mut batches = Vec::with_capacity(num_batches); 
+        for _ in 0..num_batches {
+            let batch = self.buf.read_fri_batch_info::<C::F, D>()?;
+            batches.push(batch);
+        }
+
+        Ok(FriInstanceInfo { oracles, batches })
     }
 }
 
-pub struct BufferVerifierChallenges<C: GenericConfig<D>, const D: usize> {
-    betas: Vec<C::F>,
-    gammas: Vec<C::F>,
-    alphas: Vec<C::F>,
-    zeta: C::FE,
-    fri_alpha: C::FE,
-    fri_pow_response: C::F,
-    fri_betas: Vec<C::FE>,
-    fri_query_indices: Vec<usize>,
-}
 
 impl<'a, C: GenericConfig<D>, const D: usize> ProofBuf<C, &'a mut [u8], D> {
-    pub fn write_challenges(&mut self, challenges: BufferVerifierChallenges<C, D>) -> IoResult<()> {
+    pub fn write_challenges(&mut self, challenges: &ProofChallenges<C::F, D>) -> IoResult<()> {
         self.buf
             .0
             .set_position(self.offsets.challenge_betas_offset as u64);
-        self.buf.write_field_vec(challenges.betas.as_slice())?;
+        self.buf.write_field_vec(challenges.plonk_betas.as_slice())?;
 
         self.offsets.challenge_gammas_offset = self.buf.0.position() as usize;
-        self.buf.write_field_vec(challenges.gammas.as_slice())?;
+        self.buf.write_field_vec(challenges.plonk_gammas.as_slice())?;
 
         self.offsets.challenge_alphas_offset = self.buf.0.position() as usize;
-        self.buf.write_field_vec(challenges.alphas.as_slice())?;
+        self.buf.write_field_vec(challenges.plonk_alphas.as_slice())?;
 
         self.offsets.challenge_zeta_offset = self.buf.0.position() as usize;
-        self.buf.write_field_ext::<C::F, D>(challenges.zeta)?;
+        self.buf.write_field_ext::<C::F, D>(challenges.plonk_zeta)?;
 
         self.offsets.fri_alpha_offset = self.buf.0.position() as usize;
-        self.buf.write_field_ext::<C::F, D>(challenges.fri_alpha)?;
+        self.buf.write_field_ext::<C::F, D>(challenges.fri_challenges.fri_alpha)?;
 
         self.offsets.fri_pow_response_offset = self.buf.0.position() as usize;
-        self.buf.write_field(challenges.fri_pow_response)?;
+        self.buf.write_field(challenges.fri_challenges.fri_pow_response)?;
 
         self.offsets.fri_betas_offset = self.buf.0.position() as usize;
         self.buf
-            .write_field_ext_vec::<C::F, D>(challenges.fri_betas.as_slice())?;
+            .write_field_ext_vec::<C::F, D>(challenges.fri_challenges.fri_betas.as_slice())?;
 
         self.offsets.fri_query_indices_offset = self.buf.0.position() as usize;
         self.buf
-            .write_usize_vec(challenges.fri_query_indices.as_slice())?;
+            .write_usize_vec(challenges.fri_challenges.fri_query_indices.as_slice())?;
 
         self.offsets.len = self.buf.0.position() as usize;
         self.set_offsets()?;
@@ -391,11 +411,28 @@ impl<'a, C: GenericConfig<D>, const D: usize> ProofBuf<C, &'a mut [u8], D> {
         Ok(())
     }
 
-    pub fn write_pis_hash(&mut self, pis: &[C::F]) -> IoResult<()> {
-        let pis_hash = C::InnerHasher::hash_no_pad(pis);
-
+    pub fn write_pis_hash(&mut self, pis_hash: <<C as GenericConfig<D>>::InnerHasher as Hasher<C::F>>::Hash) -> IoResult<()> {
         self.buf.0.set_position(self.offsets.pis_hash_offset as u64);
         self.buf.write_hash::<C::F, C::InnerHasher>(pis_hash)
+    }
+
+    pub fn write_fri_instance(&mut self, fri_instance: &FriInstanceInfo<C::F, D>) -> IoResult<()> {
+        self.buf.0.set_position(self.offsets.fri_instance_offset as u64);
+        self.buf.0.write_u64::<LittleEndian>(fri_instance.oracles.len() as u64)?;
+        for oracle in &fri_instance.oracles {
+            self.buf.write_fri_oracle_info(oracle)?;
+        }
+
+        self.buf.0.write_u64::<LittleEndian>(fri_instance.batches.len() as u64)?;
+        for batch in &fri_instance.batches {
+            self.buf.write_fri_batch_info(batch)?;
+        }
+
+        let new_buf_len = self.buf.0.position();
+        self.buf.0.set_position(0);
+        self.buf.0.write_u64::<LittleEndian>(new_buf_len)?;
+
+        Ok(())
     }
 }
 
@@ -409,10 +446,12 @@ pub struct CircuitBufOffsets {
     len: usize,
     circuit_digest_offset: usize,
     num_challenges_offset: usize,
+    num_constants_offset: usize,
     num_gate_constraints_offset: usize,
     gates_offset: usize,
     selectors_info_offset: usize,
     degree_bits_offset: usize,
+    num_wires_offset: usize,
     num_routed_wires_offset: usize,
     k_is_offset: usize,
     num_partial_products_offset: usize,
@@ -426,20 +465,20 @@ pub struct CircuitBufOffsets {
     fri_num_query_rounds_offset: usize,
     fri_reduction_arity_bits_offset: usize,
     fri_reduction_strategy_offset: usize,
-    // these offsets are initially set to `sigmas_cap_offset` and is updated via "circuit initialization" method
-    fri_instance_offset: usize,
 }
 
-const NUM_CIRCUIT_BUF_OFFSETS: usize = 21;
+const NUM_CIRCUIT_BUF_OFFSETS: usize = 22;
 
 fn get_circuit_buf_offsets<R: AsRef<[u8]>>(buf: &mut Buffer<R>) -> IoResult<CircuitBufOffsets> {
     let len = buf.0.read_u64::<LittleEndian>()? as usize;
     let circuit_digest_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let num_challenges_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let num_constants_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let num_gate_constraints_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let gates_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let selectors_info_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let degree_bits_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let num_wires_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let num_routed_wires_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let k_is_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let num_partial_products_offset = buf.0.read_u64::<LittleEndian>()? as usize;
@@ -453,16 +492,17 @@ fn get_circuit_buf_offsets<R: AsRef<[u8]>>(buf: &mut Buffer<R>) -> IoResult<Circ
     let fri_num_query_rounds_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let fri_reduction_arity_bits_offset: usize = buf.0.read_u64::<LittleEndian>()? as usize;
     let fri_reduction_strategy_offset = buf.0.read_u64::<LittleEndian>()? as usize;
-    let fri_instance_offset = buf.0.read_u64::<LittleEndian>()? as usize;
 
     Ok(CircuitBufOffsets {
         len,
         circuit_digest_offset,
         num_challenges_offset,
+        num_constants_offset,
         num_gate_constraints_offset,
         gates_offset,
         selectors_info_offset,
         degree_bits_offset,
+        num_wires_offset,
         num_routed_wires_offset,
         k_is_offset,
         num_partial_products_offset,
@@ -476,7 +516,6 @@ fn get_circuit_buf_offsets<R: AsRef<[u8]>>(buf: &mut Buffer<R>) -> IoResult<Circ
         fri_num_query_rounds_offset,
         fri_reduction_arity_bits_offset,
         fri_reduction_strategy_offset,
-        fri_instance_offset,
     }) 
 }
 
@@ -506,6 +545,13 @@ impl<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> CircuitBuf<C, R, D> {
         self.buf
             .0
             .set_position(self.offsets.num_challenges_offset as u64);
+        Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
+    }
+
+    pub fn read_num_constants(&mut self) -> IoResult<usize> {
+        self.buf
+            .0
+            .set_position(self.offsets.num_constants_offset as u64);
         Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
     }
 
@@ -549,6 +595,13 @@ impl<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> CircuitBuf<C, R, D> {
         self.buf
             .0
             .set_position(self.offsets.degree_bits_offset as u64);
+        Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
+    }
+    
+    pub fn read_num_wires(&mut self) -> IoResult<usize> {
+        self.buf
+            .0
+            .set_position(self.offsets.num_wires_offset as u64);
         Ok(self.buf.0.read_u64::<LittleEndian>()? as usize)
     }
 
@@ -638,65 +691,6 @@ impl<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> CircuitBuf<C, R, D> {
     pub fn read_fri_reduction_strategy(&mut self) -> IoResult<FriReductionStrategy> {
         self.buf.0.set_position(self.offsets.fri_reduction_strategy_offset as u64);
         self.buf.read_fri_reduction_strategy()
-    }
-
-    pub fn read_fri_instance(
-        &mut self,
-        num_constants: usize,
-        num_wires: usize,
-        num_routed_wires: usize,
-        num_challenges: usize,
-        num_partial_products: usize,
-        quotient_degree_factor: usize,
-        degree_bits: usize,
-        plonk_zeta: C::FE,
-    ) -> IoResult<FriInstanceInfo<C::F, D>> {
-        self.buf
-            .0
-            .set_position(self.offsets.fri_instance_offset as u64);
-
-        let fri_preprocessed_polys = FriPolynomialInfo::from_range(
-            PlonkOracle::CONSTANTS_SIGMAS.index,
-            0..num_constants + num_routed_wires,
-        );
-        let fri_wire_polys = FriPolynomialInfo::from_range(PlonkOracle::WIRES.index, 0..num_wires);
-        let fri_zs_partial_products_polys = FriPolynomialInfo::from_range(
-            PlonkOracle::ZS_PARTIAL_PRODUCTS.index,
-            0..num_challenges * (1 + num_partial_products),
-        );
-        let fri_quotient_polys = FriPolynomialInfo::from_range(
-            PlonkOracle::QUOTIENT.index,
-            0..num_challenges * quotient_degree_factor,
-        );
-        let all_fri_polynomials = [
-            fri_preprocessed_polys,
-            fri_wire_polys,
-            fri_zs_partial_products_polys,
-            fri_quotient_polys,
-        ]
-        .concat();
-        let zeta_batch = FriBatchInfo {
-            point: plonk_zeta,
-            polynomials: all_fri_polynomials,
-        };
-
-        let g = C::FE::primitive_root_of_unity(degree_bits);
-        let zeta_next = g * plonk_zeta;
-        let fri_zs_polys = FriPolynomialInfo::from_range(
-            PlonkOracle::ZS_PARTIAL_PRODUCTS.index,
-            0..num_challenges,
-        );
-        let zeta_next_batch = FriBatchInfo {
-            point: zeta_next,
-            polynomials: fri_zs_polys,
-        };
-
-        let batches = vec![zeta_batch, zeta_next_batch];
-
-        Ok(FriInstanceInfo {
-            oracles: FRI_ORACLES.to_vec(),
-            batches,
-        })
     }
 }
 
@@ -958,7 +952,30 @@ impl<R: AsRef<[u8]>> Buffer<R> {
             _ => Err(IoError::from(IoErrorKind::InvalidData))
         }
     }
-    
+   
+    fn read_fri_oracle_info(&mut self) -> IoResult<FriOracleInfo> {
+        let blinding = self.read_bool()?;
+        Ok(FriOracleInfo { blinding })
+    }
+
+    fn read_fri_polynomial_info(&mut self) -> IoResult<FriPolynomialInfo> {
+        let oracle_index = self.0.read_u64::<LittleEndian>()? as usize;
+        let polynomial_index = self.0.read_u64::<LittleEndian>()? as usize;
+        Ok(FriPolynomialInfo { oracle_index, polynomial_index })
+    }
+
+    fn read_fri_batch_info<F: RichField + Extendable<D>, const D: usize>(&mut self) -> IoResult<FriBatchInfo<F, D>> {
+        let point = self.read_field_ext::<F, D>()?;
+
+        let len = self.0.read_u64::<LittleEndian>()? as usize;
+        let mut polynomials = Vec::with_capacity(len);
+        for _ in 0..len {
+            let poly_info = self.read_fri_polynomial_info()?;
+            polynomials.push(poly_info);
+        }
+
+        Ok(FriBatchInfo { point, polynomials })
+    }
 }
 
 impl<'a> Buffer<&'a mut [u8]> {
@@ -1075,6 +1092,26 @@ impl<'a> Buffer<&'a mut [u8]> {
         }
         Ok(())
     }
+
+    fn write_fri_oracle_info(&mut self, info: &FriOracleInfo) -> IoResult<()> {
+        self.0.write_u8(info.blinding as u8)
+    }
+
+    fn write_fri_polynomial_info(&mut self, info: &FriPolynomialInfo) -> IoResult<()> {
+        self.0.write_u64::<LittleEndian>(info.oracle_index as u64)?;
+        self.0.write_u64::<LittleEndian>(info.polynomial_index as u64)
+    }
+
+    fn write_fri_batch_info<F: RichField + Extendable<D>, const D: usize>(&mut self, info: &FriBatchInfo<F, D>) -> IoResult<()> {
+        self.write_field_ext::<F, D>(info.point)?;
+        
+        self.0.write_u64::<LittleEndian>(info.polynomials.len() as u64)?;
+        for poly_info in info.polynomials.iter() {
+            self.write_fri_polynomial_info(poly_info)?;
+        }
+
+        Ok(())
+    }
 }
 
 pub fn serialize_proof<'a, C: GenericConfig<D>, const D: usize>(
@@ -1084,7 +1121,7 @@ pub fn serialize_proof<'a, C: GenericConfig<D>, const D: usize>(
 ) -> IoResult<()> {
     let mut buf = Buffer::new(buf);
 
-    // start after the place where the len goes
+    // start after the place where len goes
     buf.0.set_position(std::mem::size_of::<u64>() as u64);
 
     let mut val_offset = NUM_PROOF_BUF_OFFSETS * std::mem::size_of::<u64>() as usize;
@@ -1095,7 +1132,7 @@ pub fn serialize_proof<'a, C: GenericConfig<D>, const D: usize>(
 
     // write pis_offset
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
-    val_offset += std::mem::size_of::<u64>() * pis.len();
+    val_offset += std::mem::size_of::<u64>() * (1 + pis.len());
 
     // write wires_cap_offset
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
@@ -1137,7 +1174,8 @@ pub fn serialize_proof<'a, C: GenericConfig<D>, const D: usize>(
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
     val_offset += std::mem::size_of::<u64>() * D * proof.openings.plonk_zs_next.len();
 
-    // write all challenge & fri_instance offsets - 8 in total
+    // write all challenge & fri_instance offsets - 9 in total
+    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
@@ -1157,8 +1195,11 @@ pub fn serialize_proof<'a, C: GenericConfig<D>, const D: usize>(
     buf.0
         .set_position((val_start + C::Hasher::HASH_SIZE) as u64);
 
-    // write caps
+    // write pis
+    buf.0.write_u64::<LittleEndian>(pis.len() as u64)?;
     buf.write_field_vec(pis)?;
+
+    // write caps
     buf.write_merkle_cap(&proof.wires_cap)?;
     buf.write_merkle_cap(&proof.plonk_zs_partial_products_cap)?;
     buf.write_merkle_cap(&proof.quotient_polys_cap)?;
@@ -1202,6 +1243,10 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
     val_offset += std::mem::size_of::<u64>();
 
+    // write num_constants_offset 
+    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
+    val_offset += std::mem::size_of::<u64>();
+
     // write num_gate_constraints_offset
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
     val_offset += std::mem::size_of::<u64>();
@@ -1237,9 +1282,14 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
 
     // write degree_bits_offset
     buf.0.set_position(degree_bits_offset_offset);
-    buf.0.write_u64::<LittleEndian>(degree_bits_offset)?;
+    val_offset = degree_bits_offset as usize;
 
-    val_offset = degree_bits_offset as usize + std::mem::size_of::<u64>();
+    buf.0.write_u64::<LittleEndian>(degree_bits_offset)?;
+    val_offset += std::mem::size_of::<u64>();
+
+    // write num_wires_offset
+    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
+    val_offset += std::mem::size_of::<u64>();
 
     // write_num_routed_wires_offset
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
@@ -1332,6 +1382,8 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
     buf.0
         .write_u64::<LittleEndian>(common_data.config.num_challenges as u64)?;
     buf.0
+        .write_u64::<LittleEndian>(common_data.num_constants as u64)?;
+    buf.0
         .write_u64::<LittleEndian>(common_data.num_gate_constraints as u64)?;
 
     // skip over gates and selector info
@@ -1339,6 +1391,8 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
 
     buf.0
         .write_u64::<LittleEndian>(common_data.degree_bits as u64)?;
+    buf.0
+        .write_u64::<LittleEndian>(common_data.config.num_wires as u64)?;
     buf.0
         .write_u64::<LittleEndian>(common_data.config.num_routed_wires as u64)?;
     buf.write_field_vec::<C::F>(common_data.k_is.as_slice())?;
@@ -1374,6 +1428,7 @@ fn inspect<R: AsRef<[u8]>>(buf: &mut Buffer<R>) {
 #[cfg(test)]
 mod tests {
     use crate::{plonk::{circuit_data::CircuitConfig, circuit_builder::CircuitBuilder, prover::prove, config::PoseidonGoldilocksConfig}, iop::witness::PartialWitness, util::timing::TimingTree};
+    use super::super::fri_verifier::get_fri_instance;
     use anyhow::{anyhow, Result};
     use log::{info, Level};
 
@@ -1444,6 +1499,9 @@ mod tests {
         let degree_bits = circuit_buf.read_degree_bits()?;
         assert_eq!(degree_bits, common.degree_bits);
 
+        let num_wires = circuit_buf.read_num_wires()?;
+        assert_eq!(num_wires, common.config.num_wires);
+
         let num_routed_wires = circuit_buf.read_num_routed_wires()?;
         assert_eq!(num_routed_wires, common.config.num_routed_wires);
         
@@ -1492,4 +1550,129 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_proof_serialization() -> Result<()> {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+        
+        let mut proof_bytes = vec![0u8; 200_000];
+
+        let (proof, _verifier_only, common) = dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
+
+        serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
+        let mut proof_buf = ProofBuf::<C, &[u8], D>::new(proof_bytes.as_slice())?;
+        
+        let cap_height = common.fri_params.config.cap_height;
+        let wires_cap = proof_buf.read_wires_cap(cap_height)?;
+        assert_eq!(wires_cap, proof.proof.wires_cap);
+
+        let zs_pp_cap = proof_buf.read_zs_pp_cap(cap_height)?;
+        assert_eq!(zs_pp_cap, proof.proof.plonk_zs_partial_products_cap);
+
+        let quotient_polys_cap = proof_buf.read_quotient_polys_cap(cap_height)?;
+        assert_eq!(quotient_polys_cap, proof.proof.quotient_polys_cap);
+
+        let constants = proof_buf.read_constants_openings(common.num_constants)?;
+        assert_eq!(constants, proof.proof.openings.constants);
+
+        let plonk_sigmas = proof_buf.read_plonk_sigmas_openings(common.config.num_routed_wires)?;
+        assert_eq!(plonk_sigmas, proof.proof.openings.plonk_sigmas);
+
+        let plonk_wires = proof_buf.read_wires_openings(common.config.num_wires)?;
+        assert_eq!(plonk_wires, proof.proof.openings.wires);
+
+        let plonk_zs = proof_buf.read_plonk_zs_openings(common.config.num_challenges)?;
+        assert_eq!(plonk_zs, proof.proof.openings.plonk_zs);
+
+        let plonk_zs_next = proof_buf.read_plonk_zs_next_openings(common.config.num_challenges)?;
+        assert_eq!(plonk_zs_next, proof.proof.openings.plonk_zs_next);
+
+        let plonk_zs_partial_products = proof_buf.read_pps_openings(common.num_partial_products, common.config.num_challenges)?;
+        assert_eq!(plonk_zs_partial_products, proof.proof.openings.partial_products);
+
+        let quotient_polys = proof_buf.read_quotient_polys_openings(common.quotient_degree_factor, common.config.num_challenges)?;
+        assert_eq!(quotient_polys, proof.proof.openings.quotient_polys);
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_init_challenges() -> Result<()> {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+
+        let mut proof_bytes = vec![0u8; 200_000];
+        let (proof, _verifier_only, common) = dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
+        serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
+        let mut proof_buf = ProofBuf::<C, &mut [u8], D>::new(proof_bytes.as_mut_slice())?;
+
+        let pis = proof_buf.read_pis()?;
+        assert_eq!(&pis, &proof.public_inputs);
+
+        let pis_hash = <<C as GenericConfig<D>>::InnerHasher as Hasher<F>>::hash_no_pad(pis.as_slice());
+        assert_eq!(pis_hash, proof.get_public_inputs_hash());
+
+        proof_buf.write_pis_hash(pis_hash)?;
+        let challenges = proof.get_challenges(pis_hash, &common)?;
+        proof_buf.write_challenges(&challenges)?;
+
+        let plonk_betas = proof_buf.read_challenge_betas(common.config.num_challenges)?;
+        let plonk_gammas = proof_buf.read_challenge_gammas(common.config.num_challenges)?;
+        let plonk_alphas = proof_buf.read_challenge_alphas(common.config.num_challenges)?;
+        let plonk_zeta = proof_buf.read_challenge_zeta()?;
+
+        let fri_alpha = proof_buf.read_fri_alpha()?;
+        let fri_pow_response = proof_buf.read_fri_pow_response()?;
+        let fri_betas = proof_buf.read_fri_betas(common.fri_params.reduction_arity_bits.len())?;
+        let fri_query_indices = proof_buf.read_fri_query_indices(common.fri_params.config.num_query_rounds)?;
+
+        assert_eq!(plonk_betas, challenges.plonk_betas);
+        assert_eq!(plonk_gammas, challenges.plonk_gammas);
+        assert_eq!(plonk_alphas, challenges.plonk_alphas);
+        assert_eq!(plonk_zeta, challenges.plonk_zeta);
+
+        assert_eq!(fri_alpha, challenges.fri_challenges.fri_alpha);
+        assert_eq!(fri_pow_response, challenges.fri_challenges.fri_pow_response);
+        assert_eq!(fri_betas, challenges.fri_challenges.fri_betas);
+        assert_eq!(fri_query_indices, challenges.fri_challenges.fri_query_indices);
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_init_fri_instance() -> Result<()> {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+
+        let mut proof_bytes = vec![0u8; 200_000];
+        let (proof, _verifier_only, common) = dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
+        serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
+        let mut proof_buf = ProofBuf::<C, &mut [u8], D>::new(proof_bytes.as_mut_slice())?;
+
+        let pis_hash = proof.get_public_inputs_hash();
+        let challenges = proof.get_challenges(pis_hash, &common)?;
+        let fri_instance = common.get_fri_instance(challenges.plonk_zeta);
+
+        proof_buf.write_fri_instance(&fri_instance)?;
+
+        let fri_instance_read = proof_buf.read_fri_instance()?;
+        for (a, b) in fri_instance_read.oracles.iter().zip(fri_instance.oracles.iter()) {
+            assert_eq!(a.blinding, b.blinding);
+        }
+
+        for (a, b) in fri_instance_read.batches.iter().zip(fri_instance.batches.iter()) {
+            assert_eq!(a.point, b.point);
+            for (a, b) in a.polynomials.iter().zip(b.polynomials.iter()) {
+                assert_eq!(a.oracle_index, b.oracle_index);
+                assert_eq!(a.polynomial_index, b.polynomial_index);
+            }
+        }
+
+        Ok(())
+    }
+
 }

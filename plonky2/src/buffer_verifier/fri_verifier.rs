@@ -5,12 +5,13 @@ use plonky2_field::types::Field;
 use plonky2_util::{log2_strict, reverse_index_bits_in_place};
 
 use crate::fri::proof::{FriChallenges, FriInitialTreeProof, FriProof, FriQueryRound};
-use crate::fri::structure::{FriBatchInfo, FriInstanceInfo, FriOpenings};
+use crate::fri::structure::{FriBatchInfo, FriInstanceInfo, FriOpenings, FriPolynomialInfo};
 use crate::fri::{FriConfig, FriParams};
 use crate::hash::hash_types::RichField;
 use crate::hash::merkle_proofs::verify_merkle_proof_to_cap;
 use crate::hash::merkle_tree::MerkleCap;
 use crate::plonk::config::{GenericConfig, Hasher};
+use crate::plonk::plonk_common::{PlonkOracle, FRI_ORACLES};
 use crate::util::reducing::ReducingFactor;
 use crate::util::reverse_bits;
 
@@ -264,5 +265,59 @@ impl<F: RichField + Extendable<D>, const D: usize> PrecomputedReducedOpenings<F,
         Self {
             reduced_openings_at_point,
         }
+    }
+}
+
+pub fn get_fri_instance<F: RichField + Extendable<D>, const D: usize>(
+    num_constants: usize,
+    num_wires: usize,
+    num_routed_wires: usize,
+    num_challenges: usize,
+    num_partial_products: usize,
+    quotient_degree_factor: usize,
+    degree_bits: usize,
+    plonk_zeta: F::Extension
+) -> FriInstanceInfo<F, D> {
+    let fri_preprocessed_polys = FriPolynomialInfo::from_range(
+        PlonkOracle::CONSTANTS_SIGMAS.index,
+        0..num_constants + num_routed_wires,
+    );
+    let fri_wire_polys = FriPolynomialInfo::from_range(PlonkOracle::WIRES.index, 0..num_wires);
+    let fri_zs_partial_products_polys = FriPolynomialInfo::from_range(
+        PlonkOracle::ZS_PARTIAL_PRODUCTS.index,
+        0..num_challenges * (1 + num_partial_products),
+    );
+    let fri_quotient_polys = FriPolynomialInfo::from_range(
+        PlonkOracle::QUOTIENT.index,
+        0..num_challenges * quotient_degree_factor,
+    );
+    let all_fri_polynomials = [
+        fri_preprocessed_polys,
+        fri_wire_polys,
+        fri_zs_partial_products_polys,
+        fri_quotient_polys,
+    ]
+    .concat();
+    let zeta_batch = FriBatchInfo {
+        point: plonk_zeta,
+        polynomials: all_fri_polynomials,
+    };
+
+    let g = F::Extension::primitive_root_of_unity(degree_bits);
+    let zeta_next = g * plonk_zeta;
+    let fri_zs_polys = FriPolynomialInfo::from_range(
+        PlonkOracle::ZS_PARTIAL_PRODUCTS.index,
+        0..num_challenges,
+    );
+    let zeta_next_batch = FriBatchInfo {
+        point: zeta_next,
+        polynomials: fri_zs_polys,
+    };
+
+    let batches = vec![zeta_batch, zeta_next_batch];
+
+    FriInstanceInfo {
+        oracles: FRI_ORACLES.to_vec(),
+        batches,
     }
 }

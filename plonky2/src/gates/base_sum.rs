@@ -7,6 +7,7 @@ use plonky2_field::extension::Extendable;
 use plonky2_field::packed::PackedField;
 use plonky2_field::types::{Field, Field64};
 
+#[cfg(feature = "buffer_verifier")]
 use super::gate::GateBox;
 #[cfg(feature = "buffer_verifier")]
 use crate::buffer_verifier::serialization::GateKind;
