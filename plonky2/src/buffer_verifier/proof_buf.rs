@@ -1,4 +1,4 @@
-use std::io::{Result as IoResult, SeekFrom, Seek};
+use std::io::{Result as IoResult, Seek, SeekFrom};
 use std::marker::PhantomData;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
@@ -245,21 +245,24 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
     }
 
     pub fn read_fri_pow_witness(&mut self) -> IoResult<C::F> {
-        self.buf.0.set_position(self.offsets.fri_pow_witness_offset as u64);
+        self.buf
+            .0
+            .set_position(self.offsets.fri_pow_witness_offset as u64);
         self.buf.read_field()
     }
 
     pub fn read_fri_commit_phase_merkle_caps(
         &mut self,
         reduction_arity_bits_len: usize,
-        cap_height: usize
+        cap_height: usize,
     ) -> IoResult<Vec<MerkleCap<C::F, C::Hasher>>> {
         self.buf
             .0
             .set_position(self.offsets.fri_commit_phase_merkle_caps_offset as u64);
-        self.buf.read_fri_commit_phase_merkle_caps(reduction_arity_bits_len, cap_height)
+        self.buf
+            .read_fri_commit_phase_merkle_caps(reduction_arity_bits_len, cap_height)
     }
-    
+
     pub fn read_fri_query_round_proof(
         &mut self,
         round: usize,
@@ -272,14 +275,18 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
         quotient_degree_factor: usize,
         reduction_arity_bits: &[usize],
     ) -> IoResult<FriQueryRound<C::F, C::Hasher, D>> {
-        self.buf.0.set_position(self.offsets.fri_query_round_proofs_offset as u64);
+        self.buf
+            .0
+            .set_position(self.offsets.fri_query_round_proofs_offset as u64);
 
         // seek to the `round`th round
         for _ in 0..round {
             let query_round_len = self.buf.0.read_u64::<LittleEndian>()?;
             self.buf.0.seek(SeekFrom::Current(query_round_len as i64))?;
         }
-        self.buf.0.seek(SeekFrom::Current(std::mem::size_of::<u64>() as i64))?;
+        self.buf
+            .0
+            .seek(SeekFrom::Current(std::mem::size_of::<u64>() as i64))?;
 
         self.buf.read_fri_query_round::<C::F, C, D>(
             hiding,
@@ -293,7 +300,10 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
         )
     }
 
-    pub fn read_fri_final_poly(&mut self, fianl_poly_len: usize) -> IoResult<PolynomialCoeffs<C::FE>> {
+    pub fn read_fri_final_poly(
+        &mut self,
+        fianl_poly_len: usize,
+    ) -> IoResult<PolynomialCoeffs<C::FE>> {
         self.buf
             .0
             .set_position(self.offsets.fri_final_poly_offset as u64);
@@ -498,7 +508,9 @@ mod tests {
 
     use super::*;
     use crate::{
-        buffer_verifier::{serialization::serialize_proof_with_pis, fri_verifier::get_final_poly_len},
+        buffer_verifier::{
+            fri_verifier::get_final_poly_len, serialization::serialize_proof_with_pis,
+        },
         gates::noop::NoopGate,
         hash::hash_types::RichField,
         iop::witness::PartialWitness,
@@ -593,13 +605,13 @@ mod tests {
 
         let fri_commit_phase_merkle_caps = proof_buf.read_fri_commit_phase_merkle_caps(
             common.fri_params.reduction_arity_bits.len(),
-            cap_height
+            cap_height,
         )?;
         assert_eq!(
             fri_commit_phase_merkle_caps,
             proof.proof.opening_proof.commit_phase_merkle_caps
         );
-        
+
         let num_query_rounds = common.fri_params.config.num_query_rounds;
         for round in 0..num_query_rounds {
             let fri_query_round_proof = proof_buf.read_fri_query_round_proof(
@@ -611,7 +623,7 @@ mod tests {
                 common.config.num_challenges,
                 common.num_partial_products,
                 common.quotient_degree_factor,
-                common.fri_params.reduction_arity_bits.as_slice()
+                common.fri_params.reduction_arity_bits.as_slice(),
             )?;
             assert_eq!(
                 fri_query_round_proof,
@@ -619,7 +631,10 @@ mod tests {
             );
         }
 
-        let final_poly_len = get_final_poly_len(common.fri_params.reduction_arity_bits.as_slice(), common.fri_params.degree_bits);
+        let final_poly_len = get_final_poly_len(
+            common.fri_params.reduction_arity_bits.as_slice(),
+            common.fri_params.degree_bits,
+        );
         let fri_final_poly = proof_buf.read_fri_final_poly(final_poly_len)?;
         assert_eq!(fri_final_poly, proof.proof.opening_proof.final_poly);
 

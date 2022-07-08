@@ -5,18 +5,18 @@ use plonky2_field::types::Field;
 use super::circuit_buf::CircuitBuf;
 use super::proof_buf::ProofBuf;
 use crate::buffer_verifier::get_challenges::get_challenges;
+use crate::buffer_verifier::vanishing_poly::eval_vanishing_poly;
 use crate::fri::verifier::verify_fri_proof;
 use crate::hash::hash_types::RichField;
 use crate::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData};
 use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::plonk_common::reduce_with_powers;
-use crate::plonk::proof::{Proof, ProofChallenges, OpeningSet};
-use crate::buffer_verifier::vanishing_poly::eval_vanishing_poly;
+use crate::plonk::proof::{OpeningSet, Proof, ProofChallenges};
 use crate::plonk::vars::EvaluationVars;
 
 pub(crate) fn verify<'a, 'b, C: GenericConfig<D>, const D: usize>(
     proof_buf: &mut ProofBuf<C, &'a mut [u8], D>,
-    circuit_buf: &mut CircuitBuf<C, &'b mut [u8] , D>,
+    circuit_buf: &mut CircuitBuf<C, &'b mut [u8], D>,
 ) -> Result<()>
 where
     [(); C::Hasher::HASH_SIZE]:,
@@ -33,7 +33,7 @@ where
         <<C as GenericConfig<D>>::InnerHasher as Hasher<C::F>>::hash_no_pad(pis.as_slice());
     let cap_height = circuit_buf.read_cap_height()?;
     let wires_cap = proof_buf.read_wires_cap(cap_height)?;
-    let plonk_zs_partial_products_cap = proof_buf.read_zs_pp_cap(cap_height)?; 
+    let plonk_zs_partial_products_cap = proof_buf.read_zs_pp_cap(cap_height)?;
     let quotient_polys_cap = proof_buf.read_quotient_polys_cap(cap_height)?;
 
     let num_constants = circuit_buf.read_num_constants()?;
@@ -48,7 +48,8 @@ where
     let wires = proof_buf.read_wires_openings(num_wires)?;
     let plonk_zs = proof_buf.read_plonk_zs_openings(num_challenges)?;
     let partial_products = proof_buf.read_pps_openings(num_partial_products, num_challenges)?;
-    let quotient_polys = proof_buf.read_quotient_polys_openings(quotient_degree_factor, num_challenges)?;
+    let quotient_polys =
+        proof_buf.read_quotient_polys_openings(quotient_degree_factor, num_challenges)?;
     let plonk_zs_next = proof_buf.read_plonk_zs_next_openings(num_challenges)?;
 
     let openings = OpeningSet {
@@ -62,7 +63,8 @@ where
     };
 
     let fri_reduction_arity_bits = circuit_buf.read_fri_reduction_arity_bits()?;
-    let fri_commit_phase_merkle_caps = proof_buf.read_fri_commit_phase_merkle_caps(fri_reduction_arity_bits.len(), cap_height)?;
+    let fri_commit_phase_merkle_caps =
+        proof_buf.read_fri_commit_phase_merkle_caps(fri_reduction_arity_bits.len(), cap_height)?;
     let fri_final_poly = proof_buf.read_fri_final_poly(fri_reduction_arity_bits.len())?;
     let fri_pow_witness = proof_buf.read_fri_pow_witness()?;
     let circuit_digest = circuit_buf.read_circuit_digest()?;
@@ -83,7 +85,7 @@ where
         degree_bits,
         num_challenges,
         fri_num_query_rounds,
-        fri_rate_bits
+        fri_rate_bits,
     )?;
 
     proof_buf.write_challenges(&challenges)?;
@@ -100,7 +102,7 @@ where
         num_partial_products,
         num_gate_constraints,
         num_routed_wires,
-        num_challenges
+        num_challenges,
     )?;
 
     // verify_with_challenges(
@@ -114,12 +116,7 @@ where
     Ok(())
 }
 
-pub(crate) fn verify_constraints<
-    'a,
-    'b,
-    C: GenericConfig<D>,
-    const D: usize,
->(
+pub(crate) fn verify_constraints<'a, 'b, C: GenericConfig<D>, const D: usize>(
     proof_buf: &mut ProofBuf<C, &'a mut [u8], D>,
     circuit_buf: &mut CircuitBuf<C, &'b mut [u8], D>,
     challenges: &ProofChallenges<C::F, D>,
@@ -168,14 +165,12 @@ where
         num_partial_products,
         num_gate_constraints,
         num_challenges,
-        num_routed_wires
+        num_routed_wires,
     );
 
     // Check each polynomial identity, of the form `vanishing(x) = Z_H(x) quotient(x)`, at zeta.
     let quotient_polys_zeta = &openings.quotient_polys;
-    let zeta_pow_deg = challenges
-        .plonk_zeta
-        .exp_power_of_2(degree_bits);
+    let zeta_pow_deg = challenges.plonk_zeta.exp_power_of_2(degree_bits);
     let z_h_zeta = zeta_pow_deg - C::FE::ONE;
     // `quotient_polys_zeta` holds `num_challenges * quotient_degree_factor` evaluations.
     // Each chunk of `quotient_degree_factor` holds the evaluations of `t_0(zeta),...,t_{quotient_degree_factor-1}(zeta)`

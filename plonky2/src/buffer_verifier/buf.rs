@@ -1,5 +1,6 @@
 use std::io::{
-    Cursor, Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write, SeekFrom, Seek,
+    Cursor, Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Seek, SeekFrom,
+    Write,
 };
 use std::ops::Range;
 
@@ -210,17 +211,21 @@ impl<R: AsRef<[u8]>> Buffer<R> {
         Ok(FriBatchInfo { point, polynomials })
     }
 
-    pub fn read_fri_commit_phase_merkle_caps<F: RichField + Extendable<D>, H: Hasher<F>, const D: usize>(
+    pub fn read_fri_commit_phase_merkle_caps<
+        F: RichField + Extendable<D>,
+        H: Hasher<F>,
+        const D: usize,
+    >(
         &mut self,
         reduction_arity_bits_len: usize,
-        cap_height: usize
+        cap_height: usize,
     ) -> IoResult<Vec<MerkleCap<F, H>>> {
         let mut caps = Vec::new();
         for _ in 0..reduction_arity_bits_len {
             let cap = self.read_merkle_cap(cap_height)?;
             caps.push(cap);
         }
-        
+
         Ok(caps)
     }
 
@@ -234,9 +239,9 @@ impl<R: AsRef<[u8]>> Buffer<R> {
     }
 
     fn read_fri_initial_tree_proof<
-    F: RichField + Extendable<D>,
-    C: GenericConfig<D, F = F>,
-    const D: usize,
+        F: RichField + Extendable<D>,
+        C: GenericConfig<D, F = F>,
+        const D: usize,
     >(
         &mut self,
         hiding: bool,
@@ -245,13 +250,12 @@ impl<R: AsRef<[u8]>> Buffer<R> {
         num_wires: usize,
         num_challenges: usize,
         num_partial_products: usize,
-        quotient_degree_factor: usize
+        quotient_degree_factor: usize,
     ) -> IoResult<FriInitialTreeProof<F, C::Hasher>> {
         let salt = salt_size(hiding);
         let mut evals_proofs = Vec::with_capacity(4);
 
-        let constants_sigmas_v =
-            self.read_field_vec(num_constants + num_routed_wires)?;
+        let constants_sigmas_v = self.read_field_vec(num_constants + num_routed_wires)?;
         let constants_sigmas_p = self.read_merkle_proof()?;
         evals_proofs.push((constants_sigmas_v, constants_sigmas_p));
 
@@ -259,14 +263,12 @@ impl<R: AsRef<[u8]>> Buffer<R> {
         let wires_p = self.read_merkle_proof()?;
         evals_proofs.push((wires_v, wires_p));
 
-        let zs_partial_v = self.read_field_vec(
-            num_challenges * (1 + num_partial_products) + salt,
-        )?;
+        let zs_partial_v =
+            self.read_field_vec(num_challenges * (1 + num_partial_products) + salt)?;
         let zs_partial_p = self.read_merkle_proof()?;
         evals_proofs.push((zs_partial_v, zs_partial_p));
 
-        let quotient_v =
-            self.read_field_vec(num_challenges * quotient_degree_factor + salt)?;
+        let quotient_v = self.read_field_vec(num_challenges * quotient_degree_factor + salt)?;
         let quotient_p = self.read_merkle_proof()?;
         evals_proofs.push((quotient_v, quotient_p));
 
@@ -324,7 +326,6 @@ impl<R: AsRef<[u8]>> Buffer<R> {
         })
     }
 }
-
 
 impl<'a> Buffer<&'a mut [u8]> {
     pub(crate) fn write_field<F: PrimeField64>(&mut self, x: F) -> IoResult<()> {
@@ -493,12 +494,12 @@ impl<'a> Buffer<&'a mut [u8]> {
         const D: usize,
     >(
         &mut self,
-        commit_phase_merkle_caps: &[MerkleCap<F, C::Hasher>]
+        commit_phase_merkle_caps: &[MerkleCap<F, C::Hasher>],
     ) -> IoResult<()> {
         for cap in commit_phase_merkle_caps.iter() {
             self.write_merkle_cap(cap)?
         }
-        
+
         Ok(())
     }
 
@@ -554,7 +555,8 @@ impl<'a> Buffer<&'a mut [u8]> {
     ) -> IoResult<()> {
         for fqr in fqrs {
             let len_offset = self.0.position();
-            self.0.set_position(len_offset + std::mem::size_of::<u64>() as u64);
+            self.0
+                .set_position(len_offset + std::mem::size_of::<u64>() as u64);
             self.write_fri_query_round::<F, C, D>(fqr)?;
 
             let len = self.0.position() - len_offset - (std::mem::size_of::<u64>() as u64);

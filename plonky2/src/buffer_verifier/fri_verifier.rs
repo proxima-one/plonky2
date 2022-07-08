@@ -320,9 +320,6 @@ pub fn get_fri_instance<F: RichField + Extendable<D>, const D: usize>(
     }
 }
 
-pub fn get_final_poly_len(
-    fri_reduction_arity_bits: &[usize],
-    fri_degree_bits: usize
-) -> usize {
+pub fn get_final_poly_len(fri_reduction_arity_bits: &[usize], fri_degree_bits: usize) -> usize {
     1 << (fri_degree_bits - fri_reduction_arity_bits.iter().sum::<usize>())
 }

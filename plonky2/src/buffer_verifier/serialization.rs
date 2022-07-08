@@ -91,7 +91,9 @@ pub fn serialize_proof<'a, C: GenericConfig<D>, const D: usize>(
     // write fri_commit_phase_merkle_caps
     let fri_query_round_proofs_offset_offset = buf.0.position();
     buf.0.set_position(val_offset as u64);
-    buf.write_fri_commit_phase_merkle_caps::<C::F, C, D>(proof.opening_proof.commit_phase_merkle_caps.as_slice())?;
+    buf.write_fri_commit_phase_merkle_caps::<C::F, C, D>(
+        proof.opening_proof.commit_phase_merkle_caps.as_slice(),
+    )?;
     val_offset = buf.0.position() as usize;
     buf.0.set_position(fri_query_round_proofs_offset_offset);
 

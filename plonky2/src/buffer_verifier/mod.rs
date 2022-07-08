@@ -7,5 +7,5 @@ pub mod serialization;
 
 pub(crate) mod buf;
 pub(crate) mod get_challenges;
-pub(crate) mod vanishing_poly;
 pub(crate) mod util;
+pub(crate) mod vanishing_poly;

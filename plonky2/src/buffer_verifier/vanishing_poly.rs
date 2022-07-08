@@ -36,32 +36,28 @@ pub(crate) fn eval_vanishing_poly<
     betas: &[F],
     gammas: &[F],
     alphas: &[F],
-	gates: &[GateBox<F, D>],
-	selectors_info: &SelectorsInfo,
-	k_is: &[F],
-	degree_bits: usize,
-	quotient_degree_factor: usize,
-	num_partial_products: usize,
-	num_gate_constraints: usize,
-	num_challenges: usize,
-	num_routed_wires: usize
+    gates: &[GateBox<F, D>],
+    selectors_info: &SelectorsInfo,
+    k_is: &[F],
+    degree_bits: usize,
+    quotient_degree_factor: usize,
+    num_partial_products: usize,
+    num_gate_constraints: usize,
+    num_challenges: usize,
+    num_routed_wires: usize,
 ) -> Vec<F::Extension> {
     let max_degree = quotient_degree_factor;
     let num_prods = num_partial_products;
 
-    let constraint_terms = evaluate_gate_constraints::<F, C, D>(
-		vars,
-		num_gate_constraints,
-		gates,
-		selectors_info
-	);
+    let constraint_terms =
+        evaluate_gate_constraints::<F, C, D>(vars, num_gate_constraints, gates, selectors_info);
 
     // The L_1(x) (Z(x) - 1) vanishing terms.
     let mut vanishing_z_1_terms = Vec::new();
     // The terms checking the partial products.
     let mut vanishing_partial_products_terms = Vec::new();
 
-	let degree = 1 << degree_bits;
+    let degree = 1 << degree_bits;
     let l1_x = plonk_common::eval_l_1(degree, x);
 
     for i in 0..num_challenges {
@@ -121,9 +117,9 @@ pub fn evaluate_gate_constraints<
     const D: usize,
 >(
     vars: EvaluationVars<F, D>,
-	num_gate_constraints: usize,
-	gates: &[GateBox<F, D>],
-	selectors_info: &SelectorsInfo
+    num_gate_constraints: usize,
+    gates: &[GateBox<F, D>],
+    selectors_info: &SelectorsInfo,
 ) -> Vec<F::Extension> {
     let mut constraints = vec![F::Extension::ZERO; num_gate_constraints];
     for (i, gate) in gates.iter().enumerate() {
