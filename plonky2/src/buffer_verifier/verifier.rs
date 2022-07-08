@@ -5,7 +5,7 @@ use plonky2_field::types::Field;
 use super::circuit_buf::CircuitBuf;
 use super::proof_buf::ProofBuf;
 use crate::buffer_verifier::fri_verifier::{
-    fri_verifier_query_round, fri_verify_proof_of_work, precompute_reduced_evals, get_fri_instance,
+    fri_verifier_query_round, fri_verify_proof_of_work, get_fri_instance, precompute_reduced_evals,
 };
 use crate::buffer_verifier::get_challenges::get_challenges;
 use crate::buffer_verifier::vanishing_poly::eval_vanishing_poly;
@@ -125,7 +125,7 @@ where
         num_partial_products,
         quotient_degree_factor,
         degree_bits,
-        challenges.plonk_zeta
+        challenges.plonk_zeta,
     );
     proof_buf.write_fri_instance(&fri_instance)?;
 
@@ -256,11 +256,12 @@ mod tests {
     use anyhow::{anyhow, Result};
     use log::{info, Level};
     use plonky2_field::extension::Extendable;
-    
+
     use super::*;
     use crate::{
         buffer_verifier::{
-            fri_verifier::get_final_poly_len, serialization::{serialize_proof_with_pis, serialize_circuit_data},
+            fri_verifier::get_final_poly_len,
+            serialization::{serialize_circuit_data, serialize_proof_with_pis},
         },
         gates::noop::NoopGate,
         hash::hash_types::RichField,
@@ -274,7 +275,7 @@ mod tests {
         },
         util::timing::TimingTree,
     };
-    
+
     type ProofTuple<F, C, const D: usize> = (
         ProofWithPublicInputs<F, C, D>,
         VerifierOnlyCircuitData<C, D>,
@@ -322,7 +323,7 @@ mod tests {
 
         let (proof, verifier_data, common_data) =
             dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
-        
+
         let mut proof_bytes = vec![0u8; 200_000];
         let mut circuit_bytes = vec![0u8; 200_000];
         serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
