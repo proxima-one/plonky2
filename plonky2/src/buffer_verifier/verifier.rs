@@ -4,8 +4,10 @@ use plonky2_field::types::Field;
 
 use super::circuit_buf::CircuitBuf;
 use super::proof_buf::ProofBuf;
+use crate::buffer_verifier::fri_verifier::{fri_verify_proof_of_work, precompute_reduced_evals, fri_verifier_query_round};
 use crate::buffer_verifier::get_challenges::get_challenges;
 use crate::buffer_verifier::vanishing_poly::eval_vanishing_poly;
+use crate::fri::proof::FriChallenges;
 use crate::fri::verifier::verify_fri_proof;
 use crate::hash::hash_types::RichField;
 use crate::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData};
@@ -14,7 +16,7 @@ use crate::plonk::plonk_common::reduce_with_powers;
 use crate::plonk::proof::{OpeningSet, Proof, ProofChallenges};
 use crate::plonk::vars::EvaluationVars;
 
-pub(crate) fn verify<'a, 'b, C: GenericConfig<D>, const D: usize>(
+pub fn verify<'a, 'b, C: GenericConfig<D>, const D: usize>(
     proof_buf: &mut ProofBuf<C, &'a mut [u8], D>,
     circuit_buf: &mut CircuitBuf<C, &'b mut [u8], D>,
 ) -> Result<()>
@@ -105,18 +107,69 @@ where
         num_challenges,
     )?;
 
-    // verify_with_challenges(
-    //     proof_with_pis.proof,
-    //     public_inputs_hash,
-    //     challenges,
-    //     verifier_data,
-    //     common_data,
-    // )
+    let fri_pow_response = proof_buf.read_fri_pow_response()?;
+    let fri_pow_bits = circuit_buf.read_fri_proof_of_work_bits()?;
+    fri_verify_proof_of_work(fri_pow_response, fri_pow_bits)?;
+    
+    let fri_openings = openings.to_fri_openings();
+    let precomputed_reduced_evals = precompute_reduced_evals::<C::F, D>(&fri_openings, challenges.fri_challenges.fri_alpha);
+
+    let fri_instance = proof_buf.read_fri_instance()?;
+    proof_buf.write_fri_instance(&fri_instance)?;
+
+    let fri_alpha = proof_buf.read_fri_alpha()?;
+    let fri_betas = proof_buf.read_fri_betas(fri_reduction_arity_bits.len())?;
+   
+    let fri_query_indices = proof_buf.read_fri_query_indices(fri_num_query_rounds)?;
+    let constants_sigmas_cap = circuit_buf.read_sigmas_cap(cap_height)?;
+    let hiding = circuit_buf.read_fri_is_hiding()?;
+    let fri_degree_bits = circuit_buf.read_fri_degree_bits()?;
+
+    let initial_merkle_caps = &[
+        constants_sigmas_cap,
+        wires_cap,
+        plonk_zs_partial_products_cap,
+        quotient_polys_cap
+    ];
+    
+    for round in 0..fri_num_query_rounds {
+        let x_index = fri_query_indices[round];
+        let round_proof = proof_buf.read_fri_query_round_proof(
+            round,
+            hiding,
+            num_constants,
+            num_routed_wires,
+            num_wires,
+            num_challenges,
+            num_partial_products,
+            quotient_degree_factor,
+            fri_reduction_arity_bits.as_slice(),
+        )?;
+
+
+        let lde_bits = fri_degree_bits + fri_rate_bits;
+        let lde_size = 1 << lde_bits;
+
+        fri_verifier_query_round::<C::F, C, D>(
+            &fri_instance,
+            &precomputed_reduced_evals,
+            initial_merkle_caps,
+            &fri_commit_phase_merkle_caps,
+            &fri_final_poly,
+            &round_proof,
+            fri_alpha,
+            fri_betas.as_slice(),
+            fri_reduction_arity_bits.as_slice(),
+            x_index,
+            lde_size,
+            hiding
+        )?;
+    }
 
     Ok(())
 }
 
-pub(crate) fn verify_constraints<'a, 'b, C: GenericConfig<D>, const D: usize>(
+pub fn verify_constraints<'a, 'b, C: GenericConfig<D>, const D: usize>(
     proof_buf: &mut ProofBuf<C, &'a mut [u8], D>,
     circuit_buf: &mut CircuitBuf<C, &'b mut [u8], D>,
     challenges: &ProofChallenges<C::F, D>,
@@ -186,3 +239,4 @@ where
 
     Ok(())
 }
+

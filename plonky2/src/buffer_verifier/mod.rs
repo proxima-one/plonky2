@@ -1,5 +1,5 @@
 pub(crate) mod fri_verifier;
-pub mod plonk_verifier;
+pub mod verifier;
 
 pub mod circuit_buf;
 pub mod proof_buf;

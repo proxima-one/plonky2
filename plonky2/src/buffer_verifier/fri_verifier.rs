@@ -1,6 +1,7 @@
 use anyhow::{ensure, Result};
 use plonky2_field::extension::{flatten, Extendable, FieldExtension};
 use plonky2_field::interpolation::{barycentric_weights, interpolate};
+use plonky2_field::polynomial::PolynomialCoeffs;
 use plonky2_field::types::Field;
 use plonky2_util::{log2_strict, reverse_index_bits_in_place};
 
@@ -46,66 +47,20 @@ pub(crate) fn compute_evaluation<F: Field + Extendable<D>, const D: usize>(
 
 pub(crate) fn fri_verify_proof_of_work<F: RichField + Extendable<D>, const D: usize>(
     fri_pow_response: F,
-    config: &FriConfig,
+    fri_pow_bits: u32 
 ) -> Result<()> {
     ensure!(
         fri_pow_response.to_canonical_u64().leading_zeros()
-            >= config.proof_of_work_bits + (64 - F::order().bits()) as u32,
+            >= fri_pow_bits + (64 - F::order().bits()) as u32,
         "Invalid proof of work witness."
     );
 
     Ok(())
 }
 
-pub fn verify_fri_proof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(
-    instance: &FriInstanceInfo<F, D>,
-    openings: &FriOpenings<F, D>,
-    challenges: &FriChallenges<F, D>,
-    initial_merkle_caps: &[MerkleCap<F, C::Hasher>],
-    proof: &FriProof<F, C::Hasher, D>,
-    params: &FriParams,
-) -> Result<()>
-where
-    [(); C::Hasher::HASH_SIZE]:,
-{
-    ensure!(
-        params.final_poly_len() == proof.final_poly.len(),
-        "Final polynomial has wrong degree."
-    );
 
-    // Size of the LDE domain.
-    let n = params.lde_size();
-
-    // Check PoW.
-    fri_verify_proof_of_work(challenges.fri_pow_response, &params.config)?;
-
-    // Check that parameters are coherent.
-    ensure!(
-        params.config.num_query_rounds == proof.query_round_proofs.len(),
-        "Number of query rounds does not match config."
-    );
-
-    let precomputed_reduced_evals =
-        PrecomputedReducedOpenings::from_os_and_alpha(openings, challenges.fri_alpha);
-    for (&x_index, round_proof) in challenges
-        .fri_query_indices
-        .iter()
-        .zip(&proof.query_round_proofs)
-    {
-        fri_verifier_query_round::<F, C, D>(
-            instance,
-            challenges,
-            &precomputed_reduced_evals,
-            initial_merkle_caps,
-            proof,
-            x_index,
-            n,
-            round_proof,
-            params,
-        )?;
-    }
-
-    Ok(())
+pub(crate) fn precompute_reduced_evals<F: RichField + Extendable<D>, const D: usize>(openings: &FriOpenings<F, D>, alpha: F::Extension) -> PrecomputedReducedOpenings<F, D> {
+    PrecomputedReducedOpenings::from_os_and_alpha(openings, alpha)
 }
 
 fn fri_verify_initial_proof<F: RichField, H: Hasher<F>>(
@@ -133,7 +88,7 @@ pub(crate) fn fri_combine_initial<
     alpha: F::Extension,
     subgroup_x: F,
     precomputed_reduced_evals: &PrecomputedReducedOpenings<F, D>,
-    params: &FriParams,
+    hiding: bool
 ) -> F::Extension {
     assert!(D > 1, "Not implemented for D=1.");
     let subgroup_x = F::Extension::from_basefield(subgroup_x);
@@ -150,7 +105,7 @@ pub(crate) fn fri_combine_initial<
             .iter()
             .map(|p| {
                 let poly_blinding = instance.oracles[p.oracle_index].blinding;
-                let salted = params.hiding && poly_blinding;
+                let salted = hiding && poly_blinding;
                 proof.unsalted_eval(p.oracle_index, p.polynomial_index, salted)
             })
             .map(F::Extension::from_basefield);
@@ -166,20 +121,23 @@ pub(crate) fn fri_combine_initial<
     sum * subgroup_x
 }
 
-fn fri_verifier_query_round<
+pub(crate) fn fri_verifier_query_round<
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
     const D: usize,
 >(
     instance: &FriInstanceInfo<F, D>,
-    challenges: &FriChallenges<F, D>,
     precomputed_reduced_evals: &PrecomputedReducedOpenings<F, D>,
     initial_merkle_caps: &[MerkleCap<F, C::Hasher>],
-    proof: &FriProof<F, C::Hasher, D>,
+    commit_phase_merkle_caps: &[MerkleCap<F, C::Hasher>],
+    final_poly: &PolynomialCoeffs<F::Extension>,
+    round_proof: &FriQueryRound<F, C::Hasher, D>,
+    fri_alpha: F::Extension,
+    fri_betas: &[F::Extension],
+    reduction_arity_bits: &[usize],
     mut x_index: usize,
     n: usize,
-    round_proof: &FriQueryRound<F, C::Hasher, D>,
-    params: &FriParams,
+    hiding: bool,
 ) -> Result<()>
 where
     [(); C::Hasher::HASH_SIZE]:,
@@ -199,13 +157,13 @@ where
     let mut old_eval = fri_combine_initial::<F, C, D>(
         instance,
         &round_proof.initial_trees_proof,
-        challenges.fri_alpha,
+        fri_alpha,
         subgroup_x,
         precomputed_reduced_evals,
-        params,
+        hiding,
     );
 
-    for (i, &arity_bits) in params.reduction_arity_bits.iter().enumerate() {
+    for (i, &arity_bits) in reduction_arity_bits.iter().enumerate() {
         let arity = 1 << arity_bits;
         let evals = &round_proof.steps[i].evals;
 
@@ -222,13 +180,13 @@ where
             x_index_within_coset,
             arity_bits,
             evals,
-            challenges.fri_betas[i],
+            fri_betas[i],
         );
 
         verify_merkle_proof_to_cap::<F, C::Hasher>(
             flatten(evals),
             coset_index,
-            &proof.commit_phase_merkle_caps[i],
+            &commit_phase_merkle_caps[i],
             &round_proof.steps[i].merkle_proof,
         )?;
 
@@ -241,7 +199,7 @@ where
     // Final check of FRI. After all the reductions, we check that the final polynomial is equal
     // to the one sent by the prover.
     ensure!(
-        proof.final_poly.eval(subgroup_x.into()) == old_eval,
+        final_poly.eval(subgroup_x.into()) == old_eval,
         "Final polynomial evaluation is invalid."
     );
 
