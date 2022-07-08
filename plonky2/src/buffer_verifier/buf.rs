@@ -1,5 +1,5 @@
 use std::io::{
-    Cursor, Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write,
+    Cursor, Error as IoError, ErrorKind as IoErrorKind, Read, Result as IoResult, Write, SeekFrom, Seek,
 };
 use std::ops::Range;
 
@@ -7,6 +7,7 @@ use byteorder::{ByteOrder, LittleEndian, ReadBytesExt, WriteBytesExt};
 use plonky2_field::extension::{Extendable, FieldExtension};
 use plonky2_field::types::{Field64, PrimeField64};
 
+use crate::fri::proof::{FriInitialTreeProof, FriQueryRound, FriQueryStep};
 use crate::fri::reduction_strategies::FriReductionStrategy;
 use crate::fri::structure::{FriBatchInfo, FriOracleInfo, FriPolynomialInfo};
 use crate::gates::arithmetic_base::ArithmeticGate;
@@ -27,8 +28,10 @@ use crate::gates::random_access::RandomAccessGate;
 use crate::gates::reducing::ReducingGate;
 use crate::gates::reducing_extension::ReducingExtensionGate;
 use crate::hash::hash_types::RichField;
+use crate::hash::merkle_proofs::MerkleProof;
 use crate::hash::merkle_tree::MerkleCap;
 use crate::plonk::config::{GenericConfig, GenericHashOut, Hasher};
+use crate::plonk::plonk_common::salt_size;
 
 pub struct Buffer<R: AsRef<[u8]>>(pub(crate) Cursor<R>);
 
@@ -206,7 +209,122 @@ impl<R: AsRef<[u8]>> Buffer<R> {
 
         Ok(FriBatchInfo { point, polynomials })
     }
+
+    pub fn read_fri_commit_phase_merkle_caps<F: RichField + Extendable<D>, H: Hasher<F>, const D: usize>(
+        &mut self,
+        reduction_arity_bits_len: usize,
+        cap_height: usize
+    ) -> IoResult<Vec<MerkleCap<F, H>>> {
+        let mut caps = Vec::new();
+        for _ in 0..reduction_arity_bits_len {
+            let cap = self.read_merkle_cap(cap_height)?;
+            caps.push(cap);
+        }
+        
+        Ok(caps)
+    }
+
+    fn read_merkle_proof<F: RichField, H: Hasher<F>>(&mut self) -> IoResult<MerkleProof<F, H>> {
+        let length = self.0.read_u8()?;
+        Ok(MerkleProof {
+            siblings: (0..length)
+                .map(|_| self.read_hash::<F, H>())
+                .collect::<IoResult<Vec<_>>>()?,
+        })
+    }
+
+    fn read_fri_initial_tree_proof<
+    F: RichField + Extendable<D>,
+    C: GenericConfig<D, F = F>,
+    const D: usize,
+    >(
+        &mut self,
+        hiding: bool,
+        num_constants: usize,
+        num_routed_wires: usize,
+        num_wires: usize,
+        num_challenges: usize,
+        num_partial_products: usize,
+        quotient_degree_factor: usize
+    ) -> IoResult<FriInitialTreeProof<F, C::Hasher>> {
+        let salt = salt_size(hiding);
+        let mut evals_proofs = Vec::with_capacity(4);
+
+        let constants_sigmas_v =
+            self.read_field_vec(num_constants + num_routed_wires)?;
+        let constants_sigmas_p = self.read_merkle_proof()?;
+        evals_proofs.push((constants_sigmas_v, constants_sigmas_p));
+
+        let wires_v = self.read_field_vec(num_wires + salt)?;
+        let wires_p = self.read_merkle_proof()?;
+        evals_proofs.push((wires_v, wires_p));
+
+        let zs_partial_v = self.read_field_vec(
+            num_challenges * (1 + num_partial_products) + salt,
+        )?;
+        let zs_partial_p = self.read_merkle_proof()?;
+        evals_proofs.push((zs_partial_v, zs_partial_p));
+
+        let quotient_v =
+            self.read_field_vec(num_challenges * quotient_degree_factor + salt)?;
+        let quotient_p = self.read_merkle_proof()?;
+        evals_proofs.push((quotient_v, quotient_p));
+
+        Ok(FriInitialTreeProof { evals_proofs })
+    }
+
+    fn read_fri_query_step<
+        F: RichField + Extendable<D>,
+        C: GenericConfig<D, F = F>,
+        const D: usize,
+    >(
+        &mut self,
+        arity: usize,
+        compressed: bool,
+    ) -> IoResult<FriQueryStep<F, C::Hasher, D>> {
+        let evals = self.read_field_ext_vec::<F, D>(arity - if compressed { 1 } else { 0 })?;
+        let merkle_proof = self.read_merkle_proof()?;
+        Ok(FriQueryStep {
+            evals,
+            merkle_proof,
+        })
+    }
+
+    pub(crate) fn read_fri_query_round<
+        F: RichField + Extendable<D>,
+        C: GenericConfig<D, F = F>,
+        const D: usize,
+    >(
+        &mut self,
+        hiding: bool,
+        num_constants: usize,
+        num_routed_wires: usize,
+        num_wires: usize,
+        num_challenges: usize,
+        num_partial_products: usize,
+        quotient_degree_factor: usize,
+        reduction_arity_bits: &[usize],
+    ) -> IoResult<FriQueryRound<F, C::Hasher, D>> {
+        let initial_trees_proof = self.read_fri_initial_tree_proof::<F, C, D>(
+            hiding,
+            num_constants,
+            num_routed_wires,
+            num_wires,
+            num_challenges,
+            num_partial_products,
+            quotient_degree_factor,
+        )?;
+        let steps = reduction_arity_bits
+            .iter()
+            .map(|&ar| self.read_fri_query_step::<F, C, D>(1 << ar, false))
+            .collect::<IoResult<_>>()?;
+        Ok(FriQueryRound {
+            initial_trees_proof,
+            steps,
+        })
+    }
 }
+
 
 impl<'a> Buffer<&'a mut [u8]> {
     pub(crate) fn write_field<F: PrimeField64>(&mut self, x: F) -> IoResult<()> {
@@ -233,6 +351,22 @@ impl<'a> Buffer<&'a mut [u8]> {
     ) -> IoResult<()> {
         for &a in &cap.0 {
             self.write_hash::<F, H>(a)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn write_merkle_proof<F: RichField, H: Hasher<F>>(
+        &mut self,
+        p: &MerkleProof<F, H>,
+    ) -> IoResult<()> {
+        let length = p.siblings.len();
+        self.0.write_u8(
+            length
+                .try_into()
+                .expect("Merkle proof length must fit in u8."),
+        )?;
+        for &h in &p.siblings {
+            self.write_hash::<F, H>(h)?;
         }
         Ok(())
     }
@@ -348,6 +482,86 @@ impl<'a> Buffer<&'a mut [u8]> {
             .write_u64::<LittleEndian>(info.polynomials.len() as u64)?;
         for poly_info in info.polynomials.iter() {
             self.write_fri_polynomial_info(poly_info)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn write_fri_commit_phase_merkle_caps<
+        F: RichField + Extendable<D>,
+        C: GenericConfig<D, F = F>,
+        const D: usize,
+    >(
+        &mut self,
+        commit_phase_merkle_caps: &[MerkleCap<F, C::Hasher>]
+    ) -> IoResult<()> {
+        for cap in commit_phase_merkle_caps.iter() {
+            self.write_merkle_cap(cap)?
+        }
+        
+        Ok(())
+    }
+
+    pub(crate) fn write_fri_initial_proof<
+        F: RichField + Extendable<D>,
+        C: GenericConfig<D, F = F>,
+        const D: usize,
+    >(
+        &mut self,
+        fitp: &FriInitialTreeProof<F, C::Hasher>,
+    ) -> IoResult<()> {
+        for (v, p) in &fitp.evals_proofs {
+            self.write_field_vec(v)?;
+            self.write_merkle_proof(p)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn write_fri_query_step<
+        F: RichField + Extendable<D>,
+        C: GenericConfig<D, F = F>,
+        const D: usize,
+    >(
+        &mut self,
+        fqs: &FriQueryStep<F, C::Hasher, D>,
+    ) -> IoResult<()> {
+        self.write_field_ext_vec::<F, D>(&fqs.evals)?;
+        self.write_merkle_proof(&fqs.merkle_proof)
+    }
+
+    pub(crate) fn write_fri_query_round<
+        F: RichField + Extendable<D>,
+        C: GenericConfig<D, F = F>,
+        const D: usize,
+    >(
+        &mut self,
+        fqr: &FriQueryRound<F, C::Hasher, D>,
+    ) -> IoResult<()> {
+        self.write_fri_initial_proof::<F, C, D>(&fqr.initial_trees_proof)?;
+        for fqs in &fqr.steps {
+            self.write_fri_query_step::<F, C, D>(fqs)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn write_fri_query_rounds<
+        F: RichField + Extendable<D>,
+        C: GenericConfig<D, F = F>,
+        const D: usize,
+    >(
+        &mut self,
+        fqrs: &[FriQueryRound<F, C::Hasher, D>],
+    ) -> IoResult<()> {
+        for fqr in fqrs {
+            let len_offset = self.0.position();
+            self.0.set_position(len_offset + std::mem::size_of::<u64>() as u64);
+            self.write_fri_query_round::<F, C, D>(fqr)?;
+
+            let len = self.0.position() - len_offset - (std::mem::size_of::<u64>() as u64);
+            let tmp = self.0.position();
+            self.0.set_position(len_offset);
+            self.0.write_u64::<LittleEndian>(len)?;
+            self.0.set_position(tmp);
         }
 
         Ok(())

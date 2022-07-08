@@ -280,6 +280,7 @@ impl<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> CircuitBuf<C, R, D> {
         self.buf.read_fri_reduction_strategy()
     }
 }
+
 #[cfg(test)]
 mod tests {
     use anyhow::{anyhow, Result};

@@ -1,10 +1,12 @@
-use std::io::Result as IoResult;
+use std::io::{Result as IoResult, SeekFrom, Seek};
 use std::marker::PhantomData;
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use plonky2_field::polynomial::PolynomialCoeffs;
 
 use super::buf::Buffer;
 use super::util::InnerHashForConfig;
+use crate::fri::proof::FriQueryRound;
 use crate::fri::structure::FriInstanceInfo;
 use crate::hash::merkle_tree::MerkleCap;
 use crate::plonk::config::{GenericConfig, Hasher};
@@ -32,6 +34,10 @@ struct ProofBufOffsets {
     pps_offset: usize,
     quotient_polys_offset: usize,
     plonk_zs_next_offset: usize,
+    fri_pow_witness_offset: usize,
+    fri_commit_phase_merkle_caps_offset: usize,
+    fri_query_round_proofs_offset: usize,
+    fri_final_poly_offset: usize,
     // The following offsets should all be initially set to `plonk_zs_next_offset`.
     // once the verifier computes the challenges, they should be updated accordingly
     challenge_betas_offset: usize,
@@ -45,7 +51,7 @@ struct ProofBufOffsets {
     fri_instance_offset: usize,
 }
 
-pub(crate) const NUM_PROOF_BUF_OFFSETS: usize = 22;
+pub(crate) const NUM_PROOF_BUF_OFFSETS: usize = 26;
 
 // TODO: check to ensure offsets are valid and return a IoResult
 fn get_proof_buf_offsets<R: AsRef<[u8]>>(buf: &mut Buffer<R>) -> IoResult<ProofBufOffsets> {
@@ -62,6 +68,10 @@ fn get_proof_buf_offsets<R: AsRef<[u8]>>(buf: &mut Buffer<R>) -> IoResult<ProofB
     let pps_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let quotient_polys_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let plonk_zs_next_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_pow_witness_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_commit_phase_merkle_caps_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_query_round_proofs_offset = buf.0.read_u64::<LittleEndian>()? as usize;
+    let fri_final_poly_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let challenge_betas_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let challenge_gammas_offset = buf.0.read_u64::<LittleEndian>()? as usize;
     let challenge_alphas_offset = buf.0.read_u64::<LittleEndian>()? as usize;
@@ -86,6 +96,10 @@ fn get_proof_buf_offsets<R: AsRef<[u8]>>(buf: &mut Buffer<R>) -> IoResult<ProofB
         pps_offset,
         quotient_polys_offset,
         plonk_zs_next_offset,
+        fri_pow_witness_offset,
+        fri_commit_phase_merkle_caps_offset,
+        fri_query_round_proofs_offset,
+        fri_final_poly_offset,
         challenge_betas_offset,
         challenge_gammas_offset,
         challenge_alphas_offset,
@@ -228,6 +242,64 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
 
     pub fn read_challenge_zeta(&mut self) -> IoResult<C::FE> {
         self.buf.read_field_ext::<C::F, D>()
+    }
+
+    pub fn read_fri_pow_witness(&mut self) -> IoResult<C::F> {
+        self.buf.0.set_position(self.offsets.fri_pow_witness_offset as u64);
+        self.buf.read_field()
+    }
+
+    pub fn read_fri_commit_phase_merkle_caps(
+        &mut self,
+        reduction_arity_bits_len: usize,
+        cap_height: usize
+    ) -> IoResult<Vec<MerkleCap<C::F, C::Hasher>>> {
+        self.buf
+            .0
+            .set_position(self.offsets.fri_commit_phase_merkle_caps_offset as u64);
+        self.buf.read_fri_commit_phase_merkle_caps(reduction_arity_bits_len, cap_height)
+    }
+    
+    pub fn read_fri_query_round_proof(
+        &mut self,
+        round: usize,
+        hiding: bool,
+        num_constants: usize,
+        num_routed_wires: usize,
+        num_wires: usize,
+        num_challenges: usize,
+        num_partial_products: usize,
+        quotient_degree_factor: usize,
+        reduction_arity_bits: &[usize],
+    ) -> IoResult<FriQueryRound<C::F, C::Hasher, D>> {
+        self.buf.0.set_position(self.offsets.fri_query_round_proofs_offset as u64);
+
+        // seek to the `round`th round
+        for _ in 0..round {
+            let query_round_len = self.buf.0.read_u64::<LittleEndian>()?;
+            self.buf.0.seek(SeekFrom::Current(query_round_len as i64))?;
+        }
+        self.buf.0.seek(SeekFrom::Current(std::mem::size_of::<u64>() as i64))?;
+
+        self.buf.read_fri_query_round::<C::F, C, D>(
+            hiding,
+            num_constants,
+            num_routed_wires,
+            num_wires,
+            num_challenges,
+            num_partial_products,
+            quotient_degree_factor,
+            reduction_arity_bits,
+        )
+    }
+
+    pub fn read_fri_final_poly(&mut self, fianl_poly_len: usize) -> IoResult<PolynomialCoeffs<C::FE>> {
+        self.buf
+            .0
+            .set_position(self.offsets.fri_final_poly_offset as u64);
+
+        let coeffs = self.buf.read_field_ext_vec::<C::F, D>(fianl_poly_len)?;
+        Ok(PolynomialCoeffs { coeffs })
     }
 
     pub fn read_fri_alpha(&mut self) -> IoResult<C::FE> {
@@ -426,7 +498,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        buffer_verifier::serialization::serialize_proof_with_pis,
+        buffer_verifier::{serialization::serialize_proof_with_pis, fri_verifier::get_final_poly_len},
         gates::noop::NoopGate,
         hash::hash_types::RichField,
         iop::witness::PartialWitness,
@@ -486,10 +558,8 @@ mod tests {
         type F = <C as GenericConfig<D>>::F;
 
         let mut proof_bytes = vec![0u8; 200_000];
-
         let (proof, _verifier_only, common) =
             dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
-
         serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
         let mut proof_buf = ProofBuf::<C, &[u8], D>::new(proof_bytes.as_slice())?;
 
@@ -517,6 +587,41 @@ mod tests {
 
         let plonk_zs_next = proof_buf.read_plonk_zs_next_openings(common.config.num_challenges)?;
         assert_eq!(plonk_zs_next, proof.proof.openings.plonk_zs_next);
+
+        let fri_pow_witness = proof_buf.read_fri_pow_witness()?;
+        assert_eq!(fri_pow_witness, proof.proof.opening_proof.pow_witness);
+
+        let fri_commit_phase_merkle_caps = proof_buf.read_fri_commit_phase_merkle_caps(
+            common.fri_params.reduction_arity_bits.len(),
+            cap_height
+        )?;
+        assert_eq!(
+            fri_commit_phase_merkle_caps,
+            proof.proof.opening_proof.commit_phase_merkle_caps
+        );
+        
+        let num_query_rounds = common.fri_params.config.num_query_rounds;
+        for round in 0..num_query_rounds {
+            let fri_query_round_proof = proof_buf.read_fri_query_round_proof(
+                round,
+                common.fri_params.hiding,
+                common.num_constants,
+                common.config.num_routed_wires,
+                common.config.num_wires,
+                common.config.num_challenges,
+                common.num_partial_products,
+                common.quotient_degree_factor,
+                common.fri_params.reduction_arity_bits.as_slice()
+            )?;
+            assert_eq!(
+                fri_query_round_proof,
+                proof.proof.opening_proof.query_round_proofs[round]
+            );
+        }
+
+        let final_poly_len = get_final_poly_len(common.fri_params.reduction_arity_bits.as_slice(), common.fri_params.degree_bits);
+        let fri_final_poly = proof_buf.read_fri_final_poly(final_poly_len)?;
+        assert_eq!(fri_final_poly, proof.proof.opening_proof.final_poly);
 
         let plonk_zs_partial_products = proof_buf
             .read_pps_openings(common.num_partial_products, common.config.num_challenges)?;

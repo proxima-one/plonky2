@@ -81,6 +81,40 @@ pub fn serialize_proof<'a, C: GenericConfig<D>, const D: usize>(
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
     val_offset += std::mem::size_of::<u64>() * D * proof.openings.plonk_zs_next.len();
 
+    // write fri_pow_witness_offset
+    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
+    val_offset += std::mem::size_of::<u64>();
+
+    // write fri_commit_phase_merkle_caps_offset
+    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
+
+    // write fri_commit_phase_merkle_caps
+    let fri_query_round_proofs_offset_offset = buf.0.position();
+    buf.0.set_position(val_offset as u64);
+    buf.write_fri_commit_phase_merkle_caps::<C::F, C, D>(proof.opening_proof.commit_phase_merkle_caps.as_slice())?;
+    val_offset = buf.0.position() as usize;
+    buf.0.set_position(fri_query_round_proofs_offset_offset);
+
+    // write fri_query_round_proofs_offset
+    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
+
+    // write fri_query_round_proofs
+    let fri_final_poly_offset_offset = buf.0.position();
+    buf.0.set_position(val_offset as u64);
+    buf.write_fri_query_rounds::<C::F, C, D>(proof.opening_proof.query_round_proofs.as_slice())?;
+    val_offset = buf.0.position() as usize;
+    buf.0.set_position(fri_final_poly_offset_offset);
+
+    // write fri_final_poly_offset
+    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
+
+    // write fri_final_poly
+    let challenge_offsets_offset = buf.0.position();
+    buf.0.set_position(val_offset as u64);
+    buf.write_field_ext_vec::<C::F, D>(proof.opening_proof.final_poly.coeffs.as_slice())?;
+    val_offset = buf.0.position() as usize;
+    buf.0.set_position(challenge_offsets_offset);
+
     // write all challenge & fri_instance offsets - 9 in total
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
@@ -119,8 +153,7 @@ pub fn serialize_proof<'a, C: GenericConfig<D>, const D: usize>(
     buf.write_field_ext_vec::<C::F, D>(proof.openings.partial_products.as_slice())?;
     buf.write_field_ext_vec::<C::F, D>(proof.openings.quotient_polys.as_slice())?;
     buf.write_field_ext_vec::<C::F, D>(proof.openings.plonk_zs_next.as_slice())?;
-
-    assert_eq!(buf.0.position() as usize, len);
+    buf.write_field(proof.opening_proof.pow_witness)?;
 
     Ok(())
 }

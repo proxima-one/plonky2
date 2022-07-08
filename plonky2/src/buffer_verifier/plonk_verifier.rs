@@ -30,6 +30,11 @@ where
 
     let public_inputs_hash =
         <<C as GenericConfig<D>>::InnerHasher as Hasher<C::F>>::hash_no_pad(pis.as_slice());
+    let cap_height = circuit_buf.read_cap_height()?;
+    let wires_cap = proof_buf.read_wires_cap(cap_height)?;
+    let plonk_zs_partial_products_cap = proof_buf.read_zs_pp_cap(cap_height)?; 
+    let quotient_polys_cap = proof_buf.read_quotient_polys_cap(cap_height)?;
+
     // let challenges = proof_with_pis.get_challenges(public_inputs_hash, common_data)?;
 
     // verify_with_challenges(
