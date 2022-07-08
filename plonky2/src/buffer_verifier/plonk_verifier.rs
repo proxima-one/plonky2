@@ -29,7 +29,7 @@ where
         "Number of public inputs doesn't match circuit data."
     );
 
-    let public_inputs_hash =
+    let pis_hash =
         <<C as GenericConfig<D>>::InnerHasher as Hasher<C::F>>::hash_no_pad(pis.as_slice());
     let cap_height = circuit_buf.read_cap_height()?;
     let wires_cap = proof_buf.read_wires_cap(cap_height)?;
@@ -71,7 +71,7 @@ where
     let fri_rate_bits = circuit_buf.read_fri_rate_bits()?;
 
     let challenges = get_challenges::<C::F, C, D>(
-        public_inputs_hash,
+        pis_hash,
         &wires_cap,
         &plonk_zs_partial_products_cap,
         &quotient_polys_cap,
@@ -87,6 +87,21 @@ where
     )?;
 
     proof_buf.write_challenges(&challenges)?;
+
+    let num_gate_constraints = circuit_buf.read_num_gate_constraints()?;
+    verify_constraints(
+        proof_buf,
+        circuit_buf,
+        &challenges,
+        &openings,
+        pis_hash,
+        degree_bits,
+        quotient_degree_factor,
+        num_partial_products,
+        num_gate_constraints,
+        num_routed_wires,
+        num_challenges
+    )?;
 
     // verify_with_challenges(
     //     proof_with_pis.proof,
