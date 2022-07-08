@@ -5,4 +5,5 @@ pub(crate) mod buf;
 pub mod circuit_buf;
 pub mod proof_buf;
 pub mod serialization;
+pub(crate) mod get_challenges;
 pub(crate) mod util;

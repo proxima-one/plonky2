@@ -4,18 +4,19 @@ use plonky2_field::types::Field;
 
 use super::circuit_buf::CircuitBuf;
 use super::proof_buf::ProofBuf;
+use crate::buffer_verifier::get_challenges::get_challenges;
 use crate::fri::verifier::verify_fri_proof;
 use crate::hash::hash_types::RichField;
 use crate::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData};
 use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::plonk_common::reduce_with_powers;
-use crate::plonk::proof::{Proof, ProofChallenges};
+use crate::plonk::proof::{Proof, ProofChallenges, OpeningSet};
 use crate::plonk::vanishing_poly::eval_vanishing_poly;
 use crate::plonk::vars::EvaluationVars;
 
-pub(crate) fn verify<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize>(
-    proof_buf: &mut ProofBuf<C, R, D>,
-    circuit_buf: &mut CircuitBuf<C, R, D>,
+pub(crate) fn verify<'a, 'b, C: GenericConfig<D>, const D: usize>(
+    proof_buf: &mut ProofBuf<C, &'a mut [u8], D>,
+    circuit_buf: &mut CircuitBuf<C, &'b mut [u8] , D>,
 ) -> Result<()>
 where
     [(); C::Hasher::HASH_SIZE]:,
@@ -35,7 +36,57 @@ where
     let plonk_zs_partial_products_cap = proof_buf.read_zs_pp_cap(cap_height)?; 
     let quotient_polys_cap = proof_buf.read_quotient_polys_cap(cap_height)?;
 
-    // let challenges = proof_with_pis.get_challenges(public_inputs_hash, common_data)?;
+    let num_constants = circuit_buf.read_num_constants()?;
+    let num_routed_wires = circuit_buf.read_num_routed_wires()?;
+    let num_wires = circuit_buf.read_num_wires()?;
+    let num_challenges = circuit_buf.read_num_challenges()?;
+    let num_partial_products = circuit_buf.read_num_partial_products()?;
+    let quotient_degree_factor = circuit_buf.read_quotient_degree_factor()?;
+
+    let constants = proof_buf.read_constants_openings(num_constants)?;
+    let plonk_sigmas = proof_buf.read_plonk_sigmas_openings(num_routed_wires)?;
+    let wires = proof_buf.read_wires_openings(num_wires)?;
+    let plonk_zs = proof_buf.read_plonk_zs_openings(num_challenges)?;
+    let partial_products = proof_buf.read_pps_openings(num_partial_products, num_challenges)?;
+    let quotient_polys = proof_buf.read_quotient_polys_openings(quotient_degree_factor, num_challenges)?;
+    let plonk_zs_next = proof_buf.read_plonk_zs_next_openings(num_challenges)?;
+
+    let openings = OpeningSet {
+        constants,
+        plonk_sigmas,
+        wires,
+        plonk_zs,
+        partial_products,
+        quotient_polys,
+        plonk_zs_next,
+    };
+
+    let fri_reduction_arity_bits = circuit_buf.read_fri_reduction_arity_bits()?;
+    let fri_commit_phase_merkle_caps = proof_buf.read_fri_commit_phase_merkle_caps(fri_reduction_arity_bits.len(), cap_height)?;
+    let fri_final_poly = proof_buf.read_fri_final_poly(fri_reduction_arity_bits.len())?;
+    let fri_pow_witness = proof_buf.read_fri_pow_witness()?;
+    let circuit_digest = circuit_buf.read_circuit_digest()?;
+    let degree_bits = circuit_buf.read_degree_bits()?;
+    let fri_num_query_rounds = circuit_buf.read_fri_num_query_rounds()?;
+    let fri_rate_bits = circuit_buf.read_fri_rate_bits()?;
+
+    let challenges = get_challenges::<C::F, C, D>(
+        public_inputs_hash,
+        &wires_cap,
+        &plonk_zs_partial_products_cap,
+        &quotient_polys_cap,
+        &openings,
+        fri_commit_phase_merkle_caps.as_slice(),
+        &fri_final_poly,
+        fri_pow_witness,
+        circuit_digest,
+        degree_bits,
+        num_challenges,
+        fri_num_query_rounds,
+        fri_rate_bits
+    )?;
+
+    proof_buf.write_challenges(&challenges)?;
 
     // verify_with_challenges(
     //     proof_with_pis.proof,
