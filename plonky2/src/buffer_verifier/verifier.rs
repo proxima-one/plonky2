@@ -4,7 +4,9 @@ use plonky2_field::types::Field;
 
 use super::circuit_buf::CircuitBuf;
 use super::proof_buf::ProofBuf;
-use crate::buffer_verifier::fri_verifier::{fri_verify_proof_of_work, precompute_reduced_evals, fri_verifier_query_round};
+use crate::buffer_verifier::fri_verifier::{
+    fri_verifier_query_round, fri_verify_proof_of_work, precompute_reduced_evals,
+};
 use crate::buffer_verifier::get_challenges::get_challenges;
 use crate::buffer_verifier::vanishing_poly::eval_vanishing_poly;
 use crate::fri::proof::FriChallenges;
@@ -110,16 +112,17 @@ where
     let fri_pow_response = proof_buf.read_fri_pow_response()?;
     let fri_pow_bits = circuit_buf.read_fri_proof_of_work_bits()?;
     fri_verify_proof_of_work(fri_pow_response, fri_pow_bits)?;
-    
+
     let fri_openings = openings.to_fri_openings();
-    let precomputed_reduced_evals = precompute_reduced_evals::<C::F, D>(&fri_openings, challenges.fri_challenges.fri_alpha);
+    let precomputed_reduced_evals =
+        precompute_reduced_evals::<C::F, D>(&fri_openings, challenges.fri_challenges.fri_alpha);
 
     let fri_instance = proof_buf.read_fri_instance()?;
     proof_buf.write_fri_instance(&fri_instance)?;
 
     let fri_alpha = proof_buf.read_fri_alpha()?;
     let fri_betas = proof_buf.read_fri_betas(fri_reduction_arity_bits.len())?;
-   
+
     let fri_query_indices = proof_buf.read_fri_query_indices(fri_num_query_rounds)?;
     let constants_sigmas_cap = circuit_buf.read_sigmas_cap(cap_height)?;
     let hiding = circuit_buf.read_fri_is_hiding()?;
@@ -129,9 +132,9 @@ where
         constants_sigmas_cap,
         wires_cap,
         plonk_zs_partial_products_cap,
-        quotient_polys_cap
+        quotient_polys_cap,
     ];
-    
+
     for round in 0..fri_num_query_rounds {
         let x_index = fri_query_indices[round];
         let round_proof = proof_buf.read_fri_query_round_proof(
@@ -145,7 +148,6 @@ where
             quotient_degree_factor,
             fri_reduction_arity_bits.as_slice(),
         )?;
-
 
         let lde_bits = fri_degree_bits + fri_rate_bits;
         let lde_size = 1 << lde_bits;
@@ -162,7 +164,7 @@ where
             fri_reduction_arity_bits.as_slice(),
             x_index,
             lde_size,
-            hiding
+            hiding,
         )?;
     }
 
@@ -239,4 +241,3 @@ where
 
     Ok(())
 }
-

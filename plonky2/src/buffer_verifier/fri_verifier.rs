@@ -47,7 +47,7 @@ pub(crate) fn compute_evaluation<F: Field + Extendable<D>, const D: usize>(
 
 pub(crate) fn fri_verify_proof_of_work<F: RichField + Extendable<D>, const D: usize>(
     fri_pow_response: F,
-    fri_pow_bits: u32 
+    fri_pow_bits: u32,
 ) -> Result<()> {
     ensure!(
         fri_pow_response.to_canonical_u64().leading_zeros()
@@ -58,8 +58,10 @@ pub(crate) fn fri_verify_proof_of_work<F: RichField + Extendable<D>, const D: us
     Ok(())
 }
 
-
-pub(crate) fn precompute_reduced_evals<F: RichField + Extendable<D>, const D: usize>(openings: &FriOpenings<F, D>, alpha: F::Extension) -> PrecomputedReducedOpenings<F, D> {
+pub(crate) fn precompute_reduced_evals<F: RichField + Extendable<D>, const D: usize>(
+    openings: &FriOpenings<F, D>,
+    alpha: F::Extension,
+) -> PrecomputedReducedOpenings<F, D> {
     PrecomputedReducedOpenings::from_os_and_alpha(openings, alpha)
 }
 
@@ -88,7 +90,7 @@ pub(crate) fn fri_combine_initial<
     alpha: F::Extension,
     subgroup_x: F,
     precomputed_reduced_evals: &PrecomputedReducedOpenings<F, D>,
-    hiding: bool
+    hiding: bool,
 ) -> F::Extension {
     assert!(D > 1, "Not implemented for D=1.");
     let subgroup_x = F::Extension::from_basefield(subgroup_x);
