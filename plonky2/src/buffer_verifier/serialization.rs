@@ -132,7 +132,6 @@ pub fn serialize_proof<'a, C: GenericConfig<D>, const D: usize>(
     let val_start = buf.0.position() as usize;
     buf.0.set_position(0);
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
-    let len = val_offset;
 
     // skip pis_hash
     buf.0
