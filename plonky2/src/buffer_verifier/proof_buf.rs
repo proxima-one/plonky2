@@ -587,7 +587,11 @@ mod tests {
         Ok((proof, data.verifier_only, data.common))
     }
 
-    fn check_deserialization<'a, C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize>(proof_buf: &mut ProofBuf<C, R, D>, proof: &ProofWithPublicInputs<C::F, C, D>, common: &CommonCircuitData<C::F, C, D>) -> Result<()> {
+    fn check_deserialization<'a, C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize>(
+        proof_buf: &mut ProofBuf<C, R, D>,
+        proof: &ProofWithPublicInputs<C::F, C, D>,
+        common: &CommonCircuitData<C::F, C, D>,
+    ) -> Result<()> {
         let cap_height = common.fri_params.config.cap_height;
         let wires_cap = proof_buf.read_wires_cap(cap_height)?;
         assert_eq!(wires_cap, proof.proof.wires_cap);
@@ -667,7 +671,12 @@ mod tests {
         Ok(())
     }
 
-    fn check_challenges_deserialization<'a, C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize>(proof_buf: &mut ProofBuf<C, R, D>, proof: &ProofWithPublicInputs<C::F, C, D>, common: &CommonCircuitData<C::F, C, D>, challenges: &ProofChallenges<C::F, D>) -> Result<()> {
+    fn check_challenges_deserialization<'a, C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize>(
+        proof_buf: &mut ProofBuf<C, R, D>,
+        proof: &ProofWithPublicInputs<C::F, C, D>,
+        common: &CommonCircuitData<C::F, C, D>,
+        challenges: &ProofChallenges<C::F, D>,
+    ) -> Result<()> {
         let plonk_betas = proof_buf.read_challenge_betas(common.config.num_challenges)?;
         let plonk_gammas = proof_buf.read_challenge_gammas(common.config.num_challenges)?;
         let plonk_alphas = proof_buf.read_challenge_alphas(common.config.num_challenges)?;
@@ -695,7 +704,17 @@ mod tests {
         Ok(())
     }
 
-    fn check_fri_instance_deserialization<'a, C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize>(proof_buf: &mut ProofBuf<C, R, D>, proof: &ProofWithPublicInputs<C::F, C, D>, common: &CommonCircuitData<C::F, C, D>, fri_instance: &FriInstanceInfo<C::F, D>) -> Result<()> {
+    fn check_fri_instance_deserialization<
+        'a,
+        C: GenericConfig<D>,
+        R: AsRef<[u8]>,
+        const D: usize,
+    >(
+        proof_buf: &mut ProofBuf<C, R, D>,
+        proof: &ProofWithPublicInputs<C::F, C, D>,
+        common: &CommonCircuitData<C::F, C, D>,
+        fri_instance: &FriInstanceInfo<C::F, D>,
+    ) -> Result<()> {
         let fri_instance_read = proof_buf.read_fri_instance()?;
         for (a, b) in fri_instance_read
             .oracles

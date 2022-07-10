@@ -5,7 +5,8 @@ use plonky2_field::types::Field;
 use super::circuit_buf::CircuitBuf;
 use super::proof_buf::ProofBuf;
 use crate::buffer_verifier::fri_verifier::{
-    fri_verifier_query_round, fri_verify_proof_of_work, get_fri_instance, precompute_reduced_evals, get_final_poly_len,
+    fri_verifier_query_round, fri_verify_proof_of_work, get_final_poly_len, get_fri_instance,
+    precompute_reduced_evals,
 };
 use crate::buffer_verifier::get_challenges::get_challenges;
 use crate::buffer_verifier::vanishing_poly::eval_vanishing_poly;
@@ -67,12 +68,9 @@ where
     let fri_reduction_arity_bits = circuit_buf.read_fri_reduction_arity_bits()?;
     let fri_commit_phase_merkle_caps =
         proof_buf.read_fri_commit_phase_merkle_caps(fri_reduction_arity_bits.len(), cap_height)?;
-    
+
     let fri_degree_bits = circuit_buf.read_fri_degree_bits()?;
-    let final_poly_len = get_final_poly_len(
-        fri_reduction_arity_bits.as_slice(),
-        fri_degree_bits,
-    );
+    let final_poly_len = get_final_poly_len(fri_reduction_arity_bits.as_slice(), fri_degree_bits);
     let fri_final_poly = proof_buf.read_fri_final_poly(final_poly_len)?;
     let fri_pow_witness = proof_buf.read_fri_pow_witness()?;
     let circuit_digest = circuit_buf.read_circuit_digest()?;
@@ -121,8 +119,7 @@ where
 
     let fri_alpha = proof_buf.read_fri_alpha()?;
     let fri_openings = openings.to_fri_openings();
-    let precomputed_reduced_evals =
-        precompute_reduced_evals::<C::F, D>(&fri_openings, fri_alpha);
+    let precomputed_reduced_evals = precompute_reduced_evals::<C::F, D>(&fri_openings, fri_alpha);
 
     let plonk_zeta = proof_buf.read_challenge_zeta()?;
     let fri_instance = get_fri_instance(
@@ -269,9 +266,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        buffer_verifier::{
-            serialization::{serialize_circuit_data, serialize_proof_with_pis},
-        },
+        buffer_verifier::serialization::{serialize_circuit_data, serialize_proof_with_pis},
         gates::noop::NoopGate,
         hash::hash_types::RichField,
         iop::witness::PartialWitness,
