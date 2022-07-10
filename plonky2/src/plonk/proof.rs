@@ -111,15 +111,6 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         let proof = buffer.read_proof_with_public_inputs(common_data)?;
         Ok(proof)
     }
-
-    // pub fn from_bytes_slice(
-    //     bytes: &[u8],
-    //     common_data: &CommonCircuitData<F, C, D>,
-    // ) -> anyhow::Result<Self> {
-    //     let mut buffer = RoBuffer::new(bytes);
-    //     let proof = buffer.read_proof_with_public_inputs(common_data)?;
-    //     Ok(proof)
-    // }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
@@ -250,6 +241,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
     }
 }
 
+#[derive(Debug)]
 pub struct ProofChallenges<F: RichField + Extendable<D>, const D: usize> {
     /// Random values used in Plonk's permutation argument.
     pub plonk_betas: Vec<F>,

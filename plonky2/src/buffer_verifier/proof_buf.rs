@@ -302,13 +302,13 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
 
     pub fn read_fri_final_poly(
         &mut self,
-        fianl_poly_len: usize,
+        final_poly_len: usize,
     ) -> IoResult<PolynomialCoeffs<C::FE>> {
         self.buf
             .0
             .set_position(self.offsets.fri_final_poly_offset as u64);
 
-        let coeffs = self.buf.read_field_ext_vec::<C::F, D>(fianl_poly_len)?;
+        let coeffs = self.buf.read_field_ext_vec::<C::F, D>(final_poly_len)?;
         Ok(PolynomialCoeffs { coeffs })
     }
 
@@ -362,6 +362,7 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
 }
 
 impl<'a, C: GenericConfig<D>, const D: usize> ProofBuf<C, &'a mut [u8], D> {
+    /// This function must be called before write_fri_instance
     pub fn write_challenges(&mut self, challenges: &ProofChallenges<C::F, D>) -> IoResult<()> {
         self.buf
             .0
@@ -396,6 +397,7 @@ impl<'a, C: GenericConfig<D>, const D: usize> ProofBuf<C, &'a mut [u8], D> {
         self.buf
             .write_usize_vec(challenges.fri_challenges.fri_query_indices.as_slice())?;
 
+        self.offsets.fri_instance_offset = self.buf.0.position() as usize;
         self.offsets.len = self.buf.0.position() as usize;
         self.set_offsets()?;
 
@@ -408,6 +410,12 @@ impl<'a, C: GenericConfig<D>, const D: usize> ProofBuf<C, &'a mut [u8], D> {
         self.buf
             .0
             .write_u64::<LittleEndian>(self.offsets.len as u64)?;
+        self.buf
+            .0
+            .write_u64::<LittleEndian>(self.offsets.pis_hash_offset as u64)?;
+        self.buf
+            .0
+            .write_u64::<LittleEndian>(self.offsets.pis_offset as u64)?;
         self.buf
             .0
             .write_u64::<LittleEndian>(self.offsets.wires_cap_offset as u64)?;
@@ -437,7 +445,19 @@ impl<'a, C: GenericConfig<D>, const D: usize> ProofBuf<C, &'a mut [u8], D> {
             .write_u64::<LittleEndian>(self.offsets.quotient_polys_offset as u64)?;
         self.buf
             .0
-            .write_u64::<LittleEndian>(self.offsets.plonk_zs_offset as u64)?;
+            .write_u64::<LittleEndian>(self.offsets.plonk_zs_next_offset as u64)?;
+        self.buf
+            .0
+            .write_u64::<LittleEndian>(self.offsets.fri_pow_witness_offset as u64)?;
+        self.buf
+            .0
+            .write_u64::<LittleEndian>(self.offsets.fri_commit_phase_merkle_caps_offset as u64)?;
+        self.buf
+            .0
+            .write_u64::<LittleEndian>(self.offsets.fri_query_round_proofs_offset as u64)?;
+        self.buf
+            .0
+            .write_u64::<LittleEndian>(self.offsets.fri_final_poly_offset as u64)?;
         self.buf
             .0
             .write_u64::<LittleEndian>(self.offsets.challenge_betas_offset as u64)?;
@@ -462,6 +482,9 @@ impl<'a, C: GenericConfig<D>, const D: usize> ProofBuf<C, &'a mut [u8], D> {
         self.buf
             .0
             .write_u64::<LittleEndian>(self.offsets.fri_query_indices_offset as u64)?;
+        self.buf
+            .0
+            .write_u64::<LittleEndian>(self.offsets.fri_instance_offset as u64)?;
 
         Ok(())
     }
@@ -474,10 +497,12 @@ impl<'a, C: GenericConfig<D>, const D: usize> ProofBuf<C, &'a mut [u8], D> {
         self.buf.write_hash::<C::F, C::InnerHasher>(pis_hash)
     }
 
+    /// This function must be called after write_fri_instance
     pub fn write_fri_instance(&mut self, fri_instance: &FriInstanceInfo<C::F, D>) -> IoResult<()> {
         self.buf
             .0
             .set_position(self.offsets.fri_instance_offset as u64);
+
         self.buf
             .0
             .write_u64::<LittleEndian>(fri_instance.oracles.len() as u64)?;
@@ -492,9 +517,8 @@ impl<'a, C: GenericConfig<D>, const D: usize> ProofBuf<C, &'a mut [u8], D> {
             self.buf.write_fri_batch_info(batch)?;
         }
 
-        let new_buf_len = self.buf.0.position();
-        self.buf.0.set_position(0);
-        self.buf.0.write_u64::<LittleEndian>(new_buf_len)?;
+        self.offsets.len = self.buf.0.position() as usize;
+        self.set_offsets()?;
 
         Ok(())
     }
@@ -563,18 +587,7 @@ mod tests {
         Ok((proof, data.verifier_only, data.common))
     }
 
-    #[test]
-    fn test_proof_serialization() -> Result<()> {
-        const D: usize = 2;
-        type C = PoseidonGoldilocksConfig;
-        type F = <C as GenericConfig<D>>::F;
-
-        let mut proof_bytes = vec![0u8; 200_000];
-        let (proof, _verifier_only, common) =
-            dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
-        serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
-        let mut proof_buf = ProofBuf::<C, &[u8], D>::new(proof_bytes.as_slice())?;
-
+    fn check_deserialization<'a, C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize>(proof_buf: &mut ProofBuf<C, R, D>, proof: &ProofWithPublicInputs<C::F, C, D>, common: &CommonCircuitData<C::F, C, D>) -> Result<()> {
         let cap_height = common.fri_params.config.cap_height;
         let wires_cap = proof_buf.read_wires_cap(cap_height)?;
         assert_eq!(wires_cap, proof.proof.wires_cap);
@@ -654,29 +667,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_init_challenges() -> Result<()> {
-        const D: usize = 2;
-        type C = PoseidonGoldilocksConfig;
-        type F = <C as GenericConfig<D>>::F;
-
-        let mut proof_bytes = vec![0u8; 200_000];
-        let (proof, _verifier_only, common) =
-            dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
-        serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
-        let mut proof_buf = ProofBuf::<C, &mut [u8], D>::new(proof_bytes.as_mut_slice())?;
-
-        let pis = proof_buf.read_pis()?;
-        assert_eq!(&pis, &proof.public_inputs);
-
-        let pis_hash =
-            <<C as GenericConfig<D>>::InnerHasher as Hasher<F>>::hash_no_pad(pis.as_slice());
-        assert_eq!(pis_hash, proof.get_public_inputs_hash());
-
-        proof_buf.write_pis_hash(pis_hash)?;
-        let challenges = proof.get_challenges(pis_hash, &common)?;
-        proof_buf.write_challenges(&challenges)?;
-
+    fn check_challenges_deserialization<'a, C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize>(proof_buf: &mut ProofBuf<C, R, D>, proof: &ProofWithPublicInputs<C::F, C, D>, common: &CommonCircuitData<C::F, C, D>, challenges: &ProofChallenges<C::F, D>) -> Result<()> {
         let plonk_betas = proof_buf.read_challenge_betas(common.config.num_challenges)?;
         let plonk_gammas = proof_buf.read_challenge_gammas(common.config.num_challenges)?;
         let plonk_alphas = proof_buf.read_challenge_alphas(common.config.num_challenges)?;
@@ -704,24 +695,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_init_fri_instance() -> Result<()> {
-        const D: usize = 2;
-        type C = PoseidonGoldilocksConfig;
-        type F = <C as GenericConfig<D>>::F;
-
-        let mut proof_bytes = vec![0u8; 200_000];
-        let (proof, _verifier_only, common) =
-            dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
-        serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
-        let mut proof_buf = ProofBuf::<C, &mut [u8], D>::new(proof_bytes.as_mut_slice())?;
-
-        let pis_hash = proof.get_public_inputs_hash();
-        let challenges = proof.get_challenges(pis_hash, &common)?;
-        let fri_instance = common.get_fri_instance(challenges.plonk_zeta);
-
-        proof_buf.write_fri_instance(&fri_instance)?;
-
+    fn check_fri_instance_deserialization<'a, C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize>(proof_buf: &mut ProofBuf<C, R, D>, proof: &ProofWithPublicInputs<C::F, C, D>, common: &CommonCircuitData<C::F, C, D>, fri_instance: &FriInstanceInfo<C::F, D>) -> Result<()> {
         let fri_instance_read = proof_buf.read_fri_instance()?;
         for (a, b) in fri_instance_read
             .oracles
@@ -744,5 +718,71 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[test]
+    fn test_proof_serialization() -> Result<()> {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+
+        let mut proof_bytes = vec![0u8; 200_000];
+        let (proof, _verifier_only, common) =
+            dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
+        serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
+        let mut proof_buf = ProofBuf::<C, &[u8], D>::new(proof_bytes.as_slice())?;
+
+        check_deserialization(&mut proof_buf, &proof, &common)
+    }
+
+    #[test]
+    fn test_init_challenges() -> Result<()> {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+
+        let mut proof_bytes = vec![0u8; 200_000];
+        let (proof, _verifier_only, common) =
+            dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
+        serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
+        let mut proof_buf = ProofBuf::<C, &mut [u8], D>::new(proof_bytes.as_mut_slice())?;
+
+        let pis = proof_buf.read_pis()?;
+        assert_eq!(&pis, &proof.public_inputs);
+
+        let pis_hash =
+            <<C as GenericConfig<D>>::InnerHasher as Hasher<F>>::hash_no_pad(pis.as_slice());
+        assert_eq!(pis_hash, proof.get_public_inputs_hash());
+
+        proof_buf.write_pis_hash(pis_hash)?;
+        let challenges = proof.get_challenges(pis_hash, &common)?;
+        proof_buf.write_challenges(&challenges)?;
+
+        check_deserialization(&mut proof_buf, &proof, &common)?;
+        check_challenges_deserialization(&mut proof_buf, &proof, &common, &challenges)
+    }
+
+    #[test]
+    fn test_init_fri_instance() -> Result<()> {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+
+        let mut proof_bytes = vec![0u8; 200_000];
+        let (proof, _verifier_only, common) =
+            dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
+        serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
+        let mut proof_buf = ProofBuf::<C, &mut [u8], D>::new(proof_bytes.as_mut_slice())?;
+
+        let pis_hash = proof.get_public_inputs_hash();
+        let challenges = proof.get_challenges(pis_hash, &common)?;
+        let fri_instance = common.get_fri_instance(challenges.plonk_zeta);
+
+        proof_buf.write_challenges(&challenges)?;
+        proof_buf.write_fri_instance(&fri_instance)?;
+
+        check_deserialization(&mut proof_buf, &proof, &common)?;
+        check_challenges_deserialization(&mut proof_buf, &proof, &common, &challenges)?;
+        check_fri_instance_deserialization(&mut proof_buf, &proof, &common, &fri_instance)
     }
 }

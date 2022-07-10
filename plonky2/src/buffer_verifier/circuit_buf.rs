@@ -365,6 +365,9 @@ mod tests {
         let num_gate_constraints = circuit_buf.read_num_gate_constraints()?;
         assert_eq!(num_gate_constraints, common.num_gate_constraints);
 
+        let num_constants = circuit_buf.read_num_constants()?;
+        assert_eq!(num_constants, common.num_constants);
+
         let degree_bits = circuit_buf.read_degree_bits()?;
         assert_eq!(degree_bits, common.degree_bits);
 
@@ -403,6 +406,9 @@ mod tests {
             fri_num_query_rounds,
             common.fri_params.config.num_query_rounds
         );
+
+        let fri_rate_bits = circuit_buf.read_fri_rate_bits()?;
+        assert_eq!(fri_rate_bits, common.fri_params.config.rate_bits);
 
         let constants_sigmas_cap = circuit_buf.read_sigmas_cap(cap_height)?;
         assert_eq!(constants_sigmas_cap, verifier_only.constants_sigmas_cap);

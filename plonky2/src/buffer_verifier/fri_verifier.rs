@@ -74,6 +74,7 @@ where
     [(); H::HASH_SIZE]:,
 {
     for ((evals, merkle_proof), cap) in proof.evals_proofs.iter().zip(initial_merkle_caps) {
+        println!("verifying initial merkle proof");
         verify_merkle_proof_to_cap::<F, H>(evals.clone(), x_index, cap, merkle_proof)?;
     }
 
@@ -144,6 +145,7 @@ pub(crate) fn fri_verifier_query_round<
 where
     [(); C::Hasher::HASH_SIZE]:,
 {
+    println!("fri_verify_initial_proof");
     fri_verify_initial_proof::<F, C::Hasher>(
         x_index,
         &round_proof.initial_trees_proof,
@@ -156,6 +158,7 @@ where
 
     // old_eval is the last derived evaluation; it will be checked for consistency with its
     // committed "parent" value in the next iteration.
+    println!("fri_combine_initial");
     let mut old_eval = fri_combine_initial::<F, C, D>(
         instance,
         &round_proof.initial_trees_proof,
@@ -177,6 +180,7 @@ where
         ensure!(evals[x_index_within_coset] == old_eval);
 
         // Infer P(y) from {P(x)}_{x^arity=y}.
+        println!("fri_compute_evaluation");
         old_eval = compute_evaluation(
             subgroup_x,
             x_index_within_coset,
@@ -185,6 +189,7 @@ where
             fri_betas[i],
         );
 
+        println!("fri_verify_merkle_proof_to_cap");
         verify_merkle_proof_to_cap::<F, C::Hasher>(
             flatten(evals),
             coset_index,

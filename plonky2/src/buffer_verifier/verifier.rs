@@ -5,13 +5,10 @@ use plonky2_field::types::Field;
 use super::circuit_buf::CircuitBuf;
 use super::proof_buf::ProofBuf;
 use crate::buffer_verifier::fri_verifier::{
-    fri_verifier_query_round, fri_verify_proof_of_work, get_fri_instance, precompute_reduced_evals,
+    fri_verifier_query_round, fri_verify_proof_of_work, get_fri_instance, precompute_reduced_evals, get_final_poly_len,
 };
 use crate::buffer_verifier::get_challenges::get_challenges;
 use crate::buffer_verifier::vanishing_poly::eval_vanishing_poly;
-use crate::fri::proof::FriChallenges;
-use crate::fri::verifier::verify_fri_proof;
-use crate::hash::hash_types::RichField;
 use crate::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData};
 use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::plonk_common::reduce_with_powers;
@@ -33,8 +30,9 @@ where
         "Number of public inputs doesn't match circuit data."
     );
 
-    let pis_hash =
-        <<C as GenericConfig<D>>::InnerHasher as Hasher<C::F>>::hash_no_pad(pis.as_slice());
+    let pis_hash = C::InnerHasher::hash_no_pad(pis.as_slice());
+    proof_buf.write_pis_hash(pis_hash)?;
+
     let cap_height = circuit_buf.read_cap_height()?;
     let wires_cap = proof_buf.read_wires_cap(cap_height)?;
     let plonk_zs_partial_products_cap = proof_buf.read_zs_pp_cap(cap_height)?;
@@ -69,7 +67,13 @@ where
     let fri_reduction_arity_bits = circuit_buf.read_fri_reduction_arity_bits()?;
     let fri_commit_phase_merkle_caps =
         proof_buf.read_fri_commit_phase_merkle_caps(fri_reduction_arity_bits.len(), cap_height)?;
-    let fri_final_poly = proof_buf.read_fri_final_poly(fri_reduction_arity_bits.len())?;
+    
+    let fri_degree_bits = circuit_buf.read_fri_degree_bits()?;
+    let final_poly_len = get_final_poly_len(
+        fri_reduction_arity_bits.as_slice(),
+        fri_degree_bits,
+    );
+    let fri_final_poly = proof_buf.read_fri_final_poly(final_poly_len)?;
     let fri_pow_witness = proof_buf.read_fri_pow_witness()?;
     let circuit_digest = circuit_buf.read_circuit_digest()?;
     let degree_bits = circuit_buf.read_degree_bits()?;
@@ -92,6 +96,8 @@ where
         fri_rate_bits,
     )?;
 
+    println!("challenges (post): {:#?}", challenges);
+
     proof_buf.write_challenges(&challenges)?;
 
     let num_gate_constraints = circuit_buf.read_num_gate_constraints()?;
@@ -113,10 +119,12 @@ where
     let fri_pow_bits = circuit_buf.read_fri_proof_of_work_bits()?;
     fri_verify_proof_of_work(fri_pow_response, fri_pow_bits)?;
 
+    let fri_alpha = proof_buf.read_fri_alpha()?;
     let fri_openings = openings.to_fri_openings();
     let precomputed_reduced_evals =
-        precompute_reduced_evals::<C::F, D>(&fri_openings, challenges.fri_challenges.fri_alpha);
+        precompute_reduced_evals::<C::F, D>(&fri_openings, fri_alpha);
 
+    let plonk_zeta = proof_buf.read_challenge_zeta()?;
     let fri_instance = get_fri_instance(
         num_constants,
         num_wires,
@@ -125,11 +133,11 @@ where
         num_partial_products,
         quotient_degree_factor,
         degree_bits,
-        challenges.plonk_zeta,
+        plonk_zeta,
     );
+
     proof_buf.write_fri_instance(&fri_instance)?;
 
-    let fri_alpha = proof_buf.read_fri_alpha()?;
     let fri_betas = proof_buf.read_fri_betas(fri_reduction_arity_bits.len())?;
 
     let fri_query_indices = proof_buf.read_fri_query_indices(fri_num_query_rounds)?;
@@ -161,20 +169,22 @@ where
         let lde_bits = fri_degree_bits + fri_rate_bits;
         let lde_size = 1 << lde_bits;
 
-        // fri_verifier_query_round::<C::F, C, D>(
-        //     &fri_instance,
-        //     &precomputed_reduced_evals,
-        //     initial_merkle_caps,
-        //     &fri_commit_phase_merkle_caps,
-        //     &fri_final_poly,
-        //     &round_proof,
-        //     fri_alpha,
-        //     fri_betas.as_slice(),
-        //     fri_reduction_arity_bits.as_slice(),
-        //     x_index,
-        //     lde_size,
-        //     hiding,
-        // )?;
+        println!("\nverifying fri round: {}", round);
+
+        fri_verifier_query_round::<C::F, C, D>(
+            &fri_instance,
+            &precomputed_reduced_evals,
+            initial_merkle_caps,
+            &fri_commit_phase_merkle_caps,
+            &fri_final_poly,
+            &round_proof,
+            fri_alpha,
+            fri_betas.as_slice(),
+            fri_reduction_arity_bits.as_slice(),
+            x_index,
+            lde_size,
+            hiding,
+        )?;
     }
 
     Ok(())
@@ -260,7 +270,6 @@ mod tests {
     use super::*;
     use crate::{
         buffer_verifier::{
-            fri_verifier::get_final_poly_len,
             serialization::{serialize_circuit_data, serialize_proof_with_pis},
         },
         gates::noop::NoopGate,
