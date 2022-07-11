@@ -250,14 +250,12 @@ pub fn get_fri_instance<F: RichField + Extendable<D>, const D: usize>(
     let num_zs_partial_products_polys = num_challenges * (1 + num_partial_products);
     let fri_zs_partial_products_polys = FriPolynomialInfo::from_range(
         PlonkOracle::ZS_PARTIAL_PRODUCTS.index,
-        0..num_zs_partial_products_polys
+        0..num_zs_partial_products_polys,
     );
 
     let num_quotient_polys = num_challenges * quotient_degree_factor;
-    let fri_quotient_polys = FriPolynomialInfo::from_range(
-        PlonkOracle::QUOTIENT.index,
-        0..num_quotient_polys,
-    );
+    let fri_quotient_polys =
+        FriPolynomialInfo::from_range(PlonkOracle::QUOTIENT.index, 0..num_quotient_polys);
 
     let all_fri_polynomials = [
         fri_preprocessed_polys,

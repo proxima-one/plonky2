@@ -241,7 +241,9 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
     }
 
     pub fn read_challenge_zeta(&mut self) -> IoResult<C::FE> {
-        self.buf.0.set_position(self.offsets.challenge_zeta_offset as u64);
+        self.buf
+            .0
+            .set_position(self.offsets.challenge_zeta_offset as u64);
         self.buf.read_field_ext::<C::F, D>()
     }
 
