@@ -94,8 +94,6 @@ where
         fri_rate_bits,
     )?;
 
-    println!("challenges (post): {:#?}", challenges);
-
     proof_buf.write_challenges(&challenges)?;
 
     let num_gate_constraints = circuit_buf.read_num_gate_constraints()?;
@@ -129,7 +127,7 @@ where
         num_challenges,
         num_partial_products,
         quotient_degree_factor,
-        degree_bits,
+        fri_degree_bits,
         plonk_zeta,
     );
 
@@ -165,8 +163,6 @@ where
 
         let lde_bits = fri_degree_bits + fri_rate_bits;
         let lde_size = 1 << lde_bits;
-
-        println!("\nverifying fri round: {}", round);
 
         fri_verifier_query_round::<C::F, C, D>(
             &fri_instance,

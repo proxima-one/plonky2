@@ -145,7 +145,6 @@ pub(crate) fn fri_verifier_query_round<
 where
     [(); C::Hasher::HASH_SIZE]:,
 {
-    println!("fri_verify_initial_proof");
     fri_verify_initial_proof::<F, C::Hasher>(
         x_index,
         &round_proof.initial_trees_proof,
@@ -158,7 +157,6 @@ where
 
     // old_eval is the last derived evaluation; it will be checked for consistency with its
     // committed "parent" value in the next iteration.
-    println!("fri_combine_initial");
     let mut old_eval = fri_combine_initial::<F, C, D>(
         instance,
         &round_proof.initial_trees_proof,
@@ -180,7 +178,6 @@ where
         ensure!(evals[x_index_within_coset] == old_eval);
 
         // Infer P(y) from {P(x)}_{x^arity=y}.
-        println!("fri_compute_evaluation");
         old_eval = compute_evaluation(
             subgroup_x,
             x_index_within_coset,
@@ -189,7 +186,6 @@ where
             fri_betas[i],
         );
 
-        println!("fri_verify_merkle_proof_to_cap");
         verify_merkle_proof_to_cap::<F, C::Hasher>(
             flatten(evals),
             coset_index,
@@ -243,19 +239,26 @@ pub fn get_fri_instance<F: RichField + Extendable<D>, const D: usize>(
     degree_bits: usize,
     plonk_zeta: F::Extension,
 ) -> FriInstanceInfo<F, D> {
+    let num_preprocessed_polys = num_constants + num_routed_wires;
     let fri_preprocessed_polys = FriPolynomialInfo::from_range(
         PlonkOracle::CONSTANTS_SIGMAS.index,
-        0..num_constants + num_routed_wires,
+        0..num_preprocessed_polys,
     );
+
     let fri_wire_polys = FriPolynomialInfo::from_range(PlonkOracle::WIRES.index, 0..num_wires);
+
+    let num_zs_partial_products_polys = num_challenges * (1 + num_partial_products);
     let fri_zs_partial_products_polys = FriPolynomialInfo::from_range(
         PlonkOracle::ZS_PARTIAL_PRODUCTS.index,
-        0..num_challenges * (1 + num_partial_products),
+        0..num_zs_partial_products_polys
     );
+
+    let num_quotient_polys = num_challenges * quotient_degree_factor;
     let fri_quotient_polys = FriPolynomialInfo::from_range(
         PlonkOracle::QUOTIENT.index,
-        0..num_challenges * quotient_degree_factor,
+        0..num_quotient_polys,
     );
+
     let all_fri_polynomials = [
         fri_preprocessed_polys,
         fri_wire_polys,
@@ -263,6 +266,7 @@ pub fn get_fri_instance<F: RichField + Extendable<D>, const D: usize>(
         fri_quotient_polys,
     ]
     .concat();
+
     let zeta_batch = FriBatchInfo {
         point: plonk_zeta,
         polynomials: all_fri_polynomials,

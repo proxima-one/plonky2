@@ -25,7 +25,6 @@ where
     );
     let public_inputs_hash = proof_with_pis.get_public_inputs_hash();
     let challenges = proof_with_pis.get_challenges(public_inputs_hash, common_data)?;
-    println!("challenges: (pre): {:#?}", challenges);
 
     verify_with_challenges(
         proof_with_pis.proof,
