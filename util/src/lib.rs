@@ -250,6 +250,7 @@ pub fn assume(p: bool) {
 /// This function has no semantics. It is a hint only.
 #[inline(always)]
 pub fn branch_hint() {
+    #[cfg(not(target_os = "solana"))]
     unsafe {
         asm!("", options(nomem, nostack, preserves_flags));
     }

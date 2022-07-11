@@ -11,8 +11,7 @@ edition = "2021"
 default-run = "generate_constants"
 
 [features]
-solana = ["buffer_verifier", "dep:solana-program"]
-buffer_verifier = ["dep:byteorder"]
+buffer_verifier = ["byteorder"]
 
 [dependencies]
 plonky2_field = { path = "../field" }
@@ -31,7 +30,6 @@ serde_cbor = "0.11.1"
 keccak-hash = "0.8.0"
 static_assertions = "1.1.0"
 dyn-clone = "1.0.6"
-solana-program = { path = "../../solana/sdk/program", optional = true }
 byteorder = { version = "1.4.3", optional = true }
 
 [dev-dependencies]

@@ -9,6 +9,21 @@ no-entrypoint = []
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-plonky2 = { path = "../plonky2", features = ["solana"] }
+plonky2 = { path = "../plonky2", features = ["buffer_verifier"] }
+anyhow = "1.0.40"
 plonky2_field = { path = "../field" }
 solana-program = { path = "../../solana/sdk/program" }
+solana-sdk = { path = "../../solana/sdk" }
+
+[dev-dependencies]
+log = "0.4.14"
+solana-program-test = { path = "../../solana/program-test" }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+
+[profile.release.build-override]
+opt-level = 3
+incremental = false
+codegen-units = 1

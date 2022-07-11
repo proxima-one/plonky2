@@ -74,7 +74,6 @@ where
     [(); H::HASH_SIZE]:,
 {
     for ((evals, merkle_proof), cap) in proof.evals_proofs.iter().zip(initial_merkle_caps) {
-        println!("verifying initial merkle proof");
         verify_merkle_proof_to_cap::<F, H>(evals.clone(), x_index, cap, merkle_proof)?;
     }
 
