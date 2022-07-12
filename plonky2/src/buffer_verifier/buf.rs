@@ -3,6 +3,7 @@ use std::io::{
     Write,
 };
 use std::ops::Range;
+use log::info;
 
 use byteorder::{ByteOrder, LittleEndian, ReadBytesExt, WriteBytesExt};
 use plonky2_field::extension::{Extendable, FieldExtension};
@@ -496,6 +497,7 @@ impl<'a> Buffer<&'a mut [u8]> {
         &mut self,
         commit_phase_merkle_caps: &[MerkleCap<F, C::Hasher>],
     ) -> IoResult<()> {
+        info!("num commit phase caps: {}", commit_phase_merkle_caps.len());
         for cap in commit_phase_merkle_caps.iter() {
             self.write_merkle_cap(cap)?
         }
@@ -538,10 +540,13 @@ impl<'a> Buffer<&'a mut [u8]> {
         &mut self,
         fqr: &FriQueryRound<F, C::Hasher, D>,
     ) -> IoResult<()> {
+        let prepos = self.0.position();
         self.write_fri_initial_proof::<F, C, D>(&fqr.initial_trees_proof)?;
         for fqs in &fqr.steps {
             self.write_fri_query_step::<F, C, D>(fqs)?;
         }
+
+        info!("fri_query_round_len: {}", self.0.position() - prepos);
         Ok(())
     }
 

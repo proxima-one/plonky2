@@ -2,6 +2,7 @@ use std::mem::swap;
 
 use anyhow::ensure;
 use anyhow::Result;
+use log::debug;
 use plonky2_field::extension::Extendable;
 use plonky2_field::polynomial::{PolynomialCoeffs, PolynomialValues};
 use plonky2_field::zero_poly_coset::ZeroPolyOnCoset;
@@ -35,6 +36,7 @@ pub fn prove<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: 
 where
     [(); C::Hasher::HASH_SIZE]:,
 {
+    debug!("current num threads: {}", rayon::current_num_threads());
     let config = &common_data.config;
     let num_challenges = config.num_challenges;
     let quotient_degree = common_data.quotient_degree();
