@@ -19,11 +19,11 @@ use plonky2::{
         circuit_data::{
             CircuitConfig, CommonCircuitData, VerifierCircuitTarget, VerifierOnlyCircuitData,
         },
-        config::{AlgebraicHasher, GenericConfig, Hasher, PoseidonGoldilocksConfig},
+        config::{AlgebraicHasher, GenericConfig, Hasher, PoseidonGoldilocksConfig, KeccakSpongeSha256GoldilocksConfig},
         proof::{CompressedProofWithPublicInputs, ProofWithPublicInputs},
         prover::prove,
     },
-    util::timing::TimingTree,
+    util::timing::TimingTree, fri::{FriConfig, reduction_strategies::FriReductionStrategy},
 };
 use plonky2_field::extension::Extendable;
 use rand::{rngs::OsRng, RngCore, SeedableRng};
@@ -186,6 +186,7 @@ fn benchmark(config: &CircuitConfig, log2_inner_size: usize) -> Result<()> {
     const D: usize = 2;
     type C = PoseidonGoldilocksConfig;
     type F = <C as GenericConfig<D>>::F;
+    type OuterC = KeccakSpongeSha256GoldilocksConfig;
 
     // Start with a dummy proof of specified size
     let inner = dummy_proof::<F, C, D>(config, log2_inner_size)?;
@@ -207,6 +208,27 @@ fn benchmark(config: &CircuitConfig, log2_inner_size: usize) -> Result<()> {
 
     // Add a second layer of recursion to shrink the proof size further
     let outer = recursive_proof::<F, C, C, D>(&middle, config, None)?;
+    let (proof, _, cd) = &outer;
+    info!(
+        "Double recursion proof degree {} = 2^{}",
+        cd.degree(),
+        cd.degree_bits
+    );
+
+    // add a final layer of recursion to shrink the proof
+    // and convert the proof's permutation and hash function to keccak and sha256 respectively
+	let mut outer_config = CircuitConfig::standard_recursion_config();
+	outer_config.security_bits = 96;
+	outer_config.fri_config = FriConfig {
+		reduction_strategy: FriReductionStrategy::MinSize(None),
+		num_query_rounds: 11,
+		rate_bits: 7,
+		cap_height: 4,
+		proof_of_work_bits: 19,
+	};
+
+    // Add a second layer of recursion to shrink the proof size further
+    let outer = recursive_proof::<F, OuterC, C, D>(&middle, config, None)?;
     let (proof, _, cd) = &outer;
     info!(
         "Double recursion proof degree {} = 2^{}",

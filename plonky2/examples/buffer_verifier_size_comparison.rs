@@ -45,7 +45,7 @@ where
     [(); C::Hasher::HASH_SIZE]:,
 {
     // 'size' is in degree, but we want number of noop gates. A non-zero amount of padding will be added and size will be rounded to the next power of two. To hit our target size, we go just under the previous power of two and hope padding is less than half the proof.
-    let num_dummy_gates = (1 << (12 - 1)) + 1;
+    let num_dummy_gates = (1 << (14 - 1)) + 1;
 
     info!("Constructing inner proof with {} gates", num_dummy_gates);
     let mut builder = CircuitBuilder::<F, D>::new(config.clone());
@@ -65,19 +65,75 @@ where
     Ok((proof, data.verifier_only, data.common))
 }
 
+fn recursive_proof<
+    F: RichField + Extendable<D>,
+    C: GenericConfig<D, F = F>,
+    InnerC: GenericConfig<D, F = F>,
+    const D: usize,
+>(
+    inner: &ProofTuple<F, InnerC, D>,
+    config: &CircuitConfig,
+    min_degree_bits: Option<usize>,
+) -> Result<ProofTuple<F, C, D>>
+where
+    InnerC::Hasher: AlgebraicHasher<F>,
+    [(); C::Hasher::HASH_SIZE]:,
+{
+    let (inner_proof, inner_vd, inner_cd) = inner;
+    let mut builder = CircuitBuilder::<F, D>::new(config.clone());
+    let mut pw = PartialWitness::new();
+    let pt = builder.add_virtual_proof_with_pis(inner_cd);
+    pw.set_proof_with_pis_target(&pt, inner_proof);
+
+    let inner_data = VerifierCircuitTarget {
+        constants_sigmas_cap: builder.add_virtual_cap(inner_cd.config.fri_config.cap_height),
+    };
+    pw.set_cap_target(
+        &inner_data.constants_sigmas_cap,
+        &inner_vd.constants_sigmas_cap,
+    );
+
+    builder.verify_proof(pt, &inner_data, inner_cd);
+    builder.print_gate_counts(0);
+
+    if let Some(min_degree_bits) = min_degree_bits {
+        // We don't want to pad all the way up to 2^min_degree_bits, as the builder will
+        // add a few special gates afterward. So just pad to 2^(min_degree_bits
+        // - 1) + 1. Then the builder will pad to the next power of two,
+        // 2^min_degree_bits.
+        let min_gates = (1 << (min_degree_bits - 1)) + 1;
+        for _ in builder.num_gates()..min_gates {
+            builder.add_gate(NoopGate, vec![]);
+        }
+    }
+
+    let data = builder.build::<C>();
+
+    let mut timing = TimingTree::new("prove", Level::Debug);
+    let proof = prove(&data.prover_only, &data.common, pw, &mut timing)?;
+    timing.print();
+
+    data.verify(proof.clone())?;
+
+    Ok((proof, data.verifier_only, data.common))
+}
+
 fn main() -> Result<()> {
     const D: usize = 2;
-    type C = KeccakSpongeSha256GoldilocksConfig;
+    type C = PoseidonGoldilocksConfig;
     type F = <C as GenericConfig<D>>::F;
+    type OuterC = KeccakSpongeSha256GoldilocksConfig;
+
     // Initialize logging
     let mut builder = env_logger::Builder::from_default_env();
     builder.format_timestamp(None);
 	builder.filter_level(LevelFilter::Debug);
     builder.try_init()?;
 
-	let mut circuit_config = CircuitConfig::standard_recursion_config();
-	circuit_config.security_bits = 96;
-	circuit_config.fri_config = FriConfig {
+    let inner_config = CircuitConfig::standard_recursion_config();
+	let mut outer_config = CircuitConfig::standard_recursion_config();
+	outer_config.security_bits = 96;
+	outer_config.fri_config = FriConfig {
 		reduction_strategy: FriReductionStrategy::MinSize(None),
 		num_query_rounds: 11,
 		rate_bits: 7,
@@ -85,7 +141,7 @@ fn main() -> Result<()> {
 		proof_of_work_bits: 19,
 	};
 
-    let (proof, _, common_data)= dummy_proof::<F, C, D>(&circuit_config)?;
+    let (proof, _, common_data)= dummy_proof::<F, C, D>(&outer_config)?;
 	let mut proof_bytes = vec![0; 200_000];
 	serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
 

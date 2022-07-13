@@ -53,14 +53,26 @@ impl<F: RichField, const N: usize> Hasher<F> for KeccakSpongeSha256Hasher<N> {
 
     fn hash_no_pad(input: &[F]) -> Self::Hash {
         let mut res = [0; N];
-        let mut hasher = Sha256::new();
 
         let mut buffer = Buffer::new(Vec::new());
         buffer.write_field_vec(input).unwrap();
-        hasher.update(buffer.bytes());
-        let hash = hasher.finalize();
+        let bytes = buffer.bytes();
+        #[cfg(not(target_os = "solana"))]
+        {
+            let mut hasher = Sha256::new();
+            hasher.update(bytes);
+            let hash = hasher.finalize();
 
-        res.copy_from_slice(&hash[..N]);
+            res.copy_from_slice(&hash[..N]);
+        }
+        
+        #[cfg(target_os = "solana")]
+        {
+            use solana_progam::hash::hash;
+            let hash = hash(bytes.as_slice());
+            res.copy_from_slice(&hash[..N]);
+        }
+        
         BytesHash(res)
     }
 

@@ -34,6 +34,9 @@ static_assertions = "1.1.0"
 dyn-clone = "1.0.6"
 byteorder = { version = "1.4.3", optional = true }
 
+[target.'cfg(target_os = "solana")'.dependencies]
+solana-program = { path = "../../solana/sdk/program" }
+
 [dev-dependencies]
 criterion = "0.3.5"
 tynm = "0.1.6"
