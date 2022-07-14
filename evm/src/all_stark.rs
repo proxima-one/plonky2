@@ -23,6 +23,18 @@ pub struct AllStark<F: RichField + Extendable<D>, const D: usize> {
     pub cross_table_lookups: Vec<CrossTableLookup<F>>,
 }
 
+impl<F: RichField + Extendable<D>, const D: usize> Default for AllStark<F, D> {
+    fn default() -> Self {
+        Self {
+            cpu_stark: CpuStark::default(),
+            keccak_stark: KeccakStark::default(),
+            logic_stark: LogicStark::default(),
+            memory_stark: MemoryStark::default(),
+            cross_table_lookups: all_cross_table_lookups(),
+        }
+    }
+}
+
 impl<F: RichField + Extendable<D>, const D: usize> AllStark<F, D> {
     pub(crate) fn nums_permutation_zs(&self, config: &StarkConfig) -> Vec<usize> {
         let ans = vec![
@@ -47,7 +59,7 @@ impl<F: RichField + Extendable<D>, const D: usize> AllStark<F, D> {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Table {
     Cpu = 0,
     Keccak = 1,
@@ -114,10 +126,13 @@ fn ctl_memory<F: Field>(channel: usize) -> CrossTableLookup<F> {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::BorrowMut;
+
     use anyhow::Result;
+    use ethereum_types::U256;
     use itertools::{izip, Itertools};
     use plonky2::field::polynomial::PolynomialValues;
-    use plonky2::field::types::Field;
+    use plonky2::field::types::{Field, PrimeField64};
     use plonky2::iop::witness::PartialWitness;
     use plonky2::plonk::circuit_builder::CircuitBuilder;
     use plonky2::plonk::circuit_data::CircuitConfig;
@@ -125,12 +140,12 @@ mod tests {
     use plonky2::util::timing::TimingTree;
     use rand::{thread_rng, Rng};
 
-    use crate::all_stark::{all_cross_table_lookups, AllStark};
+    use crate::all_stark::AllStark;
     use crate::config::StarkConfig;
-    use crate::cpu::columns::{KECCAK_INPUT_LIMBS, KECCAK_OUTPUT_LIMBS};
     use crate::cpu::cpu_stark::CpuStark;
+    use crate::cross_table_lookup::testutils::check_ctls;
     use crate::keccak::keccak_stark::{KeccakStark, NUM_INPUTS, NUM_ROUNDS};
-    use crate::logic::{self, LogicStark};
+    use crate::logic::{self, LogicStark, Operation};
     use crate::memory::memory_stark::{generate_random_memory_ops, MemoryStark};
     use crate::memory::NUM_CHANNELS;
     use crate::proof::AllProof;
@@ -163,41 +178,27 @@ mod tests {
         logic_stark: &LogicStark<F, D>,
         rng: &mut R,
     ) -> Vec<PolynomialValues<F>> {
-        let mut trace_rows = vec![];
-        for _ in 0..num_rows {
-            let mut row = [F::ZERO; logic::columns::NUM_COLUMNS];
-
-            assert_eq!(logic::PACKED_LIMB_BITS, 16);
-            for col in logic::columns::INPUT0 {
-                row[col] = F::from_bool(rng.gen());
-            }
-            for col in logic::columns::INPUT1 {
-                row[col] = F::from_bool(rng.gen());
-            }
-            let op: usize = rng.gen_range(0..3);
-            let op_col = [
-                logic::columns::IS_AND,
-                logic::columns::IS_OR,
-                logic::columns::IS_XOR,
-            ][op];
-            row[op_col] = F::ONE;
-            logic_stark.generate(&mut row);
-            trace_rows.push(row);
-        }
-
-        for _ in num_rows..num_rows.next_power_of_two() {
-            trace_rows.push([F::ZERO; logic::columns::NUM_COLUMNS])
-        }
-        trace_rows_to_poly_values(trace_rows)
+        let all_ops = [logic::Op::And, logic::Op::Or, logic::Op::Xor];
+        let ops = (0..num_rows)
+            .map(|_| {
+                let op = all_ops[rng.gen_range(0..all_ops.len())];
+                let input0 = U256(rng.gen());
+                let input1 = U256(rng.gen());
+                Operation::new(op, input0, input1)
+            })
+            .collect();
+        logic_stark.generate_trace(ops)
     }
 
     fn make_memory_trace<R: Rng>(
         num_memory_ops: usize,
         memory_stark: &MemoryStark<F, D>,
         rng: &mut R,
-    ) -> Vec<PolynomialValues<F>> {
+    ) -> (Vec<PolynomialValues<F>>, usize) {
         let memory_ops = generate_random_memory_ops(num_memory_ops, rng);
-        memory_stark.generate_trace(memory_ops)
+        let trace = memory_stark.generate_trace(memory_ops);
+        let num_ops = trace[0].values.len();
+        (trace, num_ops)
     }
 
     fn make_cpu_trace(
@@ -213,7 +214,7 @@ mod tests {
             .map(|i| {
                 (0..2 * NUM_INPUTS)
                     .map(|j| {
-                        keccak::registers::reg_input_limb(j)
+                        keccak::columns::reg_input_limb(j)
                             .eval_table(keccak_trace, (i + 1) * NUM_ROUNDS - 1)
                     })
                     .collect::<Vec<_>>()
@@ -225,7 +226,7 @@ mod tests {
             .map(|i| {
                 (0..2 * NUM_INPUTS)
                     .map(|j| {
-                        keccak_trace[keccak::registers::reg_output_limb(j)].values
+                        keccak_trace[keccak::columns::reg_output_limb(j)].values
                             [(i + 1) * NUM_ROUNDS - 1]
                     })
                     .collect::<Vec<_>>()
@@ -234,23 +235,33 @@ mod tests {
             })
             .collect();
 
-        let mut cpu_trace_rows = vec![];
+        let mut cpu_trace_rows: Vec<[F; CpuStark::<F, D>::COLUMNS]> = vec![];
+        let mut bootstrap_row: cpu::columns::CpuColumnsView<F> =
+            [F::ZERO; CpuStark::<F, D>::COLUMNS].into();
+        bootstrap_row.is_bootstrap_kernel = F::ONE;
+        cpu_trace_rows.push(bootstrap_row.into());
+
         for i in 0..num_keccak_perms {
-            let mut row = [F::ZERO; CpuStark::<F, D>::COLUMNS];
-            row[cpu::columns::IS_KECCAK] = F::ONE;
-            for (j, input, output) in
-                izip!(0..2 * NUM_INPUTS, KECCAK_INPUT_LIMBS, KECCAK_OUTPUT_LIMBS)
-            {
-                row[input] = keccak_input_limbs[i][j];
-                row[output] = keccak_output_limbs[i][j];
+            let mut row: cpu::columns::CpuColumnsView<F> =
+                [F::ZERO; CpuStark::<F, D>::COLUMNS].into();
+            row.is_keccak = F::ONE;
+            for (j, input, output) in izip!(
+                0..2 * NUM_INPUTS,
+                row.keccak_input_limbs.iter_mut(),
+                row.keccak_output_limbs.iter_mut()
+            ) {
+                *input = keccak_input_limbs[i][j];
+                *output = keccak_output_limbs[i][j];
             }
-            cpu_stark.generate(&mut row);
-            cpu_trace_rows.push(row);
+            cpu_stark.generate(row.borrow_mut());
+            cpu_trace_rows.push(row.into());
         }
+
         for i in 0..num_logic_rows {
-            let mut row = [F::ZERO; CpuStark::<F, D>::COLUMNS];
-            row[cpu::columns::IS_CPU_CYCLE] = F::ONE;
-            row[cpu::columns::OPCODE] = [
+            let mut row: cpu::columns::CpuColumnsView<F> =
+                [F::ZERO; CpuStark::<F, D>::COLUMNS].into();
+            row.is_cpu_cycle = F::ONE;
+            row.opcode = [
                 (logic::columns::IS_AND, 0x16),
                 (logic::columns::IS_OR, 0x17),
                 (logic::columns::IS_XOR, 0x18),
@@ -259,101 +270,92 @@ mod tests {
             .map(|(col, opcode)| logic_trace[col].values[i] * F::from_canonical_u64(opcode))
             .sum();
             for (cols_cpu, cols_logic) in [
-                (cpu::columns::LOGIC_INPUT0, logic::columns::INPUT0),
-                (cpu::columns::LOGIC_INPUT1, logic::columns::INPUT1),
+                (&mut row.logic_input0, logic::columns::INPUT0),
+                (&mut row.logic_input1, logic::columns::INPUT1),
             ] {
-                for (col_cpu, limb_cols_logic) in
-                    cols_cpu.zip(logic::columns::limb_bit_cols_for_input(cols_logic))
+                for (col_cpu, limb_cols_logic) in cols_cpu
+                    .iter_mut()
+                    .zip(logic::columns::limb_bit_cols_for_input(cols_logic))
                 {
-                    row[col_cpu] =
+                    *col_cpu =
                         limb_from_bits_le(limb_cols_logic.map(|col| logic_trace[col].values[i]));
                 }
             }
-            for (col_cpu, col_logic) in cpu::columns::LOGIC_OUTPUT.zip(logic::columns::RESULT) {
-                row[col_cpu] = logic_trace[col_logic].values[i];
+            for (col_cpu, col_logic) in row.logic_output.iter_mut().zip(logic::columns::RESULT) {
+                *col_cpu = logic_trace[col_logic].values[i];
             }
-            cpu_stark.generate(&mut row);
-            cpu_trace_rows.push(row);
+            cpu_stark.generate(row.borrow_mut());
+            cpu_trace_rows.push(row.into());
         }
-        let mut current_cpu_index = 0;
-        let mut last_timestamp = memory_trace[memory::registers::TIMESTAMP].values[0];
         for i in 0..num_memory_ops {
-            let mem_timestamp = memory_trace[memory::registers::TIMESTAMP].values[i];
-            let clock = mem_timestamp;
-            let op = (0..NUM_CHANNELS)
-                .filter(|&o| memory_trace[memory::registers::is_channel(o)].values[i] == F::ONE)
-                .collect_vec()[0];
+            let mem_timestamp: usize = memory_trace[memory::columns::TIMESTAMP].values[i]
+                .to_canonical_u64()
+                .try_into()
+                .unwrap();
+            let clock = mem_timestamp / NUM_CHANNELS;
+            let channel = mem_timestamp % NUM_CHANNELS;
 
-            if mem_timestamp != last_timestamp {
-                current_cpu_index += 1;
-                last_timestamp = mem_timestamp;
-            }
+            let is_padding_row = (0..NUM_CHANNELS)
+                .map(|c| memory_trace[memory::columns::is_channel(c)].values[i])
+                .all(|x| x == F::ZERO);
 
-            cpu_trace_rows[current_cpu_index][cpu::columns::mem_channel_used(op)] = F::ONE;
-            cpu_trace_rows[current_cpu_index][cpu::columns::CLOCK] = clock;
-            cpu_trace_rows[current_cpu_index][cpu::columns::mem_is_read(op)] =
-                memory_trace[memory::registers::IS_READ].values[i];
-            cpu_trace_rows[current_cpu_index][cpu::columns::mem_addr_context(op)] =
-                memory_trace[memory::registers::ADDR_CONTEXT].values[i];
-            cpu_trace_rows[current_cpu_index][cpu::columns::mem_addr_segment(op)] =
-                memory_trace[memory::registers::ADDR_SEGMENT].values[i];
-            cpu_trace_rows[current_cpu_index][cpu::columns::mem_addr_virtual(op)] =
-                memory_trace[memory::registers::ADDR_VIRTUAL].values[i];
-            for j in 0..8 {
-                cpu_trace_rows[current_cpu_index][cpu::columns::mem_value(op, j)] =
-                    memory_trace[memory::registers::value_limb(j)].values[i];
+            if !is_padding_row {
+                let row: &mut cpu::columns::CpuColumnsView<F> = cpu_trace_rows[clock].borrow_mut();
+
+                row.mem_channel_used[channel] = F::ONE;
+                row.clock = F::from_canonical_usize(clock);
+                row.mem_is_read[channel] = memory_trace[memory::columns::IS_READ].values[i];
+                row.mem_addr_context[channel] =
+                    memory_trace[memory::columns::ADDR_CONTEXT].values[i];
+                row.mem_addr_segment[channel] =
+                    memory_trace[memory::columns::ADDR_SEGMENT].values[i];
+                row.mem_addr_virtual[channel] =
+                    memory_trace[memory::columns::ADDR_VIRTUAL].values[i];
+                for j in 0..8 {
+                    row.mem_value[channel][j] =
+                        memory_trace[memory::columns::value_limb(j)].values[i];
+                }
             }
+        }
+
+        // Pad to a power of two.
+        for _ in cpu_trace_rows.len()..cpu_trace_rows.len().next_power_of_two() {
+            cpu_trace_rows.push([F::ZERO; CpuStark::<F, D>::COLUMNS]);
         }
         trace_rows_to_poly_values(cpu_trace_rows)
     }
 
     fn get_proof(config: &StarkConfig) -> Result<(AllStark<F, D>, AllProof<F, C, D>)> {
-        let cpu_stark = CpuStark::<F, D> {
-            f: Default::default(),
-        };
+        let all_stark = AllStark::default();
 
-        let keccak_stark = KeccakStark::<F, D> {
-            f: Default::default(),
-        };
-
-        let logic_stark = LogicStark::<F, D> {
-            f: Default::default(),
-        };
         let num_logic_rows = 62;
-
-        let memory_stark = MemoryStark::<F, D> {
-            f: Default::default(),
-        };
         let num_memory_ops = 1 << 5;
 
         let mut rng = thread_rng();
         let num_keccak_perms = 2;
 
-        let keccak_trace = make_keccak_trace(num_keccak_perms, &keccak_stark, &mut rng);
-        let logic_trace = make_logic_trace(num_logic_rows, &logic_stark, &mut rng);
-        let mut memory_trace = make_memory_trace(num_memory_ops, &memory_stark, &mut rng);
+        let keccak_trace = make_keccak_trace(num_keccak_perms, &all_stark.keccak_stark, &mut rng);
+        let logic_trace = make_logic_trace(num_logic_rows, &all_stark.logic_stark, &mut rng);
+        let mem_trace = make_memory_trace(num_memory_ops, &all_stark.memory_stark, &mut rng);
+        let mut memory_trace = mem_trace.0;
+        let num_memory_ops = mem_trace.1;
         let cpu_trace = make_cpu_trace(
             num_keccak_perms,
             num_logic_rows,
             num_memory_ops,
-            &cpu_stark,
+            &all_stark.cpu_stark,
             &keccak_trace,
             &logic_trace,
             &mut memory_trace,
         );
 
-        let all_stark = AllStark {
-            cpu_stark,
-            keccak_stark,
-            logic_stark,
-            memory_stark,
-            cross_table_lookups: all_cross_table_lookups(),
-        };
+        let traces = vec![cpu_trace, keccak_trace, logic_trace, memory_trace];
+        check_ctls(&traces, &all_stark.cross_table_lookups);
 
         let proof = prove::<F, C, D>(
             &all_stark,
             config,
-            vec![cpu_trace, keccak_trace, logic_trace, memory_trace],
+            traces,
             vec![vec![]; 4],
             &mut TimingTree::default(),
         )?;
