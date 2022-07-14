@@ -11,6 +11,7 @@ use std::{fs::File, num::ParseIntError, ops::RangeInclusive, str::FromStr};
 use anyhow::{anyhow, Context as _, Result};
 use log::{info, Level, LevelFilter};
 use plonky2::{
+    fri::{reduction_strategies::FriReductionStrategy, FriConfig},
     gates::noop::NoopGate,
     hash::hash_types::RichField,
     iop::witness::{PartialWitness, Witness},
@@ -19,11 +20,14 @@ use plonky2::{
         circuit_data::{
             CircuitConfig, CommonCircuitData, VerifierCircuitTarget, VerifierOnlyCircuitData,
         },
-        config::{AlgebraicHasher, GenericConfig, Hasher, PoseidonGoldilocksConfig, KeccakSpongeSha256GoldilocksConfig},
+        config::{
+            AlgebraicHasher, GenericConfig, Hasher, KeccakSpongeSha256GoldilocksConfig,
+            PoseidonGoldilocksConfig,
+        },
         proof::{CompressedProofWithPublicInputs, ProofWithPublicInputs},
         prover::prove,
     },
-    util::timing::TimingTree, fri::{FriConfig, reduction_strategies::FriReductionStrategy},
+    util::timing::TimingTree,
 };
 use plonky2_field::extension::Extendable;
 use rand::{rngs::OsRng, RngCore, SeedableRng};
@@ -217,15 +221,15 @@ fn benchmark(config: &CircuitConfig, log2_inner_size: usize) -> Result<()> {
 
     // add a final layer of recursion to shrink the proof
     // and convert the proof's permutation and hash function to keccak and sha256 respectively
-	let mut outer_config = CircuitConfig::standard_recursion_config();
-	outer_config.security_bits = 96;
-	outer_config.fri_config = FriConfig {
-		reduction_strategy: FriReductionStrategy::MinSize(None),
-		num_query_rounds: 11,
-		rate_bits: 7,
-		cap_height: 4,
-		proof_of_work_bits: 19,
-	};
+    let mut outer_config = CircuitConfig::standard_recursion_config();
+    outer_config.security_bits = 96;
+    outer_config.fri_config = FriConfig {
+        reduction_strategy: FriReductionStrategy::MinSize(None),
+        num_query_rounds: 11,
+        rate_bits: 7,
+        cap_height: 4,
+        proof_of_work_bits: 19,
+    };
 
     // Add a second layer of recursion to shrink the proof size further
     let outer = recursive_proof::<F, OuterC, C, D>(&middle, config, None)?;

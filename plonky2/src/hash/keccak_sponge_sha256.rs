@@ -17,28 +17,28 @@ pub struct KeccakSpongePermutation;
 impl<F: RichField> PlonkyPermutation<F> for KeccakSpongePermutation {
     fn permute(input: [F; SPONGE_WIDTH]) -> [F; SPONGE_WIDTH] {
         let mut state = [0u64; 25];
-		let mut res = [F::ZERO; SPONGE_WIDTH];
+        let mut res = [F::ZERO; SPONGE_WIDTH];
 
-		// absorb input
+        // absorb input
         for i in 0..SPONGE_WIDTH {
-			state[i] = input[i].to_canonical_u64();
+            state[i] = input[i].to_canonical_u64();
         }
 
-		// keep squeezingu until we have SPONGE_WIDTH words that fit in the field
-		let mut elems = 0;
-		while elems < SPONGE_WIDTH {
-			keccak(&mut state);
+        // keep squeezingu until we have SPONGE_WIDTH words that fit in the field
+        let mut elems = 0;
+        while elems < SPONGE_WIDTH {
+            keccak(&mut state);
 
-			for i in 0..SPONGE_WIDTH {
-				let word = state[i];
-				if word < F::ORDER {
-					res[elems] = F::from_canonical_u64(word);
-					elems += 1;
-				}
-			}
-		}
+            for i in 0..SPONGE_WIDTH {
+                let word = state[i];
+                if word < F::ORDER {
+                    res[elems] = F::from_canonical_u64(word);
+                    elems += 1;
+                }
+            }
+        }
 
-		res
+        res
     }
 }
 
@@ -65,14 +65,14 @@ impl<F: RichField, const N: usize> Hasher<F> for KeccakSpongeSha256Hasher<N> {
 
             res.copy_from_slice(&hash[..N]);
         }
-        
+
         #[cfg(target_os = "solana")]
         {
             use solana_progam::hash::hash;
             let hash = hash(bytes.as_slice());
             res.copy_from_slice(&hash[..N]);
         }
-        
+
         BytesHash(res)
     }
 

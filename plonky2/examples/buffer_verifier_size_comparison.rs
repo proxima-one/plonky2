@@ -11,20 +11,25 @@ use std::{fs::File, num::ParseIntError, ops::RangeInclusive, str::FromStr};
 use anyhow::{anyhow, Context as _, Result};
 use log::{info, Level, LevelFilter};
 use plonky2::{
+    buffer_verifier::{proof_buf::ProofBuf, serialization::serialize_proof_with_pis},
+    fri::reduction_strategies::FriReductionStrategy,
+    fri::FriConfig,
     gates::noop::NoopGate,
     hash::hash_types::RichField,
     iop::witness::{PartialWitness, Witness},
-	fri::reduction_strategies::FriReductionStrategy,
     plonk::{
         circuit_builder::CircuitBuilder,
         circuit_data::{
             CircuitConfig, CommonCircuitData, VerifierCircuitTarget, VerifierOnlyCircuitData,
         },
-        config::{AlgebraicHasher, GenericConfig, Hasher, PoseidonGoldilocksConfig, KeccakGoldilocksConfig, KeccakSpongeSha256GoldilocksConfig},
+        config::{
+            AlgebraicHasher, GenericConfig, Hasher, KeccakGoldilocksConfig,
+            KeccakSpongeSha256GoldilocksConfig, PoseidonGoldilocksConfig,
+        },
         proof::{CompressedProofWithPublicInputs, ProofWithPublicInputs},
         prover::prove,
     },
-    util::timing::TimingTree, buffer_verifier::{proof_buf::ProofBuf, serialization::serialize_proof_with_pis}, fri::FriConfig,
+    util::timing::TimingTree,
 };
 use plonky2_field::extension::Extendable;
 use rand::{rngs::OsRng, RngCore, SeedableRng};
@@ -127,26 +132,26 @@ fn main() -> Result<()> {
     // Initialize logging
     let mut builder = env_logger::Builder::from_default_env();
     builder.format_timestamp(None);
-	builder.filter_level(LevelFilter::Debug);
+    builder.filter_level(LevelFilter::Debug);
     builder.try_init()?;
 
     let inner_config = CircuitConfig::standard_recursion_config();
-	let mut outer_config = CircuitConfig::standard_recursion_config();
-	outer_config.security_bits = 96;
-	outer_config.fri_config = FriConfig {
-		reduction_strategy: FriReductionStrategy::MinSize(None),
-		num_query_rounds: 11,
-		rate_bits: 7,
-		cap_height: 4,
-		proof_of_work_bits: 19,
-	};
+    let mut outer_config = CircuitConfig::standard_recursion_config();
+    outer_config.security_bits = 96;
+    outer_config.fri_config = FriConfig {
+        reduction_strategy: FriReductionStrategy::MinSize(None),
+        num_query_rounds: 11,
+        rate_bits: 7,
+        cap_height: 4,
+        proof_of_work_bits: 19,
+    };
 
-    let (proof, _, common_data)= dummy_proof::<F, C, D>(&outer_config)?;
-	let mut proof_bytes = vec![0; 200_000];
-	serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
+    let (proof, _, common_data) = dummy_proof::<F, C, D>(&outer_config)?;
+    let mut proof_bytes = vec![0; 200_000];
+    serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
 
-	let mut proof_buf = ProofBuf::<C, &[u8], D>::new(proof_bytes.as_slice())?;
-	info!("Serialized proof: {} bytes", proof_buf.len());
+    let mut proof_buf = ProofBuf::<C, &[u8], D>::new(proof_bytes.as_slice())?;
+    info!("Serialized proof: {} bytes", proof_buf.len());
 
     Ok(())
 }

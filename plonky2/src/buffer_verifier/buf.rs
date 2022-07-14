@@ -3,9 +3,9 @@ use std::io::{
     Write,
 };
 use std::ops::Range;
-use log::info;
 
 use byteorder::{ByteOrder, LittleEndian, ReadBytesExt, WriteBytesExt};
+use log::info;
 use plonky2_field::extension::{Extendable, FieldExtension};
 use plonky2_field::types::{Field64, PrimeField64};
 

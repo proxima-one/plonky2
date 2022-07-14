@@ -126,7 +126,6 @@ pub fn verify_constraints<'a, 'b, C: GenericConfig<D>, const D: usize>(
 where
     [(); C::Hasher::HASH_SIZE]:,
 {
-
     let num_constants = circuit_buf.read_num_constants()?;
     let num_wires = circuit_buf.read_num_wires()?;
     let num_routed_wires = circuit_buf.read_num_routed_wires()?;
@@ -218,7 +217,7 @@ where
 pub fn verify_fri_round<'a, 'b, C: GenericConfig<D>, const D: usize>(
     proof_buf: &mut ProofBuf<C, &'a [u8], D>,
     circuit_buf: &mut CircuitBuf<C, &'b [u8], D>,
-    round: usize
+    round: usize,
 ) -> Result<()>
 where
     [(); C::Hasher::HASH_SIZE]:,
@@ -260,17 +259,15 @@ where
     )?;
 
     let fri_instance = proof_buf.read_fri_instance()?;
-    let fri_commit_phase_merkle_caps = proof_buf.read_fri_commit_phase_merkle_caps(
-        fri_reduction_arity_bits.len(),
-        cap_height,
-    )?;
+    let fri_commit_phase_merkle_caps =
+        proof_buf.read_fri_commit_phase_merkle_caps(fri_reduction_arity_bits.len(), cap_height)?;
     let final_poly_len = get_final_poly_len(fri_reduction_arity_bits.as_slice(), fri_degree_bits);
     let fri_final_poly = proof_buf.read_fri_final_poly(final_poly_len)?;
 
     let fri_alpha = proof_buf.read_fri_alpha()?;
     let fri_betas = proof_buf.read_fri_betas(fri_reduction_arity_bits.len())?;
     let fri_query_indices = proof_buf.read_fri_query_indices(fri_num_query_rounds)?;
-    
+
     let constants = proof_buf.read_constants_openings(num_constants)?;
     let plonk_sigmas = proof_buf.read_plonk_sigmas_openings(num_routed_wires)?;
     let wires = proof_buf.read_wires_openings(num_wires)?;
@@ -313,7 +310,6 @@ where
 
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {
