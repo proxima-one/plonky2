@@ -21,16 +21,18 @@ use crate::plonk::proof::OpeningSet;
 use crate::plonk::proof::{Proof, ProofWithPublicInputs};
 use crate::plonk::vanishing_poly::eval_vanishing_poly_base_batch;
 use crate::plonk::vars::EvaluationVarsBaseBatch;
-use crate::timed;
 use crate::util::partial_products::{partial_products_and_z_gx, quotient_chunk_products};
-use crate::util::timing::TimingTree;
 use crate::util::transpose;
+#[cfg(any(feature = "log", test))]
+use crate::util::timing::TimingTree;
+#[cfg(any(feature = "log", test))]
+use crate::timed;
 
 pub fn prove<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(
     prover_data: &ProverOnlyCircuitData<F, C, D>,
     common_data: &CommonCircuitData<F, C, D>,
     inputs: PartialWitness<F>,
-    timing: &mut TimingTree,
+    #[cfg(any(feature = "log", test))] timing: &mut TimingTree,
 ) -> Result<ProofWithPublicInputs<F, C, D>>
 where
     [(); C::Hasher::HASH_SIZE]:,
@@ -40,21 +42,28 @@ where
     let quotient_degree = common_data.quotient_degree();
     let degree = common_data.degree();
 
+    #[cfg(any(feature = "log", test))]
     let partition_witness = timed!(
         timing,
         &format!("run {} generators", prover_data.generators.len()),
         generate_partial_witness(inputs, prover_data, common_data)
     );
+    #[cfg(not(any(feature = "log", test)))]
+    let partition_witness = generate_partial_witness(inputs, prover_data, common_data);
 
     let public_inputs = partition_witness.get_targets(&prover_data.public_inputs);
     let public_inputs_hash = C::InnerHasher::hash_no_pad(&public_inputs);
 
+    #[cfg(any(feature = "log", test))]
     let witness = timed!(
         timing,
         "compute full witness",
         partition_witness.full_witness()
     );
+    #[cfg(not(any(feature = "log", test)))]
+    let witness = partition_witness.full_witness();
 
+    #[cfg(any(feature = "log", test))]
     let wires_values: Vec<PolynomialValues<F>> = timed!(
         timing,
         "compute wire polynomials",
@@ -64,7 +73,14 @@ where
             .map(|column| PolynomialValues::new(column.clone()))
             .collect()
     );
+    #[cfg(not(any(feature = "log", test)))]
+    let wires_values = witness
+        .wire_values
+        .par_iter()
+        .map(|column| PolynomialValues::new(column.clone()))
+        .collect();
 
+    #[cfg(any(feature = "log", test))]
     let wires_commitment = timed!(
         timing,
         "compute wires commitment",
@@ -76,6 +92,14 @@ where
             timing,
             prover_data.fft_root_table.as_ref(),
         )
+    );
+    #[cfg(not(any(feature = "log", test)))]
+    let wires_commitment = PolynomialBatch::from_values(
+        wires_values,
+        config.fri_config.rate_bits,
+        config.zero_knowledge && PlonkOracle::WIRES.blinding,
+        config.fri_config.cap_height,
+        prover_data.fft_root_table.as_ref(),
     );
 
     let mut challenger = Challenger::<F, C::Hasher>::new();
@@ -92,11 +116,15 @@ where
         common_data.quotient_degree_factor < common_data.config.num_routed_wires,
         "When the number of routed wires is smaller that the degree, we should change the logic to avoid computing partial products."
     );
+
+    #[cfg(any(feature = "log", test))]
     let mut partial_products_and_zs = timed!(
         timing,
         "compute partial products",
         all_wires_permutation_partial_products(&witness, &betas, &gammas, prover_data, common_data)
     );
+    #[cfg(not(any(feature = "log", test)))]
+    let mut partial_products_and_zs = all_wires_permutation_partial_products(&witness, &betas, &gammas, prover_data, common_data);
 
     // Z is expected at the front of our batch; see `zs_range` and `partial_products_range`.
     let plonk_z_vecs = partial_products_and_zs
@@ -105,6 +133,7 @@ where
         .collect();
     let zs_partial_products = [plonk_z_vecs, partial_products_and_zs.concat()].concat();
 
+    #[cfg(any(feature = "log", test))]
     let partial_products_and_zs_commitment = timed!(
         timing,
         "commit to partial products and Z's",
@@ -117,11 +146,20 @@ where
             prover_data.fft_root_table.as_ref(),
         )
     );
+    #[cfg(not(any(feature = "log", test)))]
+    let partial_products_and_zs_commitment = PolynomialBatch::from_values(
+        zs_partial_products,
+        config.fri_config.rate_bits,
+        config.zero_knowledge && PlonkOracle::ZS_PARTIAL_PRODUCTS.blinding,
+        config.fri_config.cap_height,
+        prover_data.fft_root_table.as_ref(),
+    );
 
     challenger.observe_cap(&partial_products_and_zs_commitment.merkle_tree.cap);
 
     let alphas = challenger.get_n_challenges(num_challenges);
 
+    #[cfg(any(feature = "log", test))]
     let quotient_polys = timed!(
         timing,
         "compute quotient polys",
@@ -137,7 +175,20 @@ where
         )
     );
 
+    #[cfg(not(any(feature = "log", test)))]
+    let quotient_polys = compute_quotient_polys(
+        common_data,
+        prover_data,
+        &public_inputs_hash,
+        &wires_commitment,
+        &partial_products_and_zs_commitment,
+        &betas,
+        &gammas,
+        &alphas,
+    );
+
     // Compute the quotient polynomials, aka `t` in the Plonk paper.
+    #[cfg(any(feature = "log", test))]
     let all_quotient_poly_chunks = timed!(
         timing,
         "split up quotient polys",
@@ -152,7 +203,19 @@ where
             })
             .collect()
     );
+    #[cfg(not(any(feature = "log", test)))]
+    let all_quotient_poly_chunks = quotient_polys
+        .into_par_iter()
+        .flat_map(|mut quotient_poly| {
+            quotient_poly.trim_to_len(quotient_degree).expect(
+                "Quotient has failed, the vanishing polynomial is not divisible by Z_H",
+            );
+            // Split quotient into degree-n chunks.
+            quotient_poly.chunks(degree)
+        })
+        .collect();
 
+    #[cfg(any(feature = "log", test))]
     let quotient_polys_commitment = timed!(
         timing,
         "commit to quotient polys",
@@ -164,6 +227,14 @@ where
             timing,
             prover_data.fft_root_table.as_ref(),
         )
+    );
+    #[cfg(not(any(feature = "log", test)))]
+    let quotient_polys_commitment = PolynomialBatch::from_coeffs(
+        all_quotient_poly_chunks,
+        config.fri_config.rate_bits,
+        config.zero_knowledge && PlonkOracle::QUOTIENT.blinding,
+        config.fri_config.cap_height,
+        prover_data.fft_root_table.as_ref(),
     );
 
     challenger.observe_cap(&quotient_polys_commitment.merkle_tree.cap);
@@ -178,6 +249,7 @@ where
         "Opening point is in the subgroup."
     );
 
+    #[cfg(any(feature = "log", test))]
     let openings = timed!(
         timing,
         "construct the opening set",
@@ -191,8 +263,20 @@ where
             common_data,
         )
     );
+    #[cfg(not(any(feature = "log", test)))]
+    let openings = OpeningSet::new(
+        zeta,
+        g,
+        &prover_data.constants_sigmas_commitment,
+        &wires_commitment,
+        &partial_products_and_zs_commitment,
+        &quotient_polys_commitment,
+        common_data,
+    );
+    
     challenger.observe_openings(&openings.to_fri_openings());
 
+    #[cfg(any(feature = "log", test))]
     let opening_proof = timed!(
         timing,
         "compute opening proofs",
@@ -208,6 +292,18 @@ where
             &common_data.fri_params,
             timing,
         )
+    );
+    #[cfg(not(any(feature = "log", test)))]
+    let opening_proof = PolynomialBatch::prove_openings(
+        &common_data.get_fri_instance(zeta),
+        &[
+            &prover_data.constants_sigmas_commitment,
+            &wires_commitment,
+            &partial_products_and_zs_commitment,
+            &quotient_polys_commitment,
+        ],
+        &mut challenger,
+        &common_data.fri_params,
     );
 
     let proof = Proof {

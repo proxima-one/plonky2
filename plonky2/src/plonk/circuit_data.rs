@@ -26,6 +26,7 @@ use crate::plonk::plonk_common::{PlonkOracle, FRI_ORACLES};
 use crate::plonk::proof::{CompressedProofWithPublicInputs, ProofWithPublicInputs};
 use crate::plonk::prover::prove;
 use crate::plonk::verifier::verify;
+#[cfg(any(feature = "log", test))]
 use crate::util::timing::TimingTree;
 
 #[derive(Clone, Debug)]
@@ -115,12 +116,24 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
     where
         [(); C::Hasher::HASH_SIZE]:,
     {
-        prove(
-            &self.prover_only,
-            &self.common,
-            inputs,
-            &mut TimingTree::default(),
-        )
+        #[cfg(any(feature = "log", test))]
+        {
+            prove(
+                &self.prover_only,
+                &self.common,
+                inputs,
+                &mut TimingTree::default(),
+            )
+        }
+
+        #[cfg(not(any(feature = "log", test)))]
+        {
+            prove(
+                &self.prover_only,
+                &self.common,
+                inputs,
+            )
+        }
     }
 
     pub fn verify(&self, proof_with_pis: ProofWithPublicInputs<F, C, D>) -> Result<()>
@@ -164,12 +177,24 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
     where
         [(); C::Hasher::HASH_SIZE]:,
     {
-        prove(
-            &self.prover_only,
-            &self.common,
-            inputs,
-            &mut TimingTree::default(),
-        )
+        #[cfg(any(feature = "log", test))]
+        {
+            prove(
+                &self.prover_only,
+                &self.common,
+                inputs,
+                &mut TimingTree::default(),
+            )
+        }
+
+        #[cfg(not(any(feature = "log", test)))]
+        {
+            prove(
+                &self.prover_only,
+                &self.common,
+                inputs,
+            )
+        }
     }
 }
 

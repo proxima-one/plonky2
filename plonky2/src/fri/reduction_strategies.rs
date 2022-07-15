@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+#[cfg(any(feature = "log", test))]
 use log::debug;
 
 /// A method for deciding what arity to use at each reduction layer.
@@ -68,10 +69,12 @@ fn min_size_arity_bits(
         min_size_arity_bits_helper(degree_bits, rate_bits, num_queries, max_arity_bits, vec![]);
     arity_bits.shrink_to_fit();
 
+    #[cfg(any(feature = "log", test))]
     debug!(
         "min_size_arity_bits took {:.3}s",
         start.elapsed().as_secs_f32()
     );
+    #[cfg(any(feature = "log", test))]
     debug!(
         "Smallest arity_bits {:?} results in estimated FRI proof size of {} elements",
         arity_bits, fri_proof_size

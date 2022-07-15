@@ -132,6 +132,7 @@ impl TimingTree {
 }
 
 /// Creates a named scope; useful for debugging.
+#[cfg(any(feature = "log", test))]
 #[macro_export]
 macro_rules! timed {
     ($timing_tree:expr, $level:expr, $ctx:expr, $exp:expr) => {{
