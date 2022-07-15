@@ -68,9 +68,9 @@ impl<F: RichField, const N: usize> Hasher<F> for KeccakSpongeSha256Hasher<N> {
 
         #[cfg(target_os = "solana")]
         {
-            use solana_progam::hash::hash;
+            use solana_program::hash::hash;
             let hash = hash(bytes.as_slice());
-            res.copy_from_slice(&hash[..N]);
+            res.copy_from_slice(&hash.as_ref()[0..N]);
         }
 
         BytesHash(res)

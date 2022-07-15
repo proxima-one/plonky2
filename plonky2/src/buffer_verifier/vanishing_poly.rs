@@ -17,7 +17,6 @@ use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBaseBa
 use crate::util::partial_products::{check_partial_products, check_partial_products_circuit};
 use crate::util::reducing::ReducingFactorTarget;
 use crate::util::strided_view::PackedStridedView;
-use crate::with_context;
 
 /// Evaluate the vanishing polynomial at `x`. In this context, the vanishing polynomial is a random
 /// linear combination of gate constraints, plus some other terms relating to the permutation

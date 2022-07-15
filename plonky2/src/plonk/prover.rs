@@ -2,13 +2,14 @@ use std::mem::swap;
 
 use anyhow::ensure;
 use anyhow::Result;
-use log::debug;
 use plonky2_field::extension::Extendable;
 use plonky2_field::polynomial::{PolynomialCoeffs, PolynomialValues};
 use plonky2_field::zero_poly_coset::ZeroPolyOnCoset;
 use plonky2_util::{ceil_div_usize, log2_ceil};
 #[cfg(any(feature = "log", test))]
 use rayon::prelude::*;
+#[cfg(any(feature = "log", test))]
+use log::debug;
 
 use crate::cfg_chunks;
 use crate::cfg_into_iter;
@@ -42,6 +43,7 @@ pub fn prove<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: 
 where
     [(); C::Hasher::HASH_SIZE]:,
 {
+    #[cfg(any(feature = "log", test))]
     debug!("current num threads: {}", rayon::current_num_threads());
     let config = &common_data.config;
     let num_challenges = config.num_challenges;
