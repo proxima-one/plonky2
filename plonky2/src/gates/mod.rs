@@ -24,4 +24,5 @@ pub mod util;
 
 // Can't use #[cfg(test)] here because it needs to be visible to other crates.
 // See https://github.com/rust-lang/cargo/issues/8379
+#[cfg(any(feature = "test_utils", test))]
 pub mod gate_testing;

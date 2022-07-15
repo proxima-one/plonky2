@@ -2,6 +2,7 @@ use std::cmp::max;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Instant;
 
+#[cfg(any(feature = "log", test))]
 use log::{debug, info, Level};
 use plonky2_field::cosets::get_unique_coset_shifts;
 use plonky2_field::extension::{Extendable, FieldExtension};
@@ -38,11 +39,14 @@ use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::copy_constraint::CopyConstraint;
 use crate::plonk::permutation_argument::Forest;
 use crate::plonk::plonk_common::PlonkOracle;
-use crate::timed;
-use crate::util::context_tree::ContextTree;
 use crate::util::partial_products::num_partial_products;
-use crate::util::timing::TimingTree;
 use crate::util::{transpose, transpose_poly_values};
+#[cfg(any(feature = "log", test))]
+use crate::timed;
+#[cfg(any(feature = "log", test))]
+use crate::util::context_tree::ContextTree;
+#[cfg(any(feature = "log", test))]
+use crate::util::timing::TimingTree;
 
 pub struct CircuitBuilder<F: RichField + Extendable<D>, const D: usize> {
     pub config: CircuitConfig,
@@ -62,6 +66,7 @@ pub struct CircuitBuilder<F: RichField + Extendable<D>, const D: usize> {
     copy_constraints: Vec<CopyConstraint>,
 
     /// A tree of named scopes, used for debugging.
+    #[cfg(any(feature = "log", test))]
     context_log: ContextTree,
 
     /// Generators used to generate the witness.
@@ -92,7 +97,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             public_inputs: Vec::new(),
             virtual_target_index: 0,
             copy_constraints: Vec::new(),
-            context_log: ContextTree::new(),
+            #[cfg(any(feature = "log", test))] context_log: ContextTree::new(),
             generators: Vec::new(),
             constants_to_targets: HashMap::new(),
             base_arithmetic_results: HashMap::new(),
@@ -280,8 +285,13 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             y.is_routable(&self.config),
             "Tried to route a wire that isn't routable"
         );
+        #[cfg(any(feature = "log", test))]
         self.copy_constraints
             .push(CopyConstraint::new((x, y), self.context_log.open_stack()));
+        
+        #[cfg(not(any(feature = "log", test)))]
+        self.copy_constraints
+            .push(CopyConstraint::new((x, y)));
     }
 
     pub fn assert_zero(&mut self, x: Target) {
@@ -380,10 +390,12 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         }
     }
 
+    #[cfg(any(feature = "log", test))]
     pub fn push_context(&mut self, level: log::Level, ctx: &str) {
         self.context_log.push(ctx, level, self.num_gates());
     }
 
+    #[cfg(any(feature = "log", test))]
     pub fn pop_context(&mut self) {
         self.context_log.pop(self.num_gates());
     }
@@ -501,6 +513,8 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
 
     fn blind(&mut self) {
         let (regular_poly_openings, z_openings) = self.blinding_counts();
+
+        #[cfg(any(feature = "log", test))]
         info!(
             "Adding {} blinding terms for witness polynomials, and {}*2 for Z polynomials",
             regular_poly_openings, z_openings
@@ -595,7 +609,13 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             forest.add(Target::VirtualTarget { index });
         }
 
+        #[cfg(any(feature = "log", test))]
         for &CopyConstraint { pair: (a, b), .. } in &self.copy_constraints {
+            forest.merge(a, b);
+        }
+
+        #[cfg(not(any(feature = "log", test)))]
+        for &CopyConstraint { pair: (a, b) } in &self.copy_constraints {
             forest.merge(a, b);
         }
 
@@ -608,8 +628,10 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         )
     }
 
+    #[cfg(any(feature = "log", test))]
     pub fn print_gate_counts(&self, min_delta: usize) {
         // Print gate counts for each context.
+
         self.context_log
             .filter(self.num_gates(), min_delta)
             .print(self.num_gates());
@@ -622,6 +644,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
                 .iter()
                 .filter(|inst| inst.gate_ref == gate)
                 .count();
+
             debug!("- {} instances of {}", count, gate.0.id());
         }
     }
@@ -631,6 +654,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     where
         [(); C::Hasher::HASH_SIZE]:,
     {
+        #[cfg(any(feature = "log", test))]
         let mut timing = TimingTree::new("preprocess", Level::Trace);
         let start = Instant::now();
         let rate_bits = self.config.fri_config.rate_bits;
@@ -676,12 +700,15 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             self.add_simple_generator(const_gen);
         }
 
+        #[cfg(any(feature = "log", test))]
         info!(
             "Degree before blinding & padding: {}",
             self.gate_instances.len()
         );
         self.blind_and_pad();
         let degree = self.gate_instances.len();
+
+        #[cfg(any(feature = "log", test))]
         info!("Degree after blinding & padding: {}", degree);
         let degree_bits = log2_strict(degree);
         let fri_params = self.fri_params(degree_bits);
@@ -702,11 +729,16 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         let subgroup = F::two_adic_subgroup(degree_bits);
 
         let k_is = get_unique_coset_shifts(degree, self.config.num_routed_wires);
+
+        #[cfg(any(feature = "log", test))]
         let (sigma_vecs, forest) = timed!(
             timing,
             "generate sigma polynomials",
             self.sigma_vecs(&k_is, &subgroup)
         );
+
+        #[cfg(not(any(feature = "log", test)))]
+        let (sigma_vecs, forest) = self.sigma_vecs(&k_is, &subgroup);
 
         // Precompute FFT roots.
         let max_fft_points = 1 << (degree_bits + max(rate_bits, log2_ceil(quotient_degree_factor)));
@@ -718,7 +750,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             rate_bits,
             PlonkOracle::CONSTANTS_SIGMAS.blinding,
             cap_height,
-            &mut timing,
+            #[cfg(any(feature = "log", test))] &mut timing,
             Some(&fft_root_table),
         );
 
@@ -810,7 +842,10 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             circuit_digest,
         };
 
+        #[cfg(any(feature = "log", test))]
         timing.print();
+
+        #[cfg(any(feature = "log", test))]
         debug!("Building circuit took {}s", start.elapsed().as_secs_f32());
         CircuitData {
             prover_only,

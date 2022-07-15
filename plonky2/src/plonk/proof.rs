@@ -1,8 +1,10 @@
 use anyhow::ensure;
 use plonky2_field::extension::Extendable;
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+#[cfg(any(feature = "parallel", test))]
+use rayon::prelude::*;
 
+use crate::cfg_iter;
 use crate::fri::oracle::PolynomialBatch;
 use crate::fri::proof::{
     CompressedFriProof, FriChallenges, FriChallengesTarget, FriProof, FriProofTarget,
@@ -300,8 +302,7 @@ impl<F: RichField + Extendable<D>, const D: usize> OpeningSet<F, D> {
         common_data: &CommonCircuitData<F, C, D>,
     ) -> Self {
         let eval_commitment = |z: F::Extension, c: &PolynomialBatch<F, C, D>| {
-            c.polynomials
-                .par_iter()
+            cfg_iter!(c.polynomials)
                 .map(|p| p.to_extension().eval(z))
                 .collect::<Vec<_>>()
         };

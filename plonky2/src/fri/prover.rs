@@ -2,6 +2,7 @@ use itertools::Itertools;
 use plonky2_field::extension::{flatten, unflatten, Extendable};
 use plonky2_field::polynomial::{PolynomialCoeffs, PolynomialValues};
 use plonky2_util::reverse_index_bits_in_place;
+#[cfg(any(feature = "parallel", test))]
 use rayon::prelude::*;
 
 use crate::fri::proof::{FriInitialTreeProof, FriProof, FriQueryRound, FriQueryStep};
@@ -11,10 +12,14 @@ use crate::hash::merkle_tree::MerkleTree;
 use crate::iop::challenger::Challenger;
 use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::plonk_common::reduce_with_powers;
+use crate::{cfg_chunks, cfg_into_iter, cfg_chunks_exact};
+#[cfg(any(feature = "log", test))]
 use crate::timed;
+#[cfg(any(feature = "log", test))]
 use crate::util::timing::TimingTree;
 
 /// Builds a FRI proof.
+
 pub fn fri_proof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(
     initial_merkle_trees: &[&MerkleTree<F, C::Hasher>],
     // Coefficients of the polynomial on which the LDT is performed. Only the first `1/rate` coefficients are non-zero.
@@ -23,7 +28,7 @@ pub fn fri_proof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const
     lde_polynomial_values: PolynomialValues<F::Extension>,
     challenger: &mut Challenger<F, C::Hasher>,
     fri_params: &FriParams,
-    timing: &mut TimingTree,
+    #[cfg(any(feature = "log", test))] timing: &mut TimingTree,
 ) -> FriProof<F, C::Hasher, D>
 where
     [(); C::Hasher::HASH_SIZE]:,
@@ -32,6 +37,7 @@ where
     assert_eq!(lde_polynomial_coeffs.len(), n);
 
     // Commit phase
+    #[cfg(any(feature = "log", test))]
     let (trees, final_coeffs) = timed!(
         timing,
         "fold codewords in the commitment phase",
@@ -42,14 +48,25 @@ where
             fri_params,
         )
     );
+    #[cfg(not(any(feature = "log", test)))]
+    let (trees, final_coeffs) = fri_committed_trees::<F, C, D>(
+        lde_polynomial_coeffs,
+        lde_polynomial_values,
+        challenger,
+        fri_params,
+    );
 
     // PoW phase
     let current_hash = challenger.get_hash();
+    #[cfg(any(feature = "log", test))]
     let pow_witness = timed!(
         timing,
         "find proof-of-work witness",
         fri_proof_of_work::<F, C, D>(current_hash, &fri_params.config)
     );
+
+    #[cfg(not(any(feature = "log", test)))]
+    let pow_witness = fri_proof_of_work::<F, C, D>(current_hash, &fri_params.config);
 
     // Query phase
     let query_round_proofs =
@@ -82,9 +99,7 @@ where
         let arity = 1 << arity_bits;
 
         reverse_index_bits_in_place(&mut values.values);
-        let chunked_values = values
-            .values
-            .par_chunks(arity)
+        let chunked_values = cfg_chunks!(values.values, arity)
             .map(|chunk: &[F::Extension]| flatten(chunk))
             .collect();
         let tree = MerkleTree::<F, C::Hasher>::new(chunked_values, fri_params.config.cap_height);
@@ -95,9 +110,7 @@ where
         let beta = challenger.get_extension_challenge::<D>();
         // P(x) = sum_{i<r} x^i * P_i(x^r) becomes sum_{i<r} beta^i * P_i(x).
         coeffs = PolynomialCoeffs::new(
-            coeffs
-                .coeffs
-                .par_chunks_exact(arity)
+            cfg_chunks_exact!(coeffs.coeffs, arity)
                 .map(|chunk| reduce_with_powers(chunk, beta))
                 .collect::<Vec<_>>(),
         );
@@ -118,24 +131,49 @@ fn fri_proof_of_work<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, c
     current_hash: HashOut<F>,
     config: &FriConfig,
 ) -> F {
-    (0..=F::NEG_ONE.to_canonical_u64())
-        .into_par_iter()
-        .find_any(|&i| {
-            C::InnerHasher::hash_no_pad(
-                &current_hash
-                    .elements
-                    .iter()
-                    .copied()
-                    .chain(Some(F::from_canonical_u64(i)))
-                    .collect_vec(),
-            )
-            .elements[0]
-                .to_canonical_u64()
-                .leading_zeros()
-                >= config.proof_of_work_bits + (64 - F::order().bits()) as u32
-        })
-        .map(F::from_canonical_u64)
-        .expect("Proof of work failed. This is highly unlikely!")
+    #[cfg(any(feature = "log", test))]
+    {
+        (0..=F::NEG_ONE.to_canonical_u64())
+            .into_par_iter()
+            .find_any(|&i| {
+                C::InnerHasher::hash_no_pad(
+                    &current_hash
+                        .elements
+                        .iter()
+                        .copied()
+                        .chain(Some(F::from_canonical_u64(i)))
+                        .collect_vec(),
+                )
+                .elements[0]
+                    .to_canonical_u64()
+                    .leading_zeros()
+                    >= config.proof_of_work_bits + (64 - F::order().bits()) as u32
+            })
+            .map(F::from_canonical_u64)
+            .expect("Proof of work failed. This is highly unlikely!")
+    }
+
+    #[cfg(not(any(feature = "log", test)))]
+    {
+        (0..=F::NEG_ONE.to_canonical_u64())
+            .into_iter()
+            .find(|&i| {
+                C::InnerHasher::hash_no_pad(
+                    &current_hash
+                        .elements
+                        .iter()
+                        .copied()
+                        .chain(Some(F::from_canonical_u64(i)))
+                        .collect_vec(),
+                )
+                .elements[0]
+                    .to_canonical_u64()
+                    .leading_zeros()
+                    >= config.proof_of_work_bits + (64 - F::order().bits()) as u32
+            })
+            .map(F::from_canonical_u64)
+            .expect("Proof of work failed. This is highly unlikely!")
+    }
 }
 
 fn fri_prover_query_rounds<

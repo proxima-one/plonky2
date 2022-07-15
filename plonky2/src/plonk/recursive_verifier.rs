@@ -11,6 +11,7 @@ use crate::plonk::proof::{
 use crate::plonk::vanishing_poly::eval_vanishing_poly_circuit;
 use crate::plonk::vars::EvaluationTargets;
 use crate::util::reducing::ReducingFactorTarget;
+#[cfg(any(feature = "log", test))]
 use crate::with_context;
 
 impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
@@ -67,6 +68,8 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
 
         let zeta_pow_deg =
             self.exp_power_of_2_extension(challenges.plonk_zeta, inner_common_data.degree_bits);
+        
+        #[cfg(any(feature = "log", test))]
         let vanishing_polys_zeta = with_context!(
             self,
             "evaluate the vanishing polynomial at our challenge point, zeta.",
@@ -85,7 +88,23 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
                 &challenges.plonk_alphas,
             )
         );
+        #[cfg(not(any(feature = "log", test)))]
+        let vanishing_polys_zeta = eval_vanishing_poly_circuit(
+            self,
+            inner_common_data,
+            challenges.plonk_zeta,
+            zeta_pow_deg,
+            vars,
+            local_zs,
+            next_zs,
+            partial_products,
+            s_sigmas,
+            &challenges.plonk_betas,
+            &challenges.plonk_gammas,
+            &challenges.plonk_alphas,
+        ); 
 
+        #[cfg(any(feature = "log", test))]
         with_context!(self, "check vanishing and quotient polynomials.", {
             let quotient_polys_zeta = &proof.openings.quotient_polys;
             let mut scale = ReducingFactorTarget::new(zeta_pow_deg);
@@ -99,6 +118,21 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
                 self.connect_extension(vanishing_polys_zeta[i], computed_vanishing_poly);
             }
         });
+        #[cfg(not(any(feature = "log", test)))]
+        {
+            let quotient_polys_zeta = &proof.openings.quotient_polys;
+            let mut scale = ReducingFactorTarget::new(zeta_pow_deg);
+            let z_h_zeta = self.sub_extension(zeta_pow_deg, one);
+            for (i, chunk) in quotient_polys_zeta
+                .chunks(inner_common_data.quotient_degree_factor)
+                .enumerate()
+            {
+                let recombined_quotient = scale.reduce(chunk, self);
+                let computed_vanishing_poly = self.mul_extension(z_h_zeta, recombined_quotient);
+                self.connect_extension(vanishing_polys_zeta[i], computed_vanishing_poly);
+            }
+        }
+
 
         let merkle_caps = &[
             inner_verifier_data.constants_sigmas_cap.clone(),
@@ -108,6 +142,8 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         ];
 
         let fri_instance = inner_common_data.get_fri_instance_target(self, challenges.plonk_zeta);
+
+        #[cfg(any(feature = "log", test))]
         with_context!(
             self,
             "verify FRI proof",
@@ -119,6 +155,15 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
                 &proof.opening_proof,
                 &inner_common_data.fri_params,
             )
+        );
+        #[cfg(not(any(feature = "log", test)))]
+        self.verify_fri_proof::<C>(
+            &fri_instance,
+            &proof.openings.to_fri_openings(),
+            &challenges.fri_challenges,
+            merkle_caps,
+            &proof.opening_proof,
+            &inner_common_data.fri_params,
         );
     }
 

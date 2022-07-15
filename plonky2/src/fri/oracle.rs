@@ -5,7 +5,6 @@ use plonky2_field::packed::PackedField;
 use plonky2_field::polynomial::{PolynomialCoeffs, PolynomialValues};
 use plonky2_field::types::Field;
 use plonky2_util::{log2_strict, reverse_index_bits_in_place};
-use rayon::prelude::*;
 
 use crate::fri::proof::FriProof;
 use crate::fri::prover::fri_proof;
@@ -15,11 +14,16 @@ use crate::hash::hash_types::RichField;
 use crate::hash::merkle_tree::MerkleTree;
 use crate::iop::challenger::Challenger;
 use crate::plonk::config::{GenericConfig, Hasher};
-use crate::timed;
 use crate::util::reducing::ReducingFactor;
 use crate::util::reverse_bits;
-use crate::util::timing::TimingTree;
 use crate::util::transpose;
+use crate::{cfg_into_iter, cfg_iter};
+#[cfg(any(feature = "log", test))]
+use crate::util::timing::TimingTree;
+#[cfg(any(feature = "log", test))]
+use crate::timed;
+#[cfg(any(feature = "parallel", test))]
+use rayon::prelude::*;
 
 /// Four (~64 bit) field elements gives ~128 bit security.
 pub const SALT_SIZE: usize = 4;
@@ -43,24 +47,29 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         rate_bits: usize,
         blinding: bool,
         cap_height: usize,
-        timing: &mut TimingTree,
+        #[cfg(any(feature = "log", test))] timing: &mut TimingTree,
         fft_root_table: Option<&FftRootTable<F>>,
     ) -> Self
     where
         [(); C::Hasher::HASH_SIZE]:,
     {
+       
+        #[cfg(any(feature = "log", test))]
         let coeffs = timed!(
             timing,
             "IFFT",
-            values.into_par_iter().map(|v| v.ifft()).collect::<Vec<_>>()
+            cfg_into_iter!(values).map(|v| v.ifft()).collect::<Vec<_>>()
         );
+        #[cfg(not(any(feature = "log", test)))]
+        let coeffs = cfg_into_iter!(values).map(|v| v.ifft()).collect::<Vec<_>>();
+
 
         Self::from_coeffs(
             coeffs,
             rate_bits,
             blinding,
             cap_height,
-            timing,
+            #[cfg(any(feature = "log", test))] timing,
             fft_root_table,
         )
     }
@@ -71,26 +80,37 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         rate_bits: usize,
         blinding: bool,
         cap_height: usize,
-        timing: &mut TimingTree,
+        #[cfg(any(feature = "log", test))] timing: &mut TimingTree,
         fft_root_table: Option<&FftRootTable<F>>,
     ) -> Self
     where
         [(); C::Hasher::HASH_SIZE]:,
     {
         let degree = polynomials[0].len();
+
+        #[cfg(any(feature = "log", test))]
         let lde_values = timed!(
             timing,
             "FFT + blinding",
             Self::lde_values(&polynomials, rate_bits, blinding, fft_root_table)
         );
+        #[cfg(not(any(feature = "log", test)))]
+        let lde_values = Self::lde_values(&polynomials, rate_bits, blinding, fft_root_table);
 
+        #[cfg(any(feature = "log", test))]
         let mut leaves = timed!(timing, "transpose LDEs", transpose(&lde_values));
+        #[cfg(not(any(feature = "log", test)))]
+        let mut leaves = transpose(&lde_values);
+
         reverse_index_bits_in_place(&mut leaves);
+        #[cfg(any(feature = "log", test))]
         let merkle_tree = timed!(
             timing,
             "build Merkle tree",
             MerkleTree::new(leaves, cap_height)
         );
+        #[cfg(not(any(feature = "log", test)))]
+        let merkle_tree = MerkleTree::new(leaves, cap_height);
 
         Self {
             polynomials,
@@ -112,8 +132,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         // If blinding, salt with two random elements to each leaf vector.
         let salt_size = if blinding { SALT_SIZE } else { 0 };
 
-        polynomials
-            .par_iter()
+        cfg_iter!(polynomials)
             .map(|p| {
                 assert_eq!(p.len(), degree, "Polynomial degrees inconsistent");
                 p.lde(rate_bits)
@@ -121,8 +140,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
                     .values
             })
             .chain(
-                (0..salt_size)
-                    .into_par_iter()
+                cfg_into_iter!((0..salt_size))
                     .map(|_| F::rand_vec(degree << rate_bits)),
             )
             .collect()
@@ -168,7 +186,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         oracles: &[&Self],
         challenger: &mut Challenger<F, C::Hasher>,
         fri_params: &FriParams,
-        timing: &mut TimingTree,
+        #[cfg(any(feature = "log", test))] timing: &mut TimingTree,
     ) -> FriProof<F, C::Hasher, D>
     where
         [(); C::Hasher::HASH_SIZE]:,
@@ -184,11 +202,16 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
             let polys_coeff = polynomials.iter().map(|fri_poly| {
                 &oracles[fri_poly.oracle_index].polynomials[fri_poly.polynomial_index]
             });
+
+            #[cfg(any(feature = "log", test))]
             let composition_poly = timed!(
                 timing,
                 &format!("reduce batch of {} polynomials", polynomials.len()),
                 alpha.reduce_polys_base(polys_coeff)
             );
+            #[cfg(not(any(feature = "log", test)))]
+            let composition_poly = alpha.reduce_polys_base(polys_coeff);
+
             let quotient = composition_poly.divide_by_linear(*point);
             alpha.shift_poly(&mut final_poly);
             final_poly += quotient;
@@ -198,22 +221,27 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         final_poly.coeffs.insert(0, F::Extension::ZERO);
 
         let lde_final_poly = final_poly.lde(fri_params.config.rate_bits);
+
+        #[cfg(any(feature = "log", test))]
         let lde_final_values = timed!(
             timing,
             &format!("perform final FFT {}", lde_final_poly.len()),
             lde_final_poly.coset_fft(F::coset_shift().into())
         );
+        #[cfg(not(any(feature = "log", test)))]
+        let lde_final_values = lde_final_poly.coset_fft(F::coset_shift().into());
+
+        let initial_merkle_trees = cfg_iter!(oracles)
+            .map(|c| &c.merkle_tree)
+            .collect::<Vec<_>>();
 
         let fri_proof = fri_proof::<F, C, D>(
-            &oracles
-                .par_iter()
-                .map(|c| &c.merkle_tree)
-                .collect::<Vec<_>>(),
+            &initial_merkle_trees,
             lde_final_poly,
             lde_final_values,
             challenger,
             fri_params,
-            timing,
+            #[cfg(any(feature = "log", test))] timing,
         );
 
         fri_proof

@@ -15,6 +15,7 @@ use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBaseBa
 use crate::util::partial_products::{check_partial_products, check_partial_products_circuit};
 use crate::util::reducing::ReducingFactorTarget;
 use crate::util::strided_view::PackedStridedView;
+#[cfg(any(feature = "log", test))]
 use crate::with_context;
 
 /// Evaluate the vanishing polynomial at `x`. In this context, the vanishing polynomial is a random
@@ -282,6 +283,8 @@ pub fn evaluate_gate_constraints_circuit<
     let mut all_gate_constraints = vec![builder.zero_extension(); common_data.num_gate_constraints];
     for (i, gate) in common_data.gates.iter().enumerate() {
         let selector_index = common_data.selectors_info.selector_indices[i];
+
+        #[cfg(any(feature = "log", test))]
         with_context!(
             builder,
             &format!("evaluate {} constraints", gate.0.id()),
@@ -294,6 +297,17 @@ pub fn evaluate_gate_constraints_circuit<
                 common_data.selectors_info.num_selectors(),
                 &mut all_gate_constraints,
             )
+        );
+
+        #[cfg(not(any(feature = "log", test)))]
+        gate.0.eval_filtered_circuit(
+            builder,
+            vars,
+            i,
+            selector_index,
+            common_data.selectors_info.groups[selector_index].clone(),
+            common_data.selectors_info.num_selectors(),
+            &mut all_gate_constraints,
         );
     }
     all_gate_constraints
@@ -326,11 +340,14 @@ pub(crate) fn eval_vanishing_poly_circuit<
     let max_degree = common_data.quotient_degree_factor;
     let num_prods = common_data.num_partial_products;
 
+    #[cfg(any(feature = "log", test))]
     let constraint_terms = with_context!(
         builder,
         "evaluate gate constraints",
         evaluate_gate_constraints_circuit(builder, common_data, vars,)
     );
+    #[cfg(not(any(feature = "log", test)))]
+    let constraint_terms = evaluate_gate_constraints_circuit(builder, common_data, vars);
 
     // The L_1(x) (Z(x) - 1) vanishing terms.
     let mut vanishing_z_1_terms = Vec::new();

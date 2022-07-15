@@ -20,6 +20,8 @@ use crate::iop::target::{BoolTarget, Target};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::config::{AlgebraicHasher, GenericConfig};
 use crate::util::reducing::ReducingFactorTarget;
+
+#[cfg(any(feature = "log", test))]
 use crate::with_context;
 
 impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
@@ -139,11 +141,14 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         // Size of the LDE domain.
         let n = params.lde_size();
 
+        #[cfg(any(feature = "log", test))]
         with_context!(
             self,
             "check PoW",
             self.fri_verify_proof_of_work::<C::Hasher>(challenges.fri_pow_response, &params.config)
         );
+        #[cfg(not(any(feature = "log", test)))]
+        self.fri_verify_proof_of_work::<C::Hasher>(challenges.fri_pow_response, &params.config);
 
         // Check that parameters are coherent.
         debug_assert_eq!(
@@ -152,6 +157,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             "Number of query rounds does not match config."
         );
 
+        #[cfg(any(feature = "log", test))]
         let precomputed_reduced_evals = with_context!(
             self,
             "precompute reduced evaluations",
@@ -161,11 +167,18 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
                 self
             )
         );
+        #[cfg(not(any(feature = "log", test)))]
+        let precomputed_reduced_evals = PrecomputedReducedOpeningsTarget::from_os_and_alpha(
+            openings,
+            challenges.fri_alpha,
+            self
+        );
 
         for (i, round_proof) in proof.query_round_proofs.iter().enumerate() {
             // To minimize noise in our logs, we will only record a context for a single FRI query.
             // The very first query will have some extra gates due to constants being registered, so
             // the second query is a better representative.
+            #[cfg(any(feature = "log", test))]
             let level = if i == 1 {
                 log::Level::Debug
             } else {
@@ -173,6 +186,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             };
 
             let num_queries = proof.query_round_proofs.len();
+            #[cfg(any(feature = "log", test))]
             with_context!(
                 self,
                 level,
@@ -188,6 +202,18 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
                     round_proof,
                     params,
                 )
+            );
+            #[cfg(not(any(feature = "log", test)))]
+            self.fri_verifier_query_round::<C>(
+                instance,
+                challenges,
+                &precomputed_reduced_evals,
+                initial_merkle_caps,
+                proof,
+                challenges.fri_query_indices[i],
+                n,
+                round_proof,
+                params,
             );
         }
     }
@@ -205,6 +231,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             .zip(initial_merkle_caps)
             .enumerate()
         {
+            #[cfg(any(feature = "log", test))]
             with_context!(
                 self,
                 &format!("verify {}'th initial Merkle proof", i),
@@ -215,6 +242,15 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
                     cap,
                     merkle_proof
                 )
+            );
+
+            #[cfg(not(any(feature = "log", test)))]
+            self.verify_merkle_proof_to_cap_with_cap_index::<H>(
+                evals.clone(),
+                x_index_bits,
+                cap_index,
+                cap,
+                merkle_proof
             );
         }
     }
@@ -288,6 +324,8 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
 
         let cap_index =
             self.le_sum(x_index_bits[x_index_bits.len() - params.config.cap_height..].iter());
+        
+        #[cfg(any(feature = "log", test))]
         with_context!(
             self,
             "check FRI initial proof",
@@ -298,8 +336,16 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
                 cap_index
             )
         );
+        #[cfg(not(any(feature = "log", test)))]
+        self.fri_verify_initial_proof::<C::Hasher>(
+            &x_index_bits,
+            &round_proof.initial_trees_proof,
+            initial_merkle_caps,
+            cap_index
+        );
 
         // `subgroup_x` is `subgroup[x_index]`, i.e., the actual field element in the domain.
+        #[cfg(any(feature = "log", test))]
         let mut subgroup_x = with_context!(self, "compute x from its index", {
             let g = self.constant(F::coset_shift());
             let phi = F::primitive_root_of_unity(n_log);
@@ -307,9 +353,18 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             // subgroup_x = g * phi
             self.mul(g, phi)
         });
+        #[cfg(not(any(feature = "log", test)))]
+        let mut subgroup_x = {
+            let g = self.constant(F::coset_shift());
+            let phi = F::primitive_root_of_unity(n_log);
+            let phi = self.exp_from_bits_const_base(phi, x_index_bits.iter().rev());
+            // subgroup_x = g * phi
+            self.mul(g, phi)
+        };
 
         // old_eval is the last derived evaluation; it will be checked for consistency with its
         // committed "parent" value in the next iteration.
+        #[cfg(any(feature = "log", test))]
         let mut old_eval = with_context!(
             self,
             "combine initial oracles",
@@ -321,6 +376,15 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
                 precomputed_reduced_evals,
                 params,
             )
+        );
+        #[cfg(not(any(feature = "log", test)))]
+        let mut old_eval = self.fri_combine_initial::<C>(
+            instance,
+            &round_proof.initial_trees_proof,
+            challenges.fri_alpha,
+            subgroup_x,
+            precomputed_reduced_evals,
+            params,
         );
 
         for (i, &arity_bits) in params.reduction_arity_bits.iter().enumerate() {
@@ -336,18 +400,33 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             self.connect_extension(new_eval, old_eval);
 
             // Infer P(y) from {P(x)}_{x^arity=y}.
-            old_eval = with_context!(
-                self,
-                "infer evaluation using interpolation",
-                self.compute_evaluation::<C>(
+            #[cfg(any(feature = "log", test))]
+            {
+                old_eval = with_context!(
+                    self,
+                    "infer evaluation using interpolation",
+                    self.compute_evaluation::<C>(
+                        subgroup_x,
+                        x_index_within_coset_bits,
+                        arity_bits,
+                        evals,
+                        challenges.fri_betas[i],
+                    )
+                );
+            }
+
+            #[cfg(not(any(feature = "log", test)))]
+            {
+                old_eval = self.compute_evaluation::<C>(
                     subgroup_x,
                     x_index_within_coset_bits,
                     arity_bits,
                     evals,
                     challenges.fri_betas[i],
-                )
-            );
+                );
+            }
 
+            #[cfg(any(feature = "log", test))]
             with_context!(
                 self,
                 "verify FRI round Merkle proof.",
@@ -359,6 +438,14 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
                     &round_proof.steps[i].merkle_proof,
                 )
             );
+            #[cfg(not(any(feature = "log", test)))]
+            self.verify_merkle_proof_to_cap_with_cap_index::<C::Hasher>(
+                flatten_target(evals),
+                &coset_index_bits,
+                cap_index,
+                &proof.commit_phase_merkle_caps[i],
+                &round_proof.steps[i].merkle_proof,
+            );
 
             // Update the point x to x^arity.
             subgroup_x = self.exp_power_of_2(subgroup_x, arity_bits);
@@ -368,6 +455,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
 
         // Final check of FRI. After all the reductions, we check that the final polynomial is equal
         // to the one sent by the prover.
+        #[cfg(any(feature = "log", test))]
         let eval = with_context!(
             self,
             &format!(
@@ -376,6 +464,9 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             ),
             proof.final_poly.eval_scalar(self, subgroup_x)
         );
+        #[cfg(not(any(feature = "log", test)))]
+        let eval = proof.final_poly.eval_scalar(self, subgroup_x);
+
         self.connect_extension(eval, old_eval);
     }
 
