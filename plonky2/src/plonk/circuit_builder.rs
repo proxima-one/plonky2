@@ -39,14 +39,14 @@ use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::copy_constraint::CopyConstraint;
 use crate::plonk::permutation_argument::Forest;
 use crate::plonk::plonk_common::PlonkOracle;
-use crate::util::partial_products::num_partial_products;
-use crate::util::{transpose, transpose_poly_values};
 #[cfg(any(feature = "log", test))]
 use crate::timed;
 #[cfg(any(feature = "log", test))]
 use crate::util::context_tree::ContextTree;
+use crate::util::partial_products::num_partial_products;
 #[cfg(any(feature = "log", test))]
 use crate::util::timing::TimingTree;
+use crate::util::{transpose, transpose_poly_values};
 
 pub struct CircuitBuilder<F: RichField + Extendable<D>, const D: usize> {
     pub config: CircuitConfig,
@@ -97,7 +97,8 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             public_inputs: Vec::new(),
             virtual_target_index: 0,
             copy_constraints: Vec::new(),
-            #[cfg(any(feature = "log", test))] context_log: ContextTree::new(),
+            #[cfg(any(feature = "log", test))]
+            context_log: ContextTree::new(),
             generators: Vec::new(),
             constants_to_targets: HashMap::new(),
             base_arithmetic_results: HashMap::new(),
@@ -288,10 +289,9 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         #[cfg(any(feature = "log", test))]
         self.copy_constraints
             .push(CopyConstraint::new((x, y), self.context_log.open_stack()));
-        
+
         #[cfg(not(any(feature = "log", test)))]
-        self.copy_constraints
-            .push(CopyConstraint::new((x, y)));
+        self.copy_constraints.push(CopyConstraint::new((x, y)));
     }
 
     pub fn assert_zero(&mut self, x: Target) {
@@ -750,7 +750,8 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             rate_bits,
             PlonkOracle::CONSTANTS_SIGMAS.blinding,
             cap_height,
-            #[cfg(any(feature = "log", test))] &mut timing,
+            #[cfg(any(feature = "log", test))]
+            &mut timing,
             Some(&fft_root_table),
         );
 

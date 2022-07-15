@@ -3,10 +3,10 @@ use plonky2_field::types::Field;
 
 #[cfg(any(feature = "log", test))]
 pub(crate) mod context_tree;
+pub(crate) mod iter;
 pub(crate) mod partial_products;
 pub mod reducing;
 pub mod serialization;
-pub(crate) mod iter;
 pub mod strided_view;
 #[cfg(any(feature = "log", test))]
 pub mod timing;

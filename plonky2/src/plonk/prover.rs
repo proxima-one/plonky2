@@ -25,12 +25,12 @@ use crate::plonk::proof::OpeningSet;
 use crate::plonk::proof::{Proof, ProofWithPublicInputs};
 use crate::plonk::vanishing_poly::eval_vanishing_poly_base_batch;
 use crate::plonk::vars::EvaluationVarsBaseBatch;
-use crate::util::partial_products::{partial_products_and_z_gx, quotient_chunk_products};
-use crate::util::transpose;
-#[cfg(any(feature = "log", test))]
-use crate::util::timing::TimingTree;
 #[cfg(any(feature = "log", test))]
 use crate::timed;
+use crate::util::partial_products::{partial_products_and_z_gx, quotient_chunk_products};
+#[cfg(any(feature = "log", test))]
+use crate::util::timing::TimingTree;
+use crate::util::transpose;
 
 pub fn prove<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(
     prover_data: &ProverOnlyCircuitData<F, C, D>,
@@ -124,7 +124,8 @@ where
         all_wires_permutation_partial_products(&witness, &betas, &gammas, prover_data, common_data)
     );
     #[cfg(not(any(feature = "log", test)))]
-    let mut partial_products_and_zs = all_wires_permutation_partial_products(&witness, &betas, &gammas, prover_data, common_data);
+    let mut partial_products_and_zs =
+        all_wires_permutation_partial_products(&witness, &betas, &gammas, prover_data, common_data);
 
     // Z is expected at the front of our batch; see `zs_range` and `partial_products_range`.
     let plonk_z_vecs = partial_products_and_zs
@@ -205,9 +206,9 @@ where
     #[cfg(not(any(feature = "log", test)))]
     let all_quotient_poly_chunks = cfg_into_iter!(quotient_polys)
         .flat_map(|mut quotient_poly| {
-            quotient_poly.trim_to_len(quotient_degree).expect(
-                "Quotient has failed, the vanishing polynomial is not divisible by Z_H",
-            );
+            quotient_poly
+                .trim_to_len(quotient_degree)
+                .expect("Quotient has failed, the vanishing polynomial is not divisible by Z_H");
             // Split quotient into degree-n chunks.
             quotient_poly.chunks(degree)
         })
@@ -271,7 +272,7 @@ where
         &quotient_polys_commitment,
         common_data,
     );
-    
+
     challenger.observe_openings(&openings.to_fri_openings());
 
     #[cfg(any(feature = "log", test))]

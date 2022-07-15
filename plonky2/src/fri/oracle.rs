@@ -5,6 +5,8 @@ use plonky2_field::packed::PackedField;
 use plonky2_field::polynomial::{PolynomialCoeffs, PolynomialValues};
 use plonky2_field::types::Field;
 use plonky2_util::{log2_strict, reverse_index_bits_in_place};
+#[cfg(any(feature = "parallel", test))]
+use rayon::prelude::*;
 
 use crate::fri::proof::FriProof;
 use crate::fri::prover::fri_proof;
@@ -14,16 +16,14 @@ use crate::hash::hash_types::RichField;
 use crate::hash::merkle_tree::MerkleTree;
 use crate::iop::challenger::Challenger;
 use crate::plonk::config::{GenericConfig, Hasher};
-use crate::util::reducing::ReducingFactor;
-use crate::util::reverse_bits;
-use crate::util::transpose;
-use crate::{cfg_into_iter, cfg_iter};
-#[cfg(any(feature = "log", test))]
-use crate::util::timing::TimingTree;
 #[cfg(any(feature = "log", test))]
 use crate::timed;
-#[cfg(any(feature = "parallel", test))]
-use rayon::prelude::*;
+use crate::util::reducing::ReducingFactor;
+use crate::util::reverse_bits;
+#[cfg(any(feature = "log", test))]
+use crate::util::timing::TimingTree;
+use crate::util::transpose;
+use crate::{cfg_into_iter, cfg_iter};
 
 /// Four (~64 bit) field elements gives ~128 bit security.
 pub const SALT_SIZE: usize = 4;
@@ -53,7 +53,6 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
     where
         [(); C::Hasher::HASH_SIZE]:,
     {
-       
         #[cfg(any(feature = "log", test))]
         let coeffs = timed!(
             timing,
@@ -63,13 +62,13 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         #[cfg(not(any(feature = "log", test)))]
         let coeffs = cfg_into_iter!(values).map(|v| v.ifft()).collect::<Vec<_>>();
 
-
         Self::from_coeffs(
             coeffs,
             rate_bits,
             blinding,
             cap_height,
-            #[cfg(any(feature = "log", test))] timing,
+            #[cfg(any(feature = "log", test))]
+            timing,
             fft_root_table,
         )
     }
@@ -139,10 +138,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
                     .coset_fft_with_options(F::coset_shift(), Some(rate_bits), fft_root_table)
                     .values
             })
-            .chain(
-                cfg_into_iter!((0..salt_size))
-                    .map(|_| F::rand_vec(degree << rate_bits)),
-            )
+            .chain(cfg_into_iter!((0..salt_size)).map(|_| F::rand_vec(degree << rate_bits)))
             .collect()
     }
 
@@ -241,7 +237,8 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
             lde_final_values,
             challenger,
             fri_params,
-            #[cfg(any(feature = "log", test))] timing,
+            #[cfg(any(feature = "log", test))]
+            timing,
         );
 
         fri_proof

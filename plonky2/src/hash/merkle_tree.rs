@@ -2,16 +2,16 @@ use std::mem::MaybeUninit;
 use std::slice;
 
 use plonky2_util::log2_strict;
-use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "parallel", test))]
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 
-use crate::{cfg_chunks_exact, cfg_chunks_exact_mut};
 use crate::cfg_iter_mut;
 use crate::hash::hash_types::RichField;
 use crate::hash::merkle_proofs::MerkleProof;
 use crate::plonk::config::GenericHashOut;
 use crate::plonk::config::Hasher;
+use crate::{cfg_chunks_exact, cfg_chunks_exact_mut};
 
 /// The Merkle cap of height `h` of a Merkle tree is the `h`-th layer (from the root) of the tree.
 /// It can be used in place of the root to verify Merkle paths, which are `h` elements shorter.
@@ -85,13 +85,13 @@ where
             || fill_subtree::<F, H>(left_digests_buf, left_leaves),
             || fill_subtree::<F, H>(right_digests_buf, right_leaves),
         );
-        
+
         #[cfg(not(any(feature = "parallel", test)))]
         let (left_digest, right_digest) = (
             fill_subtree::<F, H>(left_digests_buf, left_leaves),
             fill_subtree::<F, H>(right_digests_buf, right_leaves),
         );
-        
+
         left_digest_mem.write(left_digest);
         right_digest_mem.write(right_digest);
         H::two_to_one(left_digest, right_digest)

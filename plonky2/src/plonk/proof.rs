@@ -1,8 +1,8 @@
 use anyhow::ensure;
 use plonky2_field::extension::Extendable;
-use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "parallel", test))]
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use crate::cfg_iter;
 use crate::fri::oracle::PolynomialBatch;

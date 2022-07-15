@@ -12,11 +12,11 @@ use crate::hash::merkle_tree::MerkleTree;
 use crate::iop::challenger::Challenger;
 use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::plonk_common::reduce_with_powers;
-use crate::{cfg_chunks, cfg_into_iter, cfg_chunks_exact};
 #[cfg(any(feature = "log", test))]
 use crate::timed;
 #[cfg(any(feature = "log", test))]
 use crate::util::timing::TimingTree;
+use crate::{cfg_chunks, cfg_chunks_exact, cfg_into_iter};
 
 /// Builds a FRI proof.
 

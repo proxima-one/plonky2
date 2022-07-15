@@ -1,7 +1,6 @@
 //! Generates random constants using ChaCha20, seeded with zero.
 #![allow(clippy::needless_range_loop)]
 
-
 #[cfg(any(feature = "test_utils", test))]
 use plonky2_field::goldilocks_field::GoldilocksField;
 #[cfg(any(feature = "test_utils", test))]

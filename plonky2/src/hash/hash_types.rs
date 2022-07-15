@@ -1,9 +1,8 @@
 use plonky2_field::goldilocks_field::GoldilocksField;
 use plonky2_field::types::{Field, PrimeField64};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
 #[cfg(any(feature = "test_utils", test))]
 use rand::Rng;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::hash::poseidon::Poseidon;
 use crate::iop::target::Target;
