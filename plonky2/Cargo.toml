@@ -19,7 +19,6 @@ test_utils = ["rand", "rand_chacha"]
 [dependencies]
 plonky2_field = { path = "../field" }
 plonky2_util = { path = "../util" }
-env_logger = "0.9.0"
 log = { version = "0.4.14", optional = true }
 itertools = "0.10.0"
 num = { version = "0.4" }
