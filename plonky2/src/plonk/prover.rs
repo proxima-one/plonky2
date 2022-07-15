@@ -43,8 +43,6 @@ pub fn prove<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: 
 where
     [(); C::Hasher::HASH_SIZE]:,
 {
-    #[cfg(any(feature = "log", test))]
-    debug!("current num threads: {}", rayon::current_num_threads());
     let config = &common_data.config;
     let num_challenges = config.num_challenges;
     let quotient_degree = common_data.quotient_degree();
