@@ -6,8 +6,12 @@ use plonky2_field::extension::Extendable;
 use plonky2_field::polynomial::{PolynomialCoeffs, PolynomialValues};
 use plonky2_field::zero_poly_coset::ZeroPolyOnCoset;
 use plonky2_util::{ceil_div_usize, log2_ceil};
+#[cfg(any(feature = "log", test))]
 use rayon::prelude::*;
 
+use crate::cfg_chunks;
+use crate::cfg_into_iter;
+use crate::cfg_iter;
 use crate::field::types::Field;
 use crate::fri::oracle::PolynomialBatch;
 use crate::hash::hash_types::RichField;
@@ -67,16 +71,12 @@ where
     let wires_values: Vec<PolynomialValues<F>> = timed!(
         timing,
         "compute wire polynomials",
-        witness
-            .wire_values
-            .par_iter()
+        cfg_iter!(witness.wire_values)
             .map(|column| PolynomialValues::new(column.clone()))
             .collect()
     );
     #[cfg(not(any(feature = "log", test)))]
-    let wires_values = witness
-        .wire_values
-        .par_iter()
+    let wires_values = cfg_iter!(witness.wire_values)
         .map(|column| PolynomialValues::new(column.clone()))
         .collect();
 
@@ -192,8 +192,7 @@ where
     let all_quotient_poly_chunks = timed!(
         timing,
         "split up quotient polys",
-        quotient_polys
-            .into_par_iter()
+        cfg_into_iter!(quotient_polys)
             .flat_map(|mut quotient_poly| {
                 quotient_poly.trim_to_len(quotient_degree).expect(
                     "Quotient has failed, the vanishing polynomial is not divisible by Z_H",
@@ -204,8 +203,7 @@ where
             .collect()
     );
     #[cfg(not(any(feature = "log", test)))]
-    let all_quotient_poly_chunks = quotient_polys
-        .into_par_iter()
+    let all_quotient_poly_chunks = cfg_into_iter!(quotient_polys)
         .flat_map(|mut quotient_poly| {
             quotient_poly.trim_to_len(quotient_degree).expect(
                 "Quotient has failed, the vanishing polynomial is not divisible by Z_H",
@@ -362,8 +360,7 @@ fn wires_permutation_partial_products_and_zs<
     let subgroup = &prover_data.subgroup;
     let k_is = &common_data.k_is;
     let num_prods = common_data.num_partial_products;
-    let all_quotient_chunk_products = subgroup
-        .par_iter()
+    let all_quotient_chunk_products = cfg_iter!(subgroup)
         .enumerate()
         .map(|(i, &x)| {
             let s_sigmas = &prover_data.sigmas[i];
@@ -400,8 +397,7 @@ fn wires_permutation_partial_products_and_zs<
         all_partial_products_and_zs.push(partial_products_and_z_gx);
     }
 
-    transpose(&all_partial_products_and_zs)
-        .into_par_iter()
+    cfg_into_iter!(transpose(&all_partial_products_and_zs))
         .map(PolynomialValues::new)
         .collect()
 }
@@ -443,7 +439,7 @@ fn compute_quotient_polys<
 
     let z_h_on_coset = ZeroPolyOnCoset::new(common_data.degree_bits, quotient_degree_bits);
 
-    let points_batches = points.par_chunks(BATCH_SIZE);
+    let points_batches = cfg_chunks!(points, BATCH_SIZE);
     let num_batches = ceil_div_usize(points.len(), BATCH_SIZE);
     let quotient_values: Vec<Vec<F>> = points_batches
         .enumerate()
@@ -547,8 +543,7 @@ fn compute_quotient_polys<
         .flatten()
         .collect();
 
-    transpose(&quotient_values)
-        .into_par_iter()
+    cfg_into_iter!(transpose(&quotient_values))
         .map(PolynomialValues::new)
         .map(|values| values.coset_ifft(F::coset_shift()))
         .collect()

@@ -2,9 +2,12 @@ use std::mem::MaybeUninit;
 use std::slice;
 
 use plonky2_util::log2_strict;
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+#[cfg(any(feature = "parallel", test))]
+use rayon::prelude::*;
 
+use crate::{cfg_chunks_exact, cfg_chunks_exact_mut};
+use crate::cfg_iter_mut;
 use crate::hash::hash_types::RichField;
 use crate::hash::merkle_proofs::MerkleProof;
 use crate::plonk::config::GenericHashOut;
@@ -77,10 +80,18 @@ where
         let (right_digest_mem, right_digests_buf) = right_digests_buf.split_first_mut().unwrap();
         // Split `leaves` between both children.
         let (left_leaves, right_leaves) = leaves.split_at(leaves.len() / 2);
+        #[cfg(any(feature = "parallel", test))]
         let (left_digest, right_digest) = rayon::join(
             || fill_subtree::<F, H>(left_digests_buf, left_leaves),
             || fill_subtree::<F, H>(right_digests_buf, right_leaves),
         );
+        
+        #[cfg(not(any(feature = "parallel", test)))]
+        let (left_digest, right_digest) = (
+            fill_subtree::<F, H>(left_digests_buf, left_leaves),
+            fill_subtree::<F, H>(right_digests_buf, right_leaves),
+        );
+        
         left_digest_mem.write(left_digest);
         right_digest_mem.write(right_digest);
         H::two_to_one(left_digest, right_digest)
@@ -100,8 +111,7 @@ fn fill_digests_buf<F: RichField, H: Hasher<F>>(
     // `blah` chunks as opposed to chunks _of_ `blah`.)
     if digests_buf.is_empty() {
         debug_assert_eq!(cap_buf.len(), leaves.len());
-        cap_buf
-            .par_iter_mut()
+        cfg_iter_mut!(cap_buf)
             .zip(leaves)
             .for_each(|(cap_buf, leaf)| {
                 cap_buf.write(H::hash_or_noop(leaf));
@@ -111,8 +121,8 @@ fn fill_digests_buf<F: RichField, H: Hasher<F>>(
 
     let subtree_digests_len = digests_buf.len() >> cap_height;
     let subtree_leaves_len = leaves.len() >> cap_height;
-    let digests_chunks = digests_buf.par_chunks_exact_mut(subtree_digests_len);
-    let leaves_chunks = leaves.par_chunks_exact(subtree_leaves_len);
+    let digests_chunks = cfg_chunks_exact_mut!(digests_buf, subtree_digests_len);
+    let leaves_chunks = cfg_chunks_exact!(leaves, subtree_leaves_len);
     assert_eq!(digests_chunks.len(), cap_buf.len());
     assert_eq!(digests_chunks.len(), leaves_chunks.len());
     digests_chunks.zip(cap_buf).zip(leaves_chunks).for_each(

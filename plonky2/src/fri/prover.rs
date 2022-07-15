@@ -2,6 +2,7 @@ use itertools::Itertools;
 use plonky2_field::extension::{flatten, unflatten, Extendable};
 use plonky2_field::polynomial::{PolynomialCoeffs, PolynomialValues};
 use plonky2_util::reverse_index_bits_in_place;
+#[cfg(any(feature = "parallel", test))]
 use rayon::prelude::*;
 
 use crate::fri::proof::{FriInitialTreeProof, FriProof, FriQueryRound, FriQueryStep};
@@ -11,6 +12,7 @@ use crate::hash::merkle_tree::MerkleTree;
 use crate::iop::challenger::Challenger;
 use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::plonk_common::reduce_with_powers;
+use crate::{cfg_chunks, cfg_into_iter, cfg_chunks_exact};
 #[cfg(any(feature = "log", test))]
 use crate::timed;
 #[cfg(any(feature = "log", test))]
@@ -97,9 +99,7 @@ where
         let arity = 1 << arity_bits;
 
         reverse_index_bits_in_place(&mut values.values);
-        let chunked_values = values
-            .values
-            .par_chunks(arity)
+        let chunked_values = cfg_chunks!(values.values, arity)
             .map(|chunk: &[F::Extension]| flatten(chunk))
             .collect();
         let tree = MerkleTree::<F, C::Hasher>::new(chunked_values, fri_params.config.cap_height);
@@ -110,9 +110,7 @@ where
         let beta = challenger.get_extension_challenge::<D>();
         // P(x) = sum_{i<r} x^i * P_i(x^r) becomes sum_{i<r} beta^i * P_i(x).
         coeffs = PolynomialCoeffs::new(
-            coeffs
-                .coeffs
-                .par_chunks_exact(arity)
+            cfg_chunks_exact!(coeffs.coeffs, arity)
                 .map(|chunk| reduce_with_powers(chunk, beta))
                 .collect::<Vec<_>>(),
         );
@@ -133,24 +131,49 @@ fn fri_proof_of_work<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, c
     current_hash: HashOut<F>,
     config: &FriConfig,
 ) -> F {
-    (0..=F::NEG_ONE.to_canonical_u64())
-        .into_par_iter()
-        .find_any(|&i| {
-            C::InnerHasher::hash_no_pad(
-                &current_hash
-                    .elements
-                    .iter()
-                    .copied()
-                    .chain(Some(F::from_canonical_u64(i)))
-                    .collect_vec(),
-            )
-            .elements[0]
-                .to_canonical_u64()
-                .leading_zeros()
-                >= config.proof_of_work_bits + (64 - F::order().bits()) as u32
-        })
-        .map(F::from_canonical_u64)
-        .expect("Proof of work failed. This is highly unlikely!")
+    #[cfg(any(feature = "log", test))]
+    {
+        (0..=F::NEG_ONE.to_canonical_u64())
+            .into_par_iter()
+            .find_any(|&i| {
+                C::InnerHasher::hash_no_pad(
+                    &current_hash
+                        .elements
+                        .iter()
+                        .copied()
+                        .chain(Some(F::from_canonical_u64(i)))
+                        .collect_vec(),
+                )
+                .elements[0]
+                    .to_canonical_u64()
+                    .leading_zeros()
+                    >= config.proof_of_work_bits + (64 - F::order().bits()) as u32
+            })
+            .map(F::from_canonical_u64)
+            .expect("Proof of work failed. This is highly unlikely!")
+    }
+
+    #[cfg(not(any(feature = "log", test)))]
+    {
+        (0..=F::NEG_ONE.to_canonical_u64())
+            .into_iter()
+            .find(|&i| {
+                C::InnerHasher::hash_no_pad(
+                    &current_hash
+                        .elements
+                        .iter()
+                        .copied()
+                        .chain(Some(F::from_canonical_u64(i)))
+                        .collect_vec(),
+                )
+                .elements[0]
+                    .to_canonical_u64()
+                    .leading_zeros()
+                    >= config.proof_of_work_bits + (64 - F::order().bits()) as u32
+            })
+            .map(F::from_canonical_u64)
+            .expect("Proof of work failed. This is highly unlikely!")
+    }
 }
 
 fn fri_prover_query_rounds<

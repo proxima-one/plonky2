@@ -6,8 +6,6 @@ use plonky2_field::polynomial::{PolynomialCoeffs, PolynomialValues};
 use plonky2_field::types::Field;
 use plonky2_util::{log2_strict, reverse_index_bits_in_place};
 
-use rayon::prelude::*;
-
 use crate::fri::proof::FriProof;
 use crate::fri::prover::fri_proof;
 use crate::fri::structure::{FriBatchInfo, FriInstanceInfo};
@@ -19,10 +17,13 @@ use crate::plonk::config::{GenericConfig, Hasher};
 use crate::util::reducing::ReducingFactor;
 use crate::util::reverse_bits;
 use crate::util::transpose;
+use crate::{cfg_into_iter, cfg_iter};
 #[cfg(any(feature = "log", test))]
 use crate::util::timing::TimingTree;
 #[cfg(any(feature = "log", test))]
 use crate::timed;
+#[cfg(any(feature = "parallel", test))]
+use rayon::prelude::*;
 
 /// Four (~64 bit) field elements gives ~128 bit security.
 pub const SALT_SIZE: usize = 4;
@@ -57,10 +58,10 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         let coeffs = timed!(
             timing,
             "IFFT",
-            values.into_par_iter().map(|v| v.ifft()).collect::<Vec<_>>()
+            cfg_into_iter!(values).map(|v| v.ifft()).collect::<Vec<_>>()
         );
         #[cfg(not(any(feature = "log", test)))]
-        let coeffs = values.into_par_iter().map(|v| v.ifft()).collect::<Vec<_>>();
+        let coeffs = cfg_into_iter!(values).map(|v| v.ifft()).collect::<Vec<_>>();
 
 
         Self::from_coeffs(
@@ -131,8 +132,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         // If blinding, salt with two random elements to each leaf vector.
         let salt_size = if blinding { SALT_SIZE } else { 0 };
 
-        polynomials
-            .par_iter()
+        cfg_iter!(polynomials)
             .map(|p| {
                 assert_eq!(p.len(), degree, "Polynomial degrees inconsistent");
                 p.lde(rate_bits)
@@ -140,8 +140,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
                     .values
             })
             .chain(
-                (0..salt_size)
-                    .into_par_iter()
+                cfg_into_iter!((0..salt_size))
                     .map(|_| F::rand_vec(degree << rate_bits)),
             )
             .collect()
@@ -232,8 +231,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         #[cfg(not(any(feature = "log", test)))]
         let lde_final_values = lde_final_poly.coset_fft(F::coset_shift().into());
 
-        let initial_merkle_trees = oracles
-            .par_iter()
+        let initial_merkle_trees = cfg_iter!(oracles)
             .map(|c| &c.merkle_tree)
             .collect::<Vec<_>>();
 
