@@ -1,7 +1,9 @@
 use plonky2_field::goldilocks_field::GoldilocksField;
 use plonky2_field::types::{Field, PrimeField64};
-use rand::Rng;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+#[cfg(any(feature = "test_utils", test))]
+use rand::Rng;
 
 use crate::hash::poseidon::Poseidon;
 use crate::iop::target::Target;
@@ -37,6 +39,7 @@ impl<F: Field> HashOut<F> {
         Self { elements }
     }
 
+    #[cfg(any(feature = "test_utils", test))]
     pub fn rand_from_rng<R: Rng>(rng: &mut R) -> Self {
         Self {
             elements: [
@@ -114,6 +117,7 @@ pub struct MerkleCapTarget(pub Vec<HashOutTarget>);
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub struct BytesHash<const N: usize>(pub [u8; N]);
 
+#[cfg(any(feature = "test_utils", test))]
 impl<const N: usize> BytesHash<N> {
     pub fn rand_from_rng<R: Rng>(rng: &mut R) -> Self {
         let mut buf = [0; N];
