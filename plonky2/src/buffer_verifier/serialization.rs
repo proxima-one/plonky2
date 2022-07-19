@@ -135,7 +135,7 @@ pub fn serialize_proof<'a, C: GenericConfig<D>, const D: usize>(
 
     // skip pis_hash
     buf.0
-        .set_position((val_start + C::Hasher::HASH_SIZE) as u64);
+        .set_position((val_start + C::InnerHasher::HASH_SIZE) as u64);
 
     // write pis
     buf.0.write_u64::<LittleEndian>(pis.len() as u64)?;
@@ -257,12 +257,12 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
 
     // write sigmas_cap
-    let fri_rate_bits_offset_offset = buf.0.position();
+    let fri_degree_bits_offset_offset = buf.0.position();
     buf.0.set_position(val_offset as u64);
     buf.write_merkle_cap::<C::F, C::Hasher>(&verifier_data.constants_sigmas_cap)?;
-    let fri_hiding_offset = buf.0.position();
-    val_offset = fri_hiding_offset as usize;
-    buf.0.set_position(fri_rate_bits_offset_offset);
+    let fri_degree_bits_offset = buf.0.position();
+    val_offset = fri_degree_bits_offset as usize;
+    buf.0.set_position(fri_degree_bits_offset_offset);
 
     // write fri_degree_bits_offset
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
@@ -296,16 +296,10 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
 
     // write fri_reduction_strategy
-    let fri_instance_offset_offset = buf.0.position();
     buf.0.set_position(val_offset as u64);
     buf.write_fri_reduction_strategy(&common_data.fri_params.config.reduction_strategy)?;
     val_offset = buf.0.position() as usize;
-    buf.0.set_position(fri_instance_offset_offset);
 
-    // write fri_instance_offset
-    buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
-
-    // write len to reflect initially-empty fri instance
     buf.0.set_position(0);
     buf.0.write_u64::<LittleEndian>(val_offset as u64)?;
 
@@ -342,7 +336,7 @@ pub fn serialize_circuit_data<'a, C: GenericConfig<D>, const D: usize>(
     buf.0.write_u8(common_data.fri_params.hiding as u8)?;
 
     // skip over sigmas_cap
-    buf.0.set_position(fri_hiding_offset);
+    buf.0.set_position(fri_degree_bits_offset);
     buf.0
         .write_u64::<LittleEndian>(common_data.fri_params.degree_bits as u64)?;
     buf.0

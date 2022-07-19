@@ -14,12 +14,12 @@ use crate::plonk::proof::ProofChallenges;
 
 pub struct ProofBuf<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> {
     buf: Buffer<R>,
-    offsets: ProofBufOffsets,
+    pub(crate) offsets: ProofBufOffsets,
     _phantom: PhantomData<C>,
 }
 
 #[derive(Debug, Clone, Copy)]
-struct ProofBufOffsets {
+pub(crate) struct ProofBufOffsets {
     len: usize,
     // this offset is set, but the hash is written by the verifier during the first step
     pis_hash_offset: usize,
@@ -139,6 +139,10 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
     pub fn read_pis(&mut self) -> IoResult<Vec<C::F>> {
         self.buf.0.set_position(self.offsets.pis_offset as u64);
         let len = self.buf.0.read_u64::<LittleEndian>()? as usize;
+
+        #[cfg(target_os = "solana")]
+        solana_program::msg!("len: {}", len);
+
         self.buf.read_field_vec::<C::F>(len)
     }
 
@@ -544,7 +548,7 @@ mod tests {
         plonk::{
             circuit_builder::CircuitBuilder,
             circuit_data::{CircuitConfig, CommonCircuitData, VerifierOnlyCircuitData},
-            config::PoseidonGoldilocksConfig,
+            config::{KeccakSpongeSha256GoldilocksConfig, PoseidonGoldilocksConfig},
             proof::ProofWithPublicInputs,
             prover::prove,
         },
@@ -595,6 +599,11 @@ mod tests {
         proof: &ProofWithPublicInputs<C::F, C, D>,
         common: &CommonCircuitData<C::F, C, D>,
     ) -> Result<()> {
+        println!("pis_offset: {}", proof_buf.offsets.pis_offset);
+        let pis = proof_buf.read_pis()?;
+        assert_eq!(pis.len(), proof.public_inputs.len());
+        assert_eq!(pis, proof.public_inputs);
+
         let cap_height = common.fri_params.config.cap_height;
         let wires_cap = proof_buf.read_wires_cap(cap_height)?;
         assert_eq!(wires_cap, proof.proof.wires_cap);
@@ -746,6 +755,21 @@ mod tests {
     fn test_proof_serialization() -> Result<()> {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+
+        let mut proof_bytes = vec![0u8; 200_000];
+        let (proof, _verifier_only, common) =
+            dummy_proof::<F, C, D>(&CircuitConfig::default(), 10)?;
+        serialize_proof_with_pis(proof_bytes.as_mut_slice(), &proof)?;
+        let mut proof_buf = ProofBuf::<C, &[u8], D>::new(proof_bytes.as_slice())?;
+
+        check_deserialization(&mut proof_buf, &proof, &common)
+    }
+
+    #[test]
+    fn test_proof_serialization_with_other_config() -> Result<()> {
+        const D: usize = 2;
+        type C = KeccakSpongeSha256GoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
 
         let mut proof_bytes = vec![0u8; 200_000];

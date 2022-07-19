@@ -113,7 +113,7 @@ where
         fri_degree_bits,
         plonk_zeta,
     );
-
+    
     proof_buf.write_fri_instance(&fri_instance)?;
 
     Ok(())

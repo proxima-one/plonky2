@@ -212,7 +212,7 @@ fn benchmark(config: &CircuitConfig, log2_inner_size: usize) -> Result<()> {
 
     // Add a second layer of recursion to shrink the proof size further
     let outer = recursive_proof::<F, C, C, D>(&middle, config, None)?;
-    let (proof, _, cd) = &outer;
+    let (_, _, cd) = &outer;
     info!(
         "Double recursion proof degree {} = 2^{}",
         cd.degree(),
@@ -235,7 +235,7 @@ fn benchmark(config: &CircuitConfig, log2_inner_size: usize) -> Result<()> {
     let outer = recursive_proof::<F, OuterC, C, D>(&middle, config, None)?;
     let (proof, _, cd) = &outer;
     info!(
-        "Double recursion proof degree {} = 2^{}",
+        "Final recursion proof degree {} = 2^{}",
         cd.degree(),
         cd.degree_bits
     );
