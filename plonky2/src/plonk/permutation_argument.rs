@@ -2,13 +2,12 @@ use std::collections::HashMap;
 
 use plonky2_field::polynomial::PolynomialValues;
 use plonky2_field::types::Field;
+#[cfg(any(feature = "parallel", test))]
+use rayon::prelude::*;
 
 use crate::cfg_iter;
 use crate::iop::target::Target;
 use crate::iop::wire::Wire;
-
-#[cfg(any(feature = "parallel", test))]
-use rayon::prelude::*;
 
 /// Disjoint Set Forest data-structure following https://en.wikipedia.org/wiki/Disjoint-set_data_structure.
 pub struct Forest {

@@ -5,7 +5,7 @@ use plonky2_field::types::Field;
 use super::circuit_buf::CircuitBuf;
 use super::proof_buf::ProofBuf;
 use crate::buffer_verifier::fri_verifier::{
-    fri_verifier_query_round, fri_verify_proof_of_work, get_final_poly_len, get_fri_instance,
+    fri_verifier_query_round, fri_verify_proof_of_work, get_final_poly_len, populate_fri_instance,
     precompute_reduced_evals,
 };
 use crate::buffer_verifier::get_challenges::get_challenges;
@@ -106,7 +106,8 @@ where
     solana_program::msg!("9");
 
     let plonk_zeta = proof_buf.read_challenge_zeta()?;
-    let fri_instance = get_fri_instance(
+    populate_fri_instance::<C, D>(
+        proof_buf,
         num_constants,
         num_wires,
         num_routed_wires,
@@ -115,12 +116,7 @@ where
         quotient_degree_factor,
         fri_degree_bits,
         plonk_zeta,
-    );
-
-    #[cfg(target_os = "solana")]
-    solana_program::msg!("10");
-
-    proof_buf.write_fri_instance(&fri_instance)?;
+    )?;
 
     Ok(())
 }

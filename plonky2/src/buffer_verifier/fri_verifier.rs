@@ -4,6 +4,7 @@ use plonky2_field::interpolation::{barycentric_weights, interpolate};
 use plonky2_field::polynomial::PolynomialCoeffs;
 use plonky2_field::types::Field;
 use plonky2_util::{log2_strict, reverse_index_bits_in_place};
+use std::io::Result as IoResult;
 
 use crate::fri::proof::{FriChallenges, FriInitialTreeProof, FriProof, FriQueryRound};
 use crate::fri::structure::{FriBatchInfo, FriInstanceInfo, FriOpenings, FriPolynomialInfo};
@@ -15,6 +16,7 @@ use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::plonk_common::{PlonkOracle, FRI_ORACLES};
 use crate::util::reducing::ReducingFactor;
 use crate::util::reverse_bits;
+use crate::buffer_verifier::proof_buf::ProofBuf;
 
 /// Computes P'(x^arity) from {P(x*g^i)}_(i=0..arity), where g is a `arity`-th root of unity
 /// and P' is the FRI reduced polynomial.
@@ -228,7 +230,8 @@ impl<F: RichField + Extendable<D>, const D: usize> PrecomputedReducedOpenings<F,
     }
 }
 
-pub fn get_fri_instance<F: RichField + Extendable<D>, const D: usize>(
+pub fn populate_fri_instance<'a, C: GenericConfig<D>, const D: usize>(
+    proof_buf: &mut ProofBuf<C, &'a mut [u8], D>,
     num_constants: usize,
     num_wires: usize,
     num_routed_wires: usize,
@@ -236,24 +239,24 @@ pub fn get_fri_instance<F: RichField + Extendable<D>, const D: usize>(
     num_partial_products: usize,
     quotient_degree_factor: usize,
     degree_bits: usize,
-    plonk_zeta: F::Extension,
-) -> FriInstanceInfo<F, D> {
+    plonk_zeta: C::FE,
+) -> IoResult<()> {
     let num_preprocessed_polys = num_constants + num_routed_wires;
 
     #[cfg(target_os = "solana")]
     solana_program::msg!("{}", num_preprocessed_polys);
 
-    let fri_preprocessed_polys = FriPolynomialInfo::from_range(
+    let fri_preprocessed_polys = FriPolynomialInfo::iter_from_range(
         PlonkOracle::CONSTANTS_SIGMAS.index,
         0..num_preprocessed_polys,
     );
 
-    let fri_wire_polys = FriPolynomialInfo::from_range(PlonkOracle::WIRES.index, 0..num_wires);
+    let fri_wire_polys = FriPolynomialInfo::iter_from_range(PlonkOracle::WIRES.index, 0..num_wires);
 
     let num_zs_partial_products_polys = num_challenges * (1 + num_partial_products);
     #[cfg(target_os = "solana")]
     solana_program::msg!("{}", num_zs_partial_products_polys);
-    let fri_zs_partial_products_polys = FriPolynomialInfo::from_range(
+    let fri_zs_partial_products_polys = FriPolynomialInfo::iter_from_range(
         PlonkOracle::ZS_PARTIAL_PRODUCTS.index,
         0..num_zs_partial_products_polys,
     );
@@ -262,36 +265,24 @@ pub fn get_fri_instance<F: RichField + Extendable<D>, const D: usize>(
     #[cfg(target_os = "solana")]
     solana_program::msg!("{}", num_quotient_polys);
     let fri_quotient_polys =
-        FriPolynomialInfo::from_range(PlonkOracle::QUOTIENT.index, 0..num_quotient_polys);
+        FriPolynomialInfo::iter_from_range(PlonkOracle::QUOTIENT.index, 0..num_quotient_polys);
 
-    let all_fri_polynomials = [
-        fri_preprocessed_polys,
-        fri_wire_polys,
-        fri_zs_partial_products_polys,
-        fri_quotient_polys,
-    ]
-    .concat();
+    let num_fri_polys = num_preprocessed_polys + num_wires + num_zs_partial_products_polys + num_quotient_polys;
+    let fri_batch =  std::iter::once((num_fri_polys, plonk_zeta));
+    let all_fri_polynomials = fri_preprocessed_polys
+        .chain(fri_wire_polys)
+        .chain(fri_zs_partial_products_polys)
+        .chain(fri_quotient_polys);
 
-    let zeta_batch = FriBatchInfo {
-        point: plonk_zeta,
-        polynomials: all_fri_polynomials,
-    };
-
-    let g = F::Extension::primitive_root_of_unity(degree_bits);
+    let g = C::FE::primitive_root_of_unity(degree_bits);
     let zeta_next = g * plonk_zeta;
     let fri_zs_polys =
-        FriPolynomialInfo::from_range(PlonkOracle::ZS_PARTIAL_PRODUCTS.index, 0..num_challenges);
-    let zeta_next_batch = FriBatchInfo {
-        point: zeta_next,
-        polynomials: fri_zs_polys,
-    };
+        FriPolynomialInfo::iter_from_range(PlonkOracle::ZS_PARTIAL_PRODUCTS.index, 0..num_challenges);
 
-    let batches = vec![zeta_batch, zeta_next_batch];
+    let mut batches = fri_batch.chain(std::iter::once((num_challenges, zeta_next)));
+    let mut polys = all_fri_polynomials.chain(fri_zs_polys);
 
-    FriInstanceInfo {
-        oracles: FRI_ORACLES.to_vec(),
-        batches,
-    }
+    proof_buf.write_fri_instance_iter(2, &mut batches, &mut polys)
 }
 
 pub fn get_final_poly_len(fri_reduction_arity_bits: &[usize], fri_degree_bits: usize) -> usize {

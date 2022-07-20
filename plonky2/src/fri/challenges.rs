@@ -2,6 +2,8 @@ use plonky2_field::extension::Extendable;
 use plonky2_field::polynomial::PolynomialCoeffs;
 
 use crate::fri::proof::{FriChallenges, FriChallengesTarget};
+#[cfg(any(feature = "buffer_verifier", test))]
+use crate::fri::structure::FriOpeningsIter;
 use crate::fri::structure::{FriOpenings, FriOpeningsTarget};
 use crate::fri::FriConfig;
 use crate::gadgets::polynomial::PolynomialCoeffsExtTarget;
@@ -11,9 +13,6 @@ use crate::iop::challenger::{Challenger, RecursiveChallenger};
 use crate::iop::target::Target;
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::config::{AlgebraicHasher, GenericConfig, Hasher};
-
-#[cfg(any(feature = "buffer_verifier", test))]
-use crate::fri::structure::FriOpeningsIter;
 
 impl<F: RichField, H: Hasher<F>> Challenger<F, H> {
     pub fn observe_openings<const D: usize>(&mut self, openings: &FriOpenings<F, D>)
@@ -26,8 +25,10 @@ impl<F: RichField, H: Hasher<F>> Challenger<F, H> {
     }
 
     #[cfg(any(feature = "buffer_verifier", test))]
-    pub fn observe_openings_iter<'a, const D: usize>(&mut self, openings: &mut FriOpeningsIter<'a, F, D>)
-    where
+    pub fn observe_openings_iter<'a, const D: usize>(
+        &mut self,
+        openings: &mut FriOpeningsIter<'a, F, D>,
+    ) where
         F: RichField + Extendable<D>,
     {
         for v in openings {

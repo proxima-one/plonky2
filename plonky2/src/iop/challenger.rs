@@ -155,7 +155,7 @@ impl<F: RichField, H: Hasher<F>> Challenger<F, H> {
 
         self.output_buffer.clear();
         self.output_buffer
-            .extend_from_slice(&self.sponge_state[..SPONGE_RATE]);
+            .extend_from_slice(&self.sponge_state[0..SPONGE_RATE]);
 
         self.input_buffer.clear();
     }

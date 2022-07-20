@@ -7,9 +7,10 @@ use plonky2_field::polynomial::PolynomialCoeffs;
 use super::buf::Buffer;
 use super::util::InnerHashForConfig;
 use crate::fri::proof::FriQueryRound;
-use crate::fri::structure::FriInstanceInfo;
+use crate::fri::structure::{FriPolynomialInfo, FriInstanceInfo};
 use crate::hash::merkle_tree::MerkleCap;
 use crate::plonk::config::{GenericConfig, Hasher};
+use crate::plonk::plonk_common::FRI_ORACLES;
 use crate::plonk::proof::ProofChallenges;
 
 pub struct ProofBuf<C: GenericConfig<D>, R: AsRef<[u8]>, const D: usize> {
@@ -346,12 +347,6 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
             .0
             .set_position(self.offsets.fri_instance_offset as u64);
 
-        let num_oracles = self.buf.0.read_u64::<LittleEndian>()? as usize;
-        let mut oracles = Vec::with_capacity(num_oracles);
-        for _ in 0..num_oracles {
-            let oracle = self.buf.read_fri_oracle_info()?;
-            oracles.push(oracle);
-        }
 
         let num_batches = self.buf.0.read_u64::<LittleEndian>()? as usize;
         let mut batches = Vec::with_capacity(num_batches);
@@ -360,7 +355,7 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
             batches.push(batch);
         }
 
-        Ok(FriInstanceInfo { oracles, batches })
+        Ok(FriInstanceInfo { oracles: FRI_ORACLES.to_vec(), batches })
     }
 }
 
@@ -508,13 +503,6 @@ impl<'a, C: GenericConfig<D>, const D: usize> ProofBuf<C, &'a mut [u8], D> {
 
         self.buf
             .0
-            .write_u64::<LittleEndian>(fri_instance.oracles.len() as u64)?;
-        for oracle in &fri_instance.oracles {
-            self.buf.write_fri_oracle_info(oracle)?;
-        }
-
-        self.buf
-            .0
             .write_u64::<LittleEndian>(fri_instance.batches.len() as u64)?;
         for batch in &fri_instance.batches {
             self.buf.write_fri_batch_info(batch)?;
@@ -522,6 +510,25 @@ impl<'a, C: GenericConfig<D>, const D: usize> ProofBuf<C, &'a mut [u8], D> {
 
         self.offsets.len = self.buf.0.position() as usize;
         self.set_offsets()?;
+
+        Ok(())
+    }
+
+    pub(crate) fn write_fri_instance_iter(&mut self, nuum_batches: usize, batches: &mut impl Iterator<Item = (usize, C::FE)>, polys: &mut impl Iterator<Item = FriPolynomialInfo>) -> IoResult<()> {
+        self.buf
+            .0
+            .set_position(self.offsets.fri_instance_offset as u64);
+       
+        self.buf.0.write_u64::<LittleEndian>(nuum_batches as u64)?;
+        for (len, point) in batches {
+            self.buf.write_field_ext::<C::F, D>(point)?;
+            self.buf.0.write_u64::<LittleEndian>(len as u64)?;
+
+            for _ in 0..len {
+                let poly_info = polys.next().expect("incorrect number of polys!");
+                self.buf.write_fri_polynomial_info(&poly_info)?;
+            }
+        }
 
         Ok(())
     }

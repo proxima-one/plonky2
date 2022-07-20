@@ -1,16 +1,18 @@
 use anyhow::ensure;
 use plonky2_field::extension::Extendable;
-use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "parallel", test))]
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 
 use crate::cfg_iter;
 use crate::fri::oracle::PolynomialBatch;
 use crate::fri::proof::{
     CompressedFriProof, FriChallenges, FriChallengesTarget, FriProof, FriProofTarget,
 };
+#[cfg(any(feature = "buffer_verifier", test))]
+use crate::fri::structure::FriOpeningsIter;
 use crate::fri::structure::{
-    FriOpeningBatch, FriOpeningBatchTarget, FriOpenings, FriOpeningsTarget 
+    FriOpeningBatch, FriOpeningBatchTarget, FriOpenings, FriOpeningsTarget,
 };
 use crate::fri::FriParams;
 use crate::hash::hash_types::{MerkleCapTarget, RichField};
@@ -21,9 +23,6 @@ use crate::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData};
 use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::verifier::verify_with_challenges;
 use crate::util::serialization::Buffer;
-
-#[cfg(any(feature = "buffer_verifier", test))]
-use crate::fri::structure::FriOpeningsIter;
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 #[serde(bound = "")]
@@ -347,14 +346,12 @@ impl<F: RichField + Extendable<D>, const D: usize> OpeningSet<F, D> {
 
     #[cfg(any(feature = "buffer_verifier", test))]
     pub(crate) fn iter_fri_openings<'a>(&'a self) -> FriOpeningsIter<'a, F, D> {
-
         FriOpeningsIter {
             openings: self,
             idx: 0,
         }
     }
 }
-
 
 /// The purported values of each polynomial at a single point.
 #[derive(Clone, Debug)]

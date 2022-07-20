@@ -20,7 +20,6 @@ use crate::iop::target::{BoolTarget, Target};
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::config::{AlgebraicHasher, GenericConfig};
 use crate::util::reducing::ReducingFactorTarget;
-
 #[cfg(any(feature = "log", test))]
 use crate::with_context;
 
@@ -171,7 +170,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         let precomputed_reduced_evals = PrecomputedReducedOpeningsTarget::from_os_and_alpha(
             openings,
             challenges.fri_alpha,
-            self
+            self,
         );
 
         for (i, round_proof) in proof.query_round_proofs.iter().enumerate() {
@@ -250,7 +249,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
                 x_index_bits,
                 cap_index,
                 cap,
-                merkle_proof
+                merkle_proof,
             );
         }
     }
@@ -324,7 +323,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
 
         let cap_index =
             self.le_sum(x_index_bits[x_index_bits.len() - params.config.cap_height..].iter());
-        
+
         #[cfg(any(feature = "log", test))]
         with_context!(
             self,
@@ -341,7 +340,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             &x_index_bits,
             &round_proof.initial_trees_proof,
             initial_merkle_caps,
-            cap_index
+            cap_index,
         );
 
         // `subgroup_x` is `subgroup[x_index]`, i.e., the actual field element in the domain.

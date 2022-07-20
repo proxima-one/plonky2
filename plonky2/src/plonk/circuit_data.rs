@@ -129,11 +129,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
 
         #[cfg(not(any(feature = "log", test)))]
         {
-            prove(
-                &self.prover_only,
-                &self.common,
-                inputs,
-            )
+            prove(&self.prover_only, &self.common, inputs)
         }
     }
 
@@ -190,11 +186,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
 
         #[cfg(not(any(feature = "log", test)))]
         {
-            prove(
-                &self.prover_only,
-                &self.common,
-                inputs,
-            )
+            prove(&self.prover_only, &self.common, inputs)
         }
     }
 }

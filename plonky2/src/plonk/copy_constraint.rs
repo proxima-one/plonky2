@@ -20,9 +20,7 @@ impl From<(Target, Target)> for CopyConstraint {
 
         #[cfg(not(any(feature = "log", test)))]
         {
-            Self {
-                pair,
-            }
+            Self { pair }
         }
     }
 }

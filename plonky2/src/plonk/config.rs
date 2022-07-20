@@ -128,4 +128,3 @@ impl GenericConfig<2> for KeccakSpongeSha256GoldilocksConfig {
     type Hasher = KeccakSpongeSha256Hasher<25>;
     type InnerHasher = PoseidonHash;
 }
- 

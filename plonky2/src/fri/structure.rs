@@ -1,6 +1,7 @@
 //! Information about the structure of a FRI instance, in terms of the oracles and polynomials
 //! involved, and the points they are opened at.
 
+use std::iter::Map;
 use std::ops::Range;
 
 use crate::field::extension::Extendable;
@@ -62,6 +63,17 @@ impl FriPolynomialInfo {
                 polynomial_index,
             })
             .collect()
+    }
+
+    #[cfg(any(feature = "buffer_verifier", test))]
+    pub fn iter_from_range(
+        oracle_index: usize,
+        polynomial_indices: Range<usize>,
+    ) -> impl Iterator<Item = FriPolynomialInfo> {
+        polynomial_indices.map(move |polynomial_index| FriPolynomialInfo {
+            oracle_index,
+            polynomial_index,
+        })
     }
 }
 
@@ -138,7 +150,7 @@ impl<'a, F: RichField + Extendable<D>, const D: usize> Iterator for FriOpeningsI
             self.idx += 1;
             return Some(self.openings.plonk_zs_next[idx])
         }
-        
+
         None
     }
 }

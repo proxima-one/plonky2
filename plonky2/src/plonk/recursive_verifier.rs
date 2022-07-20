@@ -68,7 +68,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
 
         let zeta_pow_deg =
             self.exp_power_of_2_extension(challenges.plonk_zeta, inner_common_data.degree_bits);
-        
+
         #[cfg(any(feature = "log", test))]
         let vanishing_polys_zeta = with_context!(
             self,
@@ -102,7 +102,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             &challenges.plonk_betas,
             &challenges.plonk_gammas,
             &challenges.plonk_alphas,
-        ); 
+        );
 
         #[cfg(any(feature = "log", test))]
         with_context!(self, "check vanishing and quotient polynomials.", {
@@ -132,7 +132,6 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
                 self.connect_extension(vanishing_polys_zeta[i], computed_vanishing_poly);
             }
         }
-
 
         let merkle_caps = &[
             inner_verifier_data.constants_sigmas_cap.clone(),
