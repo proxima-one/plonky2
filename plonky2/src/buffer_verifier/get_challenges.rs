@@ -64,7 +64,6 @@ pub(crate) fn get_challenges<
     challenger.observe_cap(quotient_polys_cap);
     let plonk_zeta = challenger.get_extension_challenge::<D>();
 
-    #[cfg(target_os = "solana")]
     challenger.observe_openings_iter(&mut openings.iter_fri_openings());
 
     #[cfg(target_os = "solana")]

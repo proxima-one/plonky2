@@ -99,36 +99,43 @@ impl<'a, F: RichField + Extendable<D>, const D: usize> Iterator for FriOpeningsI
         let mut idx = self.idx;
 
         if self.idx < self.openings.constants.len() {
-            return Some(self.openings.constants[self.idx])
+            self.idx += 1;
+            return Some(self.openings.constants[idx])
         }
         idx -= self.openings.constants.len();
 
         if idx < self.openings.plonk_sigmas.len() {
+            self.idx += 1;
             return Some(self.openings.plonk_sigmas[idx])
         }
         idx -= self.openings.plonk_sigmas.len();
 
         if idx < self.openings.wires.len() {
+            self.idx += 1;
             return Some(self.openings.wires[idx])
         }
         idx -= self.openings.wires.len();
 
         if idx < self.openings.plonk_zs.len() {
+            self.idx += 1;
             return Some(self.openings.plonk_zs[idx])
         }
         idx -= self.openings.plonk_zs.len();
 
         if idx < self.openings.partial_products.len() {
+            self.idx += 1;
             return Some(self.openings.partial_products[idx])
         }
         idx -= self.openings.partial_products.len();
 
         if idx < self.openings.quotient_polys.len() {
+            self.idx += 1;
             return Some(self.openings.quotient_polys[idx])
         }
         idx -= self.openings.quotient_polys.len();
 
         if idx < self.openings.plonk_zs_next.len() {
+            self.idx += 1;
             return Some(self.openings.plonk_zs_next[idx])
         }
         
