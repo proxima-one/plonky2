@@ -21,6 +21,9 @@ pub struct Challenger<F: RichField, H: Hasher<F>> {
     _phantom: PhantomData<H>,
 }
 
+#[cfg(target_os = "solana")]
+pub(crate) const CHALLENGER_INPUT_BUF_MAX: usize = 128;
+
 /// Observes prover messages, and generates verifier challenges based on the transcript.
 ///
 /// The implementation is roughly based on a duplex sponge with a Rescue permutation. Note that in
@@ -42,6 +45,14 @@ impl<F: RichField, H: Hasher<F>> Challenger<F, H> {
     pub fn observe_element(&mut self, element: F) {
         // Any buffered outputs are now invalid, since they wouldn't reflect this input.
         self.output_buffer.clear();
+
+
+        #[cfg(target_os = "solana")]
+        {
+            if self.input_buffer.len() >= CHALLENGER_INPUT_BUF_MAX {
+                self.absorb_buffered_inputs();
+            }
+        }
 
         self.input_buffer.push(element);
     }

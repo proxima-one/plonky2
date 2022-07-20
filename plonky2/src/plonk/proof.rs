@@ -10,7 +10,7 @@ use crate::fri::proof::{
     CompressedFriProof, FriChallenges, FriChallengesTarget, FriProof, FriProofTarget,
 };
 use crate::fri::structure::{
-    FriOpeningBatch, FriOpeningBatchTarget, FriOpenings, FriOpeningsTarget,
+    FriOpeningBatch, FriOpeningBatchTarget, FriOpenings, FriOpeningsTarget 
 };
 use crate::fri::FriParams;
 use crate::hash::hash_types::{MerkleCapTarget, RichField};
@@ -21,6 +21,9 @@ use crate::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData};
 use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::verifier::verify_with_challenges;
 use crate::util::serialization::Buffer;
+
+#[cfg(any(feature = "buffer_verifier", test))]
+use crate::fri::structure::FriOpeningsIter;
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 #[serde(bound = "")]
@@ -341,7 +344,17 @@ impl<F: RichField + Extendable<D>, const D: usize> OpeningSet<F, D> {
             batches: vec![zeta_batch, zeta_next_batch],
         }
     }
+
+    #[cfg(any(feature = "buffer_verifier", test))]
+    pub(crate) fn iter_fri_openings<'a>(&'a self) -> FriOpeningsIter<'a, F, D> {
+
+        FriOpeningsIter {
+            openings: self,
+            idx: 0,
+        }
+    }
 }
+
 
 /// The purported values of each polynomial at a single point.
 #[derive(Clone, Debug)]

@@ -12,6 +12,9 @@ use crate::iop::target::Target;
 use crate::plonk::circuit_builder::CircuitBuilder;
 use crate::plonk::config::{AlgebraicHasher, GenericConfig, Hasher};
 
+#[cfg(any(feature = "buffer_verifier", test))]
+use crate::fri::structure::FriOpeningsIter;
+
 impl<F: RichField, H: Hasher<F>> Challenger<F, H> {
     pub fn observe_openings<const D: usize>(&mut self, openings: &FriOpenings<F, D>)
     where
@@ -19,6 +22,16 @@ impl<F: RichField, H: Hasher<F>> Challenger<F, H> {
     {
         for v in &openings.batches {
             self.observe_extension_elements(&v.values);
+        }
+    }
+
+    #[cfg(any(feature = "buffer_verifier", test))]
+    pub fn observe_openings_iter<'a, const D: usize>(&mut self, openings: &mut FriOpeningsIter<'a, F, D>)
+    where
+        F: RichField + Extendable<D>,
+    {
+        for v in openings {
+            self.observe_extension_element(&v)
         }
     }
 

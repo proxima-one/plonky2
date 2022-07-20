@@ -6,6 +6,7 @@ use std::ops::Range;
 use crate::field::extension::Extendable;
 use crate::hash::hash_types::RichField;
 use crate::iop::ext_target::ExtensionTarget;
+use crate::plonk::proof::OpeningSet;
 
 /// Describes an instance of a FRI-based batch opening.
 #[derive(Debug)]
@@ -82,4 +83,55 @@ pub struct FriOpeningsTarget<const D: usize> {
 /// Opened values of each polynomial that's opened at a particular point.
 pub struct FriOpeningBatchTarget<const D: usize> {
     pub values: Vec<ExtensionTarget<D>>,
+}
+
+#[cfg(any(feature = "buffer_verifier", test))]
+pub struct FriOpeningsIter<'a, F: RichField + Extendable<D>, const D: usize> {
+    pub(crate) openings: &'a OpeningSet<F, D>,
+    pub(crate) idx: usize,
+}
+
+#[cfg(any(feature = "buffer_verifier", test))]
+impl<'a, F: RichField + Extendable<D>, const D: usize> Iterator for FriOpeningsIter<'a, F, D> {
+    type Item = F::Extension;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut idx = self.idx;
+
+        if self.idx < self.openings.constants.len() {
+            return Some(self.openings.constants[self.idx])
+        }
+        idx -= self.openings.constants.len();
+
+        if idx < self.openings.plonk_sigmas.len() {
+            return Some(self.openings.plonk_sigmas[idx])
+        }
+        idx -= self.openings.plonk_sigmas.len();
+
+        if idx < self.openings.wires.len() {
+            return Some(self.openings.wires[idx])
+        }
+        idx -= self.openings.wires.len();
+
+        if idx < self.openings.plonk_zs.len() {
+            return Some(self.openings.plonk_zs[idx])
+        }
+        idx -= self.openings.plonk_zs.len();
+
+        if idx < self.openings.partial_products.len() {
+            return Some(self.openings.partial_products[idx])
+        }
+        idx -= self.openings.partial_products.len();
+
+        if idx < self.openings.quotient_polys.len() {
+            return Some(self.openings.quotient_polys[idx])
+        }
+        idx -= self.openings.quotient_polys.len();
+
+        if idx < self.openings.plonk_zs_next.len() {
+            return Some(self.openings.plonk_zs_next[idx])
+        }
+        
+        None
+    }
 }
