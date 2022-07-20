@@ -46,7 +46,6 @@ impl<F: RichField, H: Hasher<F>> Challenger<F, H> {
         // Any buffered outputs are now invalid, since they wouldn't reflect this input.
         self.output_buffer.clear();
 
-
         #[cfg(target_os = "solana")]
         {
             if self.input_buffer.len() >= CHALLENGER_INPUT_BUF_MAX {
@@ -154,7 +153,9 @@ impl<F: RichField, H: Hasher<F>> Challenger<F, H> {
             self.sponge_state = H::Permutation::permute(self.sponge_state);
         }
 
-        self.output_buffer = self.sponge_state[0..SPONGE_RATE].to_vec();
+        self.output_buffer.clear();
+        self.output_buffer
+            .extend_from_slice(&self.sponge_state[..SPONGE_RATE]);
 
         self.input_buffer.clear();
     }
