@@ -139,10 +139,6 @@ impl<R: AsRef<[u8]>, C: GenericConfig<D>, const D: usize> ProofBuf<C, R, D> {
     pub fn read_pis(&mut self) -> IoResult<Vec<C::F>> {
         self.buf.0.set_position(self.offsets.pis_offset as u64);
         let len = self.buf.0.read_u64::<LittleEndian>()? as usize;
-
-        #[cfg(target_os = "solana")]
-        solana_program::msg!("len: {}", len);
-
         self.buf.read_field_vec::<C::F>(len)
     }
 

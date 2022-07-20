@@ -46,17 +46,32 @@ pub(crate) fn get_challenges<
     challenger.observe_hash::<C::InnerHasher>(public_inputs_hash);
 
     challenger.observe_cap(wires_cap);
+
     let plonk_betas = challenger.get_n_challenges(num_challenges);
+
     let plonk_gammas = challenger.get_n_challenges(num_challenges);
 
     challenger.observe_cap(plonk_zs_partial_products_cap);
+
     let plonk_alphas = challenger.get_n_challenges(num_challenges);
+
+    #[cfg(target_os = "solana")]
+    solana_program::msg!("yo");
+
+    #[cfg(target_os = "solana")]
+    solana_program::log::sol_log_compute_units();
+
 
     challenger.observe_cap(quotient_polys_cap);
     let plonk_zeta = challenger.get_extension_challenge::<D>();
 
+    
     challenger.observe_openings(&openings.to_fri_openings());
+    
+    #[cfg(target_os = "solana")]
+    solana_program::msg!("yo");
 
+    
     Ok(ProofChallenges {
         plonk_betas,
         plonk_gammas,

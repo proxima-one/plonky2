@@ -77,7 +77,7 @@ where
     let degree_bits = circuit_buf.read_degree_bits()?;
     let fri_num_query_rounds = circuit_buf.read_fri_num_query_rounds()?;
     let fri_rate_bits = circuit_buf.read_fri_rate_bits()?;
-
+    
     let challenges = get_challenges::<C::F, C, D>(
         pis_hash,
         &wires_cap,
@@ -94,13 +94,22 @@ where
         fri_rate_bits,
     )?;
 
+    #[cfg(target_os = "solana")]
+    solana_program::msg!("8");
+
     proof_buf.write_challenges(&challenges)?;
     let fri_pow_response = proof_buf.read_fri_pow_response()?;
     let fri_pow_bits = circuit_buf.read_fri_proof_of_work_bits()?;
     fri_verify_proof_of_work(fri_pow_response, fri_pow_bits)?;
 
+    #[cfg(target_os = "solana")]
+    solana_program::msg!("9");
+
     let fri_alpha = proof_buf.read_fri_alpha()?;
     let fri_openings = openings.to_fri_openings();
+
+    #[cfg(target_os = "solana")]
+    solana_program::msg!("10");
 
     let plonk_zeta = proof_buf.read_challenge_zeta()?;
     let fri_instance = get_fri_instance(
@@ -113,7 +122,10 @@ where
         fri_degree_bits,
         plonk_zeta,
     );
-    
+
+    #[cfg(target_os = "solana")]
+    solana_program::msg!("11");
+
     proof_buf.write_fri_instance(&fri_instance)?;
 
     Ok(())
