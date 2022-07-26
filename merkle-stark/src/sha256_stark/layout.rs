@@ -1,16 +1,21 @@
 pub const NUM_PIS: usize = 0;
 pub const NUM_COLS: usize = LAST_COL + 1;
+pub const NUM_STEPS_PER_HASH: usize = 80;
 
 pub const HASH_IDX: usize = 0;
 pub const CHUNK_IDX: usize = HASH_IDX + 1;
-pub const PC: usize = CHUNK_IDX + 1;
 
-pub const PHASE_BITS_START: usize = PC + 1;
+pub const PHASE_BITS_START: usize = CHUNK_IDX + 1;
 pub fn phase_bit(i: usize) -> usize {
     PHASE_BITS_START + i
 }
 
-pub const LEFT_INPUT_COL: usize = PHASE_BITS_START + 3;
+pub const STEP_BITS_START: usize = PHASE_BITS_START + 3;
+pub fn step_bit(i: usize) -> usize {
+    STEP_BITS_START + i
+}
+
+pub const LEFT_INPUT_COL: usize = STEP_BITS_START + NUM_STEPS_PER_HASH;
 pub const RIGHT_INPUT_COL: usize = LEFT_INPUT_COL + 1;
 
 pub const NUM_WIS: usize = 16;
@@ -128,25 +133,24 @@ pub const BIG_S1_FIELD: usize = BIG_SO_FIELD + 1;
 pub const CH_FIELD: usize = BIG_S1_FIELD + 1;
 pub const MAJ_FIELD: usize = CH_FIELD + 1;
 
-pub const TEMP1_U32: usize = MAJ_FIELD + 1;
-pub const TEMP1_FIELD: usize = TEMP1_U32 + 1;
-pub const TEMP1_QUOTIENT: usize = TEMP1_FIELD + 1;
+pub const A_NEXT_FIELD: usize = MAJ_FIELD + 1;
+pub const E_NEXT_FIELD: usize = A_NEXT_FIELD + 1;
 
-pub const TEMP2_U32: usize = TEMP1_QUOTIENT + 1;
-pub const TEMP2_FIELD: usize = TEMP2_U32 + 1;
-pub const TEMP2_QUOTIENT: usize = TEMP2_FIELD + 1;
+pub const A_NEXT_QUOTIENT: usize = E_NEXT_FIELD + 1;
+pub const E_NEXT_QUOTIENT: usize = A_NEXT_QUOTIENT + 1;
 
-pub const A_FIELD: usize = TEMP2_FIELD + 1;
-pub const B_FIELD: usize = A_FIELD + 1;
-pub const C_FIELD: usize = B_FIELD + 1;
-pub const D_FIELD: usize = C_FIELD + 1;
-pub const E_FIELD: usize = D_FIELD + 1;
-pub const F_FIELD: usize = E_FIELD + 1;
-pub const G_FIELD: usize = F_FIELD + 1;
-pub const H_FIELD: usize = G_FIELD + 1;
-
-pub const HIS_START: usize = H_FIELD + 1;
+pub const HIS_START: usize = E_NEXT_QUOTIENT + 1;
 pub fn h_i(i: usize) -> usize {
+    HIS_START + i
+}
+
+pub const HIS_FIELD_START: usize = HIS_START + 8;
+pub fn h_i_field(i: usize) -> usize {
+    HIS_START + i
+}
+
+pub const HIS_QUOTIENT_START: usize = HIS_FIELD_START + 8;
+pub fn h_i_quotient(i: usize) -> usize {
     HIS_START + i
 }
 

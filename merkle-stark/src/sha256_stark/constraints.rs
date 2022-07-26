@@ -8,8 +8,8 @@ use crate::constraint_consumer::ConstraintConsumer;
 // TODO constrain cols that shouldn't change during each phase
 
 // 4 "INSNS" (stages) of the STARK
-// 0. (8 rows) load input from input colums into wis, two 32-bit limbs at a time from LEFT_INPUT_COL and RIGHT_INPUT_COL respectively and shift to right.
-// 1. (48 rows) shift wis left by 1, append / compute next WI, perform 1 round of message schedule and round fn, load a-h as initial his during first row
+// 0. (8 rows) load input from input colums into wis, two 32-bit limbs at a time from LEFT_INPUT_COL and RIGHT_INPUT_COL respectively and shift to right. Set his to IV.
+// 1. (48 rows) shift wis left by 1, append / compute next WI, perform 1 round of message schedule and round fn, load a-h as his during first row
 // 2. (16 rows) shift wis left by 1, perform 1 round of round fn. on last row, update his
 // 3. (8 rows) shift his left by 1, append original hi. Copy leftmost hi to output col and add hash_idx * 1 << 32 to it to signify which has it's for
 // Output col should be zero every row except for the last 8 of a hash.
@@ -256,7 +256,7 @@ fn eval_shift_wis<F, P>(
     }
 }
 
-fn eval_round_fn<F, P>(curr_row: &[P; NUM_COLS], yield_constr: &mut ConstraintConsumer<P>)
+fn eval_round_fn<F, P>(curr_row: &[P; NUM_COLS], next_row: &[P; NUM_COLS], yield_constr: &mut ConstraintConsumer<P>)
 where
     F: RichField,
     P: PackedField<Scalar = F>,
@@ -294,20 +294,93 @@ where
         yield_constr.constraint(in_phase_1_or_2 * (curr_row[ch_bit(bit)] - computed_bit));
     }
 
+    // S0 := (a >>> 2) xor (a >>> 13) xor (a >>> 22)
+    for bit in 0..32 {
+        let computed_bit = xor_gen(curr_row[a_bit((bit + 32 - 2) % 32)], curr_row[a_bit((bit + 32 - 13) % 32)]);
+        // degree 3
+        yield_constr.constraint(in_phase_1_or_2 * (curr_row[xor_tmp_i_bit(3, bit)] - computed_bit));
+      
+        let computed_bit = xor_gen(curr_row[xor_tmp_i_bit(3, bit)], curr_row[a_bit((bit + 10) % 32)]);
+        // degree 3
+        yield_constr.constraint(in_phase_1_or_2 * (curr_row[big_s0_bit(bit)] - computed_bit));
+    }
+
+    // maj := (a and b) xor (a and c) xor (b and c)
+    for bit in 0..32 {
+        // degree 3
+        yield_constr.constraint(in_phase_1_or_2 * (curr_row[a_and_b_bit(bit)] - curr_row[a_bit(bit)] * curr_row[b_bit(bit)]));
+
+        // degree 3
+        yield_constr.constraint(in_phase_1_or_2 * (curr_row[a_and_c_bit(bit)] - curr_row[a_bit(bit)] * curr_row[c_bit(bit)]));
+
+        // degree 3
+        yield_constr.constraint(in_phase_1_or_2 * (curr_row[b_and_c_bit(bit)] - curr_row[b_bit(bit)] * curr_row[c_bit(bit)]));
+
+        let computed_bit = xor_gen(curr_row[a_and_b_bit(bit)], curr_row[a_and_c_bit(bit)]);
+        // degree 3
+        yield_constr.constraint(in_phase_1_or_2 * (curr_row[xor_tmp_i_bit(4, bit)] - computed_bit));
+
+        let computed_bit = xor_gen(curr_row[xor_tmp_i_bit(4, bit)], curr_row[b_and_c_bit(bit)]);
+        // degree 3
+        yield_constr.constraint(in_phase_1_or_2 * (curr_row[maj_bit(bit)] - computed_bit));
+    }
+
     // temp1 := h + S1 + ch + k[i] + w[i]
+    // e := d + temp1
+	let h_field = bit_decomp_32!(curr_row, h_bit, F, P);
+	let big_s1_field = bit_decomp_32!(curr_row, big_s1_bit, F, P);
+	let ch_field = bit_decomp_32!(curr_row, ch_bit, F, P);
+    let temp1_minus_ki = h_field + big_s1_field + ch_field;
+
+    let d_field = bit_decomp_32!(curr_row, d_bit, F, P);
+    let e_u32_next = bit_decomp_32!(next_row, e_bit, F, P);
+    for step in 8..72 {
+        // degree 2
+        yield_constr.constraint(curr_row[step_bit(step)] * (curr_row[E_NEXT_FIELD] - (d_field + temp1_minus_ki + F::from_canonical_u32(KIS[step - 8]))));
+    }
+    // degree 3
+    yield_constr.constraint_transition(in_phase_1_or_2 * (curr_row[E_NEXT_FIELD] - e_u32_next * curr_row[E_NEXT_QUOTIENT]));
+
+    // temp2 := S0 + maj
+    // a := temp1 + temp2
+    let s0_field = bit_decomp_32!(curr_row, big_s0_bit, F, P);
+    let maj_field = bit_decomp_32!(curr_row, maj_bit, F, P);
+    let temp2 = s0_field + maj_field;
+    let a_u32_next = bit_decomp_32!(next_row, a_bit, F, P);
+    for step in 8..72 {
+        // degree 2
+        yield_constr.constraint(curr_row[step_bit(step)] * (curr_row[A_NEXT_FIELD] - (temp2 + temp1_minus_ki + F::from_canonical_u32(KIS[step - 8]))));
+    }
+    // degree 3
+    yield_constr.constraint(in_phase_1_or_2 * (curr_row[A_NEXT_FIELD] - a_u32_next * curr_row[A_NEXT_QUOTIENT]));
+
+
+    // h := g
+    // g := f
+    // f := e
+    // d := c
+    // c := b
+    // b := a
+    for bit in 0..32 {
+        yield_constr.constraint_transition(in_phase_1_or_2 * (next_row[h_bit(bit)] - curr_row[g_bit(bit)]));
+        yield_constr.constraint_transition(in_phase_1_or_2 * (next_row[g_bit(bit)] - curr_row[f_bit(bit)]));
+        yield_constr.constraint_transition(in_phase_1_or_2 * (next_row[f_bit(bit)] - curr_row[e_bit(bit)]));
+        yield_constr.constraint_transition(in_phase_1_or_2 * (next_row[d_bit(bit)] - curr_row[c_bit(bit)]));
+        yield_constr.constraint_transition(in_phase_1_or_2 * (next_row[c_bit(bit)] - curr_row[b_bit(bit)]));
+        yield_constr.constraint_transition(in_phase_1_or_2 * (next_row[b_bit(bit)] - curr_row[a_bit(bit)]));
+    }
 }
 
-fn eval_first_row<F, P>(
+fn eval_first_row_of_hash<F, P>(
     curr_row: &[P; NUM_COLS],
     yield_constr: &mut ConstraintConsumer<P>,
-    hash_idx: u64,
 ) where
     F: RichField,
     P: PackedField<Scalar = F>,
 {
     // set his to initial values
     for i in 0..8 {
-        yield_constr.constraint_first_row(curr_row[h_i(i)] - F::from_canonical_u32(HIS_IV[i]));
+        yield_constr.constraint(curr_row[step_bit(0)] * (curr_row[h_i(i)] - F::from_canonical_u32(HIS_IV[i])));
     }
 }
 
@@ -315,7 +388,6 @@ fn eval_phase_0<F, P>(
     curr_row: &[P; NUM_COLS],
     next_row: &[P; NUM_COLS],
     yield_constr: &mut ConstraintConsumer<P>,
-    hash_idx: u64,
 ) where
     F: RichField,
     P: PackedField<Scalar = F>,
@@ -324,11 +396,11 @@ fn eval_phase_0<F, P>(
     let phase_selector =
         -curr_row[phase_bit(0)] - curr_row[phase_bit(1)] - curr_row[phase_bit(2)] + F::ONE;
 
-    // do a bit decomposition of the left and right inputs against wis[PC*2] and wis[PC*2 + 1] also checking the hash idx
+    // do a bit decomposition of the left and right inputs, also checking hash idx
     let decomp_left = bit_decomp_32_at_idx!(curr_row, NUM_WIS - 2, wi_bit, F, P)
-        + F::from_canonical_u64(hash_idx << 32);
+        + curr_row[HASH_IDX] *  F::from_canonical_u64(1 << 32);
     let decomp_right = bit_decomp_32_at_idx!(curr_row, NUM_WIS - 1, wi_bit, F, P)
-        + F::from_canonical_u64(hash_idx << 32);
+        + curr_row[HASH_IDX] * F::from_canonical_u64(1 << 32);
 
     // degree 2
     yield_constr.constraint(phase_selector * (decomp_left - curr_row[LEFT_INPUT_COL]));
@@ -429,19 +501,22 @@ fn eval_phase_transitions<F, P>(
     let transition_0_selector = phase_0_selector * (-phase_0_selector_next + F::ONE);
     let transition_1_selector = phase_1_selector * (-phase_1_selector_next + F::ONE);
     let transition_2_selector = phase_2_selector * (-phase_2_selector_next + F::ONE);
+    let transition_3_selector = phase_3_selector * (-phase_3_selector_next + F::ONE);
 
     let not_in_transition =
-        -transition_0_selector - transition_1_selector - transition_2_selector + F::ONE;
+        -transition_0_selector - transition_1_selector + F::ONE;
 
-    // inc pc when not transitioning to next phase
-    // degre 3
-    yield_constr.constraint_transition(not_in_transition * (next_row[PC] - curr_row[PC] - F::ONE));
+    // set initial step bits to a 1 followed by NUM_STEPS_PER_HASH-1 0s
+    yield_constr.constraint_first_row(curr_row[step_bit(0)] - F::ONE);
+    for step in 1..NUM_STEPS_PER_HASH {
+        yield_constr.constraint_first_row(curr_row[step_bit(step)]);
+    }
 
-    // set pc to 0 when going to next phase
-    // degree 3
-    yield_constr.constraint_transition(transition_0_selector * next_row[PC]);
-    yield_constr.constraint_transition(transition_1_selector * next_row[PC]);
-    yield_constr.constraint_transition(transition_2_selector * next_row[PC]);
+    // inc step bits
+    for bit in 0..NUM_STEPS_PER_HASH {
+        // degree 3
+        yield_constr.constraint_transition(not_in_transition * (next_row[step_bit((bit + 1) % NUM_STEPS_PER_HASH)] - curr_row[step_bit(bit)]));
+    }
 
     // ensure phase stays the same when not transitioning to next phase
     for bit in 0..4 {
@@ -456,10 +531,14 @@ fn eval_phase_transitions<F, P>(
     yield_constr.constraint_transition(-(transition_0_selector * phase_1_selector_next) + F::ONE);
     yield_constr.constraint_transition(-(transition_1_selector * phase_2_selector_next) + F::ONE);
     yield_constr.constraint_transition(-(transition_2_selector * phase_3_selector_next) + F::ONE);
+    yield_constr.constraint_transition(-(transition_3_selector * phase_0_selector_next) + F::ONE);
 
     // ensure phase transitions happen after correct number of rows
     yield_constr
-        .constraint_transition(transition_0_selector * (curr_row[PC] - F::from_canonical_u16(8)));
+        .constraint_transition(transition_0_selector * next_row[step_bit(8)]);
+    yield_constr.constraint_transition(transition_1_selector * next_row[step_bit(56)]);
+    yield_constr.constraint_transition(transition_2_selector * next_row[step_bit(72)]);
+    yield_constr.constraint_transition(transition_3_selector * next_row[step_bit(0)]);
 }
 
 fn eval_bits_are_bits<F, P>(
@@ -471,8 +550,13 @@ fn eval_bits_are_bits<F, P>(
     P: PackedField<Scalar = F>,
 {
     // phase_bits
-    for i in 0..NUM_PHASES {
-        yield_constr.constraint((-curr_row[phase_bit(i)] + F::ONE) * curr_row[phase_bit(i)]);
+    for bit in 0..NUM_PHASES {
+        yield_constr.constraint((-curr_row[phase_bit(bit)] + F::ONE) * curr_row[phase_bit(bit)]);
+    }
+
+    // step bits
+    for bit in 0..NUM_STEPS_PER_HASH {
+        yield_constr.constraint((-curr_row[phase_bit(bit)] + F::ONE) * curr_row[phase_bit(bit)]);
     }
 
     // wis
