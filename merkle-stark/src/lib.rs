@@ -17,8 +17,8 @@ pub mod vanishing_poly;
 pub mod vars;
 pub mod verifier;
 
-pub mod tree_stark;
 pub mod sha256_stark;
+pub mod tree_stark;
 
 #[cfg(test)]
 pub mod fibonacci_stark;
