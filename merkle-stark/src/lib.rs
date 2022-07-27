@@ -2,6 +2,8 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::type_complexity)]
 #![feature(generic_const_exprs)]
+#![feature(array_windows)]
+#![feature(exclusive_range_pattern)]
 
 pub mod config;
 pub mod constraint_consumer;

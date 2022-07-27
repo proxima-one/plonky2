@@ -144,16 +144,16 @@ pub fn h_i(i: usize) -> usize {
     HIS_START + i
 }
 
-pub const HIS_FIELD_START: usize = HIS_START + 8;
-pub fn h_i_field(i: usize) -> usize {
-    HIS_START + i
+pub const HIS_NEXT_FIELD_START: usize = HIS_START + 8;
+pub fn h_i_next_field(i: usize) -> usize {
+    HIS_NEXT_FIELD_START + i
 }
 
-pub const HIS_QUOTIENT_START: usize = HIS_FIELD_START + 8;
-pub fn h_i_quotient(i: usize) -> usize {
-    HIS_START + i
+pub const HIS_NEXT_QUOTIENT_START: usize = HIS_NEXT_FIELD_START + 8;
+pub fn h_i_next_quotient(i: usize) -> usize {
+    HIS_NEXT_QUOTIENT_START + i
 }
 
-pub const OUTPUT_COL: usize = HIS_START + 8;
+pub const OUTPUT_COL: usize = HIS_NEXT_QUOTIENT_START + 8;
 
 pub const LAST_COL: usize = OUTPUT_COL;
