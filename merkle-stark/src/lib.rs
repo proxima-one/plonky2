@@ -21,6 +21,3 @@ pub mod verifier;
 
 pub mod sha256_stark;
 pub mod tree_stark;
-
-#[cfg(test)]
-pub mod fibonacci_stark;

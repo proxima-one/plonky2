@@ -9,28 +9,30 @@ use arrayref::array_ref;
 const BLOCK_LEN: usize = 16;
 
 #[repr(transparent)]
-pub struct Sha2Trace<F: Field, const MAX_ROWS: usize>(
-	[[F; NUM_COLS]; MAX_ROWS],
+pub struct Sha2Trace<F: Field>(
+    Vec<[F; NUM_COLS]>,
 );
 
-impl<F: Field, const MAX_ROWS: usize> Sha2Trace<F, MAX_ROWS> {
-	pub fn new() -> Sha2Trace<F, MAX_ROWS> {
-		Sha2Trace([[F::ZERO; NUM_COLS]; MAX_ROWS])
+impl<F: Field> Sha2Trace<F> {
+	pub fn new(max_rows: usize) -> Sha2Trace<F> {
+		Sha2Trace(
+            vec![[F::ZERO; NUM_COLS]; max_rows]
+        )
 	}
 }
 
-pub struct Sha2TraceGenerator<F: Field, const MAX_ROWS: usize>{
-	trace: Sha2Trace<F, MAX_ROWS>,
+pub struct Sha2TraceGenerator<F: Field>{
+	trace: Sha2Trace<F>,
 	hash_idx: usize,
     left_input: [u32; 8],
     right_input: [u32; 8],
 	step: usize
 }
 
-impl<F: Field, const MAX_ROWS: usize> Sha2TraceGenerator<F, MAX_ROWS> {
-	pub fn new() -> Sha2TraceGenerator<F, MAX_ROWS> {
+impl<F: Field> Sha2TraceGenerator<F> {
+	pub fn new(max_rows: usize) -> Sha2TraceGenerator<F> {
 		Sha2TraceGenerator {
-			trace: Sha2Trace::new(),
+			trace: Sha2Trace::new(max_rows),
 			hash_idx: 0,
             left_input: [0; 8],
             right_input: [0; 8],
@@ -38,13 +40,17 @@ impl<F: Field, const MAX_ROWS: usize> Sha2TraceGenerator<F, MAX_ROWS> {
 		}
 	}
 
+    fn max_rows(&self) -> usize {
+        self.trace.0.len()
+    }
+
     fn curr_row_idx(&self) -> usize {
         self.hash_idx * NUM_STEPS_PER_HASH + self.step
     }
 
     fn get_next_window(&mut self) -> (&mut [F; NUM_COLS], &mut [F; NUM_COLS], usize, usize) {
         let idx = self.curr_row_idx();
-        assert!(idx < MAX_ROWS, "get_next_window exceeded MAX_ROWS");
+        assert!(idx < self.max_rows(), "get_next_window exceeded MAX_ROWS");
 
         let hash_idx = self.hash_idx;
         let step = self.step;
@@ -365,12 +371,13 @@ impl<F: Field, const MAX_ROWS: usize> Sha2TraceGenerator<F, MAX_ROWS> {
         }
 
 
-        if self.curr_row_idx() < MAX_ROWS - 1 {
+        if self.curr_row_idx() < self.max_rows() - 1 {
             let (curr_row, next_row, hash_idx, step) = self.get_next_window();
             Self::gen_misc(curr_row, next_row, step, hash_idx);
             curr_row[OUTPUT_COL] = F::from_canonical_u32(his[0]);
         } else {
-            let curr_row = &mut (self.trace.0)[self.curr_row_idx()];
+            let i = self.curr_row_idx();
+            let curr_row = &mut (self.trace.0)[i];
             let mut dummy_row = [F::ZERO; NUM_COLS];
             Self::gen_misc(curr_row, &mut dummy_row, self.hash_idx, self.step);
         }
@@ -444,7 +451,7 @@ mod tests {
 
         let left_input = [0u32; 8];
         let right_input = [0u32; 8];
-        let mut generator = Sha2TraceGenerator::<F, 80>::new();
+        let mut generator = Sha2TraceGenerator::<F>::new(80);
         let his = generator.gen_hash(left_input, right_input);
         assert_eq!(his, state);
     }
