@@ -452,7 +452,19 @@ mod tests {
         let left_input = [0u32; 8];
         let right_input = [0u32; 8];
         let mut generator = Sha2TraceGenerator::<F>::new(80);
+
         let his = generator.gen_hash(left_input, right_input);
+
+        for i in 0..8 {
+            print!("{:b} ", his[i]);
+        }
+        println!();
+
+        for i in 0..8 {
+            println!("{:b}", state[i]);
+        }
+        println!();
+
         assert_eq!(his, state);
     }
 }
