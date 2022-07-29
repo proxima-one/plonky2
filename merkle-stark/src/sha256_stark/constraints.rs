@@ -268,12 +268,12 @@ where
     // c := b
     // b := a
     for bit in 0..32 {
-        // yield_constr.constraint_transition(in_phase_0_to_2 * (next_row[h_bit(bit)] - curr_row[g_bit(bit)]));
-        // yield_constr.constraint_transition(in_phase_0_to_2 * (next_row[g_bit(bit)] - curr_row[f_bit(bit)]));
-        // yield_constr.constraint_transition(in_phase_0_to_2 * (next_row[f_bit(bit)] - curr_row[e_bit(bit)]));
-        // yield_constr.constraint_transition(in_phase_0_to_2 * (next_row[d_bit(bit)] - curr_row[c_bit(bit)]));
-        // yield_constr.constraint_transition(in_phase_0_to_2 * (next_row[c_bit(bit)] - curr_row[b_bit(bit)]));
-        // yield_constr.constraint_transition(in_phase_0_to_2 * (next_row[b_bit(bit)] - curr_row[a_bit(bit)]));
+        yield_constr.constraint_transition(in_phase_0_to_2 * (next_row[h_bit(bit)] - curr_row[g_bit(bit)]));
+        yield_constr.constraint_transition(in_phase_0_to_2 * (next_row[g_bit(bit)] - curr_row[f_bit(bit)]));
+        yield_constr.constraint_transition(in_phase_0_to_2 * (next_row[f_bit(bit)] - curr_row[e_bit(bit)]));
+        yield_constr.constraint_transition(in_phase_0_to_2 * (next_row[d_bit(bit)] - curr_row[c_bit(bit)]));
+        yield_constr.constraint_transition(in_phase_0_to_2 * (next_row[c_bit(bit)] - curr_row[b_bit(bit)]));
+        yield_constr.constraint_transition(in_phase_0_to_2 * (next_row[b_bit(bit)] - curr_row[a_bit(bit)]));
     }
 }
 
