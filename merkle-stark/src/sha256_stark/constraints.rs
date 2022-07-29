@@ -167,70 +167,70 @@ where
     // S1 := (e >>> 6) xor (e >>> 11) xor (e >>> 25)
     for bit in 0..32 {
         let computed_bit = xor_gen(
-            curr_row[e_bit((bit + 32 - 6) % 32)],
-            curr_row[e_bit((bit + 32 - 11) % 32)],
+            curr_row[e_bit((bit + 6) % 32)],
+            curr_row[e_bit((bit + 11) % 32)],
         );
         // degree 3
         yield_constr.constraint(in_phase_0_to_2 * (curr_row[xor_tmp_i_bit(2, bit)] - computed_bit));
 
         let computed_bit = xor_gen(
             curr_row[xor_tmp_i_bit(2, bit)],
-            curr_row[e_bit((bit + 7) % 32)],
+            curr_row[e_bit((bit + 25) % 32)],
         );
         // degree 3
-        // yield_constr.constraint(in_phase_0_to_2 * (curr_row[big_s1_bit(bit)] - computed_bit));
+        yield_constr.constraint(in_phase_0_to_2 * (curr_row[big_s1_bit(bit)] - computed_bit));
     }
 
     // ch := (e and f) xor ((not e) and g)
     for bit in 0..32 {
         let computed_bit = curr_row[e_bit(bit)] * curr_row[f_bit(bit)];
         // degree 3
-        // yield_constr.constraint(in_phase_0_to_2 * (curr_row[e_and_f_bit(bit)] - computed_bit));
+        yield_constr.constraint(in_phase_0_to_2 * (curr_row[e_and_f_bit(bit)] - computed_bit));
 
         let computed_bit = (-curr_row[e_bit(bit)] + F::ONE) * curr_row[g_bit(bit)];
         // degree 3
-        // yield_constr.constraint(in_phase_0_to_2 * (curr_row[not_e_and_g_bit(bit)] - computed_bit));
+        yield_constr.constraint(in_phase_0_to_2 * (curr_row[not_e_and_g_bit(bit)] - computed_bit));
 
         let computed_bit = xor_gen(curr_row[e_and_f_bit(bit)], curr_row[not_e_and_g_bit(bit)]);
         // degree 3
-        // yield_constr.constraint(in_phase_0_to_2 * (curr_row[ch_bit(bit)] - computed_bit));
+        yield_constr.constraint(in_phase_0_to_2 * (curr_row[ch_bit(bit)] - computed_bit));
     }
 
     // S0 := (a >>> 2) xor (a >>> 13) xor (a >>> 22)
     for bit in 0..32 {
-        let computed_bit = xor_gen(curr_row[a_bit((bit + 32 - 2) % 32)], curr_row[a_bit((bit + 32 - 13) % 32)]);
+        let computed_bit = xor_gen(curr_row[a_bit((bit + 2) % 32)], curr_row[a_bit((bit + 13) % 32)]);
         // degree 3
-        // yield_constr.constraint(in_phase_0_to_2 * (curr_row[xor_tmp_i_bit(3, bit)] - computed_bit));
+        yield_constr.constraint(in_phase_0_to_2 * (curr_row[xor_tmp_i_bit(3, bit)] - computed_bit));
       
-        let computed_bit = xor_gen(curr_row[xor_tmp_i_bit(3, bit)], curr_row[a_bit((bit + 10) % 32)]);
+        let computed_bit = xor_gen(curr_row[xor_tmp_i_bit(3, bit)], curr_row[a_bit((bit + 22) % 32)]);
         // degree 3
-        // yield_constr.constraint(in_phase_0_to_2 * (curr_row[big_s0_bit(bit)] - computed_bit));
+        yield_constr.constraint(in_phase_0_to_2 * (curr_row[big_s0_bit(bit)] - computed_bit));
     }
 
     // maj := (a and b) xor (a and c) xor (b and c)
     for bit in 0..32 {
         // degree 3
-        // yield_constr.constraint(in_phase_0_to_2 * (curr_row[a_and_b_bit(bit)] - curr_row[a_bit(bit)] * curr_row[b_bit(bit)]));
+        yield_constr.constraint(in_phase_0_to_2 * (curr_row[a_and_b_bit(bit)] - curr_row[a_bit(bit)] * curr_row[b_bit(bit)]));
 
         // degree 3
-        // yield_constr.constraint(in_phase_0_to_2 * (curr_row[a_and_c_bit(bit)] - curr_row[a_bit(bit)] * curr_row[c_bit(bit)]));
+        yield_constr.constraint(in_phase_0_to_2 * (curr_row[a_and_c_bit(bit)] - curr_row[a_bit(bit)] * curr_row[c_bit(bit)]));
 
         // degree 3
-        // yield_constr.constraint(in_phase_0_to_2 * (curr_row[b_and_c_bit(bit)] - curr_row[b_bit(bit)] * curr_row[c_bit(bit)]));
+        yield_constr.constraint(in_phase_0_to_2 * (curr_row[b_and_c_bit(bit)] - curr_row[b_bit(bit)] * curr_row[c_bit(bit)]));
 
         let computed_bit = xor_gen(curr_row[a_and_b_bit(bit)], curr_row[a_and_c_bit(bit)]);
         // degree 3
-        // yield_constr.constraint(in_phase_0_to_2 * (curr_row[xor_tmp_i_bit(4, bit)] - computed_bit));
+        yield_constr.constraint(in_phase_0_to_2 * (curr_row[xor_tmp_i_bit(4, bit)] - computed_bit));
 
         let computed_bit = xor_gen(curr_row[xor_tmp_i_bit(4, bit)], curr_row[b_and_c_bit(bit)]);
         // degree 3
-        // yield_constr.constraint(in_phase_0_to_2 * (curr_row[maj_bit(bit)] - computed_bit));
+        yield_constr.constraint(in_phase_0_to_2 * (curr_row[maj_bit(bit)] - computed_bit));
     }
 
     // set round constant
     for step in 0..64 {
         // degree 2
-        // yield_constr.constraint(curr_row[step_bit(step)] * (curr_row[KI] - F::from_canonical_u32(ROUND_CONSTANTS[step])));
+        yield_constr.constraint(curr_row[step_bit(step)] * (curr_row[KI] - F::from_canonical_u32(ROUND_CONSTANTS[step])));
     }
 
     // temp1 := h + S1 + ch + k[i] + w[i]
@@ -244,7 +244,7 @@ where
     let d_field = bit_decomp_32!(curr_row, d_bit, F, P);
     let e_u32_next = bit_decomp_32!(next_row, e_bit, F, P);
     // degree 2
-    // yield_constr.constraint(in_phase_0_to_2 * (curr_row[E_NEXT_FIELD] - (d_field + temp1_minus_ki + curr_row[KI])));
+    yield_constr.constraint(in_phase_0_to_2 * (curr_row[E_NEXT_FIELD] - (d_field + temp1_minus_ki + curr_row[KI])));
     // degree 3
     // yield_constr.constraint_transition(in_phase_0_to_2 * (curr_row[E_NEXT_FIELD] - (e_u32_next + curr_row[E_NEXT_QUOTIENT] * F::from_canonical_u64(1 << 32))));
 

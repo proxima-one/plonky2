@@ -45,7 +45,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
 		eval_phase_transitions(curr_row, next_row, yield_constr);
 
 		eval_msg_schedule(curr_row, next_row, yield_constr);
-		// eval_round_fn(curr_row, next_row, yield_constr);
+		eval_round_fn(curr_row, next_row, yield_constr);
 
 		eval_shift_wis(curr_row, next_row, yield_constr);
 		eval_bits_are_bits(curr_row, next_row, yield_constr);

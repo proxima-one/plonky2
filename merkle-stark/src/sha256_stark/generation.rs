@@ -109,8 +109,10 @@ impl<F: Field> Sha2TraceGenerator<F> {
         let mut a_and_c = abcd[0] & abcd[2];
         let mut b_and_c = abcd[1] & abcd[2];
 
-        let temp1 = efgh[3].wrapping_add(s1).wrapping_add(ch).wrapping_add(ki).wrapping_add(wi);
-        let temp2 = s0.wrapping_add(maj);
+        let temp1_u32 = efgh[3].wrapping_add(s1).wrapping_add(ch).wrapping_add(ki).wrapping_add(wi);
+        let temp2_u32 = s0.wrapping_add(maj);
+        let temp1_u64 = efgh[3] as u64 + s1 as u64 + ch as u64 + ki as u64 + wi as u64;
+        let temp2_u64 = s0 as u64 + maj as u64;
 
         for bit in 0..32 {
             curr_row[xor_tmp_i_bit(2, bit)] = F::from_canonical_u32(xor_tmp_2 & 1);
@@ -144,13 +146,13 @@ impl<F: Field> Sha2TraceGenerator<F> {
         
         let (mut abcd, mut efgh) = swap(abcd, efgh);
     
-        let a_next_u64 = temp1 as u64 + temp2 as u64;
+        let a_next_u64 = temp1_u64 + temp2_u64;
         let a_next_quotient = a_next_u64 / (1 << 32);
-        let e_next_u64 = efgh[0] as u64 + temp1 as u64;
+        let e_next_u64 = efgh[0] as u64 + temp1_u64;
         let e_next_quotient = e_next_u64 / (1 << 32);
 
-        abcd[0] = temp1.wrapping_add(temp2);
-        efgh[0] = efgh[0].wrapping_add(temp1);
+        abcd[0] = temp1_u32.wrapping_add(temp2_u32);
+        efgh[0] = efgh[0].wrapping_add(temp1_u32);
 
         let res = (abcd.clone(), efgh.clone());
 
@@ -311,7 +313,9 @@ impl<F: Field> Sha2TraceGenerator<F> {
                 curr_row[h_i(j)] = F::from_canonical_u32(his[j]);
             }
 
-            (abcd, efgh) = Self::gen_round_fn(curr_row, next_row, wis[15], ROUND_CONSTANTS[i], abcd, efgh);
+            let ki = ROUND_CONSTANTS[i];
+            curr_row[KI] = F::from_canonical_u32(ki);
+            (abcd, efgh) = Self::gen_round_fn(curr_row, next_row, wis[15], ki, abcd, efgh);
 
             if i == 15 {
                 let w16 = wis[0];
