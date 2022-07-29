@@ -48,23 +48,6 @@ pub(crate) fn xor_gen<P: PackedField>(x: P, y: P) -> P {
     x + y - x * y.doubles()
 }
 
-// 0 1 1 0 0 1 // a
-// 1 0 1 1 0 0 // a >>> 1. (a >> a)[i] = a[i - 1 % len]
-// 1 0 0 1 1 0 // a in trace
-// 0 0 1 1 0 1 // (a >>> 1) in trace
-// 0 1 0 0 1 1 // (a in trace) >>> 1
-// 0 0 0 1 1 0 // a >> 2
-// 0 1 1 0 0 0 // (a >> 2) in trace
-// 0 0 1 0 0 1 // (a in trace) >> 2
-
-// 1 0 0 1 1 0 // a in trace
-// 0 0 1 1 0 1 // (a >>> 1) in trace
-// add mod 32
-
-// 1 0 0 1 1 0 // a in trace
-// 0 1 1 0 0 0 // (a >> 2) in trace
-// add but ignore top k, where k is shift
-
 // gets w[i] for the *next* row
 pub(crate) fn eval_msg_schedule<F, P>(
     curr_row: &[P; NUM_COLS],
