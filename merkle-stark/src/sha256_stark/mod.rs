@@ -9,7 +9,7 @@ pub mod layout;
 pub mod constraints;
 pub mod generation;
 
-use constraints::{eval_phase_0_and_1, eval_phase_2, eval_phase_3, eval_msg_schedule, eval_round_fn, eval_phase_transitions, eval_shift_wis, eval_bits_are_bits};
+use constraints::{eval_phase_0_and_1, eval_phase_2, eval_phase_3, eval_msg_schedule, eval_round_fn, eval_phase_transitions, eval_shift_wis, eval_check_his, eval_bits_are_bits};
 use layout::NUM_COLS;
 
 #[derive(Copy, Clone)]
@@ -47,6 +47,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
 		eval_msg_schedule(curr_row, next_row, yield_constr);
 		eval_round_fn(curr_row, next_row, yield_constr);
 
+        eval_check_his(curr_row, next_row, yield_constr);
 		eval_shift_wis(curr_row, next_row, yield_constr);
 		eval_bits_are_bits(curr_row, next_row, yield_constr);
     }

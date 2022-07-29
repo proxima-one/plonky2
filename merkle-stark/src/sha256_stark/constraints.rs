@@ -317,16 +317,26 @@ pub(crate) fn eval_phase_0_and_1<F, P>(
     // degree 2
     yield_constr.constraint(in_phase_0 * (decomp_left - curr_row[LEFT_INPUT_COL]));
     // degree 2
-    // yield_constr.constraint(in_phase_1 * (decomp_right - curr_row[RIGHT_INPUT_COL]));
+    yield_constr.constraint(in_phase_1 * (decomp_right - curr_row[RIGHT_INPUT_COL]));
 
     // ensure left and right inputs are zero in all other phases
-    // yield_constr.constraint((-in_phase_0 + F::ONE) * curr_row[LEFT_INPUT_COL]);
-    // yield_constr.constraint((-in_phase_1 + F::ONE) * curr_row[RIGHT_INPUT_COL]);
+    yield_constr.constraint((-in_phase_0 + F::ONE) * curr_row[LEFT_INPUT_COL]);
+    yield_constr.constraint((-in_phase_1 + F::ONE) * curr_row[RIGHT_INPUT_COL]);
+}
 
-    // ensure his stay the same
+pub(crate) fn eval_check_his<F, P>(
+    curr_row: &[P; NUM_COLS],
+    next_row: &[P; NUM_COLS],
+    yield_constr: &mut ConstraintConsumer<P>,
+) where
+    F: Field,
+    P: PackedField<Scalar = F>,
+{
+    // ensure his stay the same before the last row of phase 2
+    let before_last_row_of_2 = (curr_row[phase_bit(0)] + curr_row[phase_bit(1)] + curr_row[phase_bit(2)]) * (-next_row[phase_bit(3)] + F::ONE);
     for i in 0..8 {
         // degree 3
-        // yield_constr.constraint_transition(in_phase_0_or_1 * (next_row[h_i(i)] - curr_row[h_i(i)]));
+        yield_constr.constraint_transition(before_last_row_of_2 * (next_row[h_i(i)] - curr_row[h_i(i)]));
     }
 }
 
