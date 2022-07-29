@@ -44,7 +44,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
 
 		eval_phase_transitions(curr_row, next_row, yield_constr);
 
-		// eval_msg_schedule(curr_row, next_row, yield_constr);
+		eval_msg_schedule(curr_row, next_row, yield_constr);
 		// eval_round_fn(curr_row, next_row, yield_constr);
 
 		eval_shift_wis(curr_row, next_row, yield_constr);
@@ -80,14 +80,19 @@ mod tests {
 
 
     #[test]
-    fn test_hash_of_zero() ->  Result<()> {
+    fn test_stark() ->  Result<()> {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
         type S = Sha2CompressionStark<F, D>;
 
-        let left_input = [0u32; 8];
-        let right_input = [0u32; 8];
+        let mut left_input = [0u32; 8];
+        let mut right_input = [0u32; 8];
+        for i in 0..8 {
+            left_input[i] = i as u32;
+            right_input[i] = i as u32 + 8;
+        }
+
 
         let mut generator = Sha2TraceGenerator::<F>::new(128);
         generator.gen_hash(left_input, right_input);

@@ -41,8 +41,7 @@ pub fn little_s1_bit(bit: usize) -> usize {
 
 
 pub const KI: usize = LITTLE_S1_START + 32;
-pub const WI_U32: usize = KI + 1;
-pub const WI_FIELD: usize = WI_U32 + 1;
+pub const WI_FIELD: usize = KI + 1;
 pub const WI_QUOTIENT: usize = WI_FIELD + 1;
 
 pub const A_START: usize = WI_QUOTIENT + 1;

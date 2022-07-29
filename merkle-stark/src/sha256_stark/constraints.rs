@@ -8,7 +8,7 @@ use crate::constraint_consumer::ConstraintConsumer;
 // TODO constrain cols that shouldn't change during each phase
 
 // 4 "INSNS" (stages) of the STARK
-// 0. (8 rows) load input from left input colum into wis 1 at a time, first left, then right. Set his to IV and load his into a-h in first row. Perform 1 round of round fn
+// 0. (8 rows) load input from left input colum into wis 1 at a time. Set his to IV and load his into a-h in first row. Perform 1 round of round fn
 // 1. (8 rows) same as phase, but with the right input column
 // 2. (48 rows) shift wis left by 1, append / compute next WI, perform 1 round of message schedule and round fn update his in last row
 // 3. (8 rows) shift wis left by 1, shift his left by 1, copy leftmost hi to output col and add hash_idx * 1 << 32 to it to signify which hash it's for
@@ -48,6 +48,23 @@ pub(crate) fn xor_gen<P: PackedField>(x: P, y: P) -> P {
     x + y - x * y.doubles()
 }
 
+// 0 1 1 0 0 1 // a
+// 1 0 1 1 0 0 // a >>> 1. (a >> a)[i] = a[i - 1 % len]
+// 1 0 0 1 1 0 // a in trace
+// 0 0 1 1 0 1 // (a >>> 1) in trace
+// 0 1 0 0 1 1 // (a in trace) >>> 1
+// 0 0 0 1 1 0 // a >> 2
+// 0 1 1 0 0 0 // (a >> 2) in trace
+// 0 0 1 0 0 1 // (a in trace) >> 2
+
+// 1 0 0 1 1 0 // a in trace
+// 0 0 1 1 0 1 // (a >>> 1) in trace
+// add mod 32
+
+// 1 0 0 1 1 0 // a in trace
+// 0 1 1 0 0 0 // (a >> 2) in trace
+// add but ignore top k, where k is shift
+
 // gets w[i] for the *next* row
 pub(crate) fn eval_msg_schedule<F, P>(
     curr_row: &[P; NUM_COLS],
@@ -59,73 +76,73 @@ pub(crate) fn eval_msg_schedule<F, P>(
 {
     let into_phase_2 = next_row[phase_bit(2)];
 
-    // s0 := (w[i-15] >>>  7) xor (w[i-15] >>> 18) xor (w[i-15] >>  3)
+    // s0 := (w[i-15] >>> 7) xor (w[i-15] >>> 18) xor (w[i-15] >>  3)
 
-    for bit in 3..32 {
+    for bit in 0..29 {
         let computed_bit = xor_gen(
-            curr_row[wi_bit(0, (bit + 32 - 7) % 32)],
-            curr_row[wi_bit(0, (bit + 14) % 32)],
+            next_row[wi_bit(0, (bit + 7) % 32)],
+            next_row[wi_bit(0, (bit + 18) % 32)],
         );
         // degree 3
-        yield_constr.constraint_transition(into_phase_2 * (curr_row[xor_tmp_i_bit(0, bit)] - computed_bit));
+        yield_constr.constraint_transition(into_phase_2 * (next_row[xor_tmp_i_bit(0, bit)] - computed_bit));
 
         let computed_bit = xor_gen(
-            curr_row[xor_tmp_i_bit(0, bit)],
-            curr_row[wi_bit(0, bit - 3)],
+            next_row[xor_tmp_i_bit(0, bit)],
+            next_row[wi_bit(0, bit + 3)],
         );
         // degree 3
-        yield_constr.constraint_transition(into_phase_2 * (curr_row[little_s0_bit(bit)] - computed_bit));
+        yield_constr.constraint_transition(into_phase_2 * (next_row[little_s0_bit(bit)] - computed_bit));
     }
-    for bit in 0..3 {
+    for bit in 29..32 {
         // we can ignore the second XOR in this case since it's with 0
         let computed_bit = xor_gen(
-            curr_row[wi_bit(0, (bit + 32 - 7) % 32)],
-            curr_row[wi_bit(0, (bit + 14) % 32)],
+            next_row[wi_bit(0, (bit + 7) % 32)],
+            next_row[wi_bit(0, (bit + 18) % 32)],
         );
         // degree 3
-        yield_constr.constraint_transition(into_phase_2 * (curr_row[little_s0_bit(bit)] - computed_bit));
+        yield_constr.constraint_transition(into_phase_2 * (next_row[little_s0_bit(bit)] - computed_bit));
     }
 
     // s1 := (w[i-2] >>> 17) xor (w[i-2] >>> 19) xor (w[i-2] >> 10)
 
-    for bit in 10..32 {
+    for bit in 0..22 {
         let computed_bit = xor_gen(
-            curr_row[wi_bit(13, (bit + 15) % 32)],
-            curr_row[wi_bit(13, (bit + 13) % 32)],
+            next_row[wi_bit(13, (bit + 17) % 32)],
+            next_row[wi_bit(13, (bit + 19) % 32)],
         );
         // degree 3
-        yield_constr.constraint_transition(into_phase_2 * (curr_row[xor_tmp_i_bit(1, bit)] - computed_bit));
+        yield_constr.constraint_transition(into_phase_2 * (next_row[xor_tmp_i_bit(1, bit)] - computed_bit));
 
         let computed_bit = xor_gen(
-            curr_row[xor_tmp_i_bit(1, bit)],
-            curr_row[wi_bit(13, bit - 10)],
+            next_row[xor_tmp_i_bit(1, bit)],
+            next_row[wi_bit(13, bit + 10)],
         );
         // degree 3
-        yield_constr.constraint_transition(into_phase_2 * (curr_row[little_s1_bit(bit)] - computed_bit));
+        yield_constr.constraint_transition(into_phase_2 * (next_row[little_s1_bit(bit)] - computed_bit));
     }
-    for bit in 0..10 {
+    for bit in 22..32 {
         // we can ignore the second XOR in this case since it's with 0
         let computed_bit = xor_gen(
-            curr_row[wi_bit(13, (bit + 15) % 32)],
-            curr_row[wi_bit(13, (bit + 13) % 32)],
+            next_row[wi_bit(13, (bit + 17) % 32)],
+            next_row[wi_bit(13, (bit + 19) % 32)],
         );
         // degree 3
-        yield_constr.constraint_transition(into_phase_2 * (curr_row[little_s1_bit(bit)] - computed_bit));
+        yield_constr.constraint_transition(into_phase_2 * (next_row[little_s1_bit(bit)] - computed_bit));
     }
 
     // w[i] := w[i-16] + s0 + w[i-7] + s1
-    // w[i] goes in the rightmost WI column of the next row,
 
     // degree 1
-    let s0_field_computed = bit_decomp_32!(curr_row, little_s0_bit, F, P);
-    let s1_field_computed = bit_decomp_32!(curr_row, little_s1_bit, F, P);
+    let s0_field_computed = bit_decomp_32!(next_row, little_s0_bit, F, P);
+    let s1_field_computed = bit_decomp_32!(next_row, little_s1_bit, F, P);
     let wi_minus_16_field_computed = bit_decomp_32_at_idx!(curr_row, 0, wi_bit, F, P);
-    let wi_minus_7_field_computed = bit_decomp_32_at_idx!(curr_row, 9, wi_bit, F, P);
+    let wi_minus_7_field_computed = bit_decomp_32_at_idx!(next_row, 8, wi_bit, F, P);
+    let wi = bit_decomp_32_at_idx!(next_row, 15, wi_bit, F, P);
 
     // degree 2
     yield_constr.constraint_transition(
         into_phase_2
-            * (curr_row[WI_FIELD]
+            * (next_row[WI_FIELD]
                 - (wi_minus_16_field_computed
                     + s0_field_computed
                     + wi_minus_7_field_computed
@@ -133,10 +150,7 @@ pub(crate) fn eval_msg_schedule<F, P>(
     );
     // degree 3
     yield_constr
-        .constraint(into_phase_2 * (curr_row[WI_FIELD] - (curr_row[WI_U32] + curr_row[WI_QUOTIENT] * F::from_canonical_u64(1 << 32))));
-    // degree 2
-    let wi_u32_computed = bit_decomp_32_at_idx!(next_row, 15, wi_bit, F, P);
-    yield_constr.constraint(into_phase_2 * (curr_row[WI_U32] - wi_u32_computed));
+        .constraint(into_phase_2 * (next_row[WI_FIELD] - (wi + next_row[WI_QUOTIENT] * F::from_canonical_u64(1 << 32))));
 }
 
 pub(crate) fn eval_shift_wis<F, P>(
@@ -147,12 +161,13 @@ pub(crate) fn eval_shift_wis<F, P>(
     F: Field,
     P: PackedField<Scalar = F>,
 {
-    // shift the wis left always
-    for i in 1..16 {
+    // shift wis unless in padding
+    let in_padding = -curr_row[phase_bit(0)] - curr_row[phase_bit(1)] - curr_row[phase_bit(2)] - curr_row[phase_bit(3)] + F::ONE;
+    for i in 0..15 {
         for bit in 0..32 {
-            // degree 2
+            // degree 3
             yield_constr.constraint_transition(
-                next_row[wi_bit(i - 1, bit)] - curr_row[wi_bit(i, bit)],
+                (-in_padding + F::ONE) * (next_row[wi_bit(i, bit)] - curr_row[wi_bit(i + 1, bit)]),
             );
         }
     }
@@ -164,7 +179,6 @@ where
     F: Field,
     P: PackedField<Scalar = F>,
 {
-    let in_phase_0 =curr_row[phase_bit(0)];
     let in_phase_0_to_2 = curr_row[phase_bit(0)] + curr_row[phase_bit(1)] + curr_row[phase_bit(2)];
 
     // S1 := (e >>> 6) xor (e >>> 11) xor (e >>> 25)
@@ -174,7 +188,7 @@ where
             curr_row[e_bit((bit + 32 - 11) % 32)],
         );
         // degree 3
-        // yield_constr.constraint(in_phase_0_to_2 * (curr_row[xor_tmp_i_bit(2, bit)] - computed_bit));
+        yield_constr.constraint(in_phase_0_to_2 * (curr_row[xor_tmp_i_bit(2, bit)] - computed_bit));
 
         let computed_bit = xor_gen(
             curr_row[xor_tmp_i_bit(2, bit)],
