@@ -340,44 +340,6 @@ pub(crate) fn eval_check_his<F, P>(
     }
 }
 
-pub(crate) fn eval_phase_1<F, P>(
-    curr_row: &[P; NUM_COLS],
-    next_row: &[P; NUM_COLS],
-    yield_constr: &mut ConstraintConsumer<P>,
-) where
-    F: Field,
-    P: PackedField<Scalar = F>,
-{
-    // if transitioning from phase 0 to phase 1, load his into a-h
-    let phase_0_selector = -curr_row[phase_bit(0)]
-        - curr_row[phase_bit(1)]
-        - curr_row[phase_bit(2)]
-        - curr_row[phase_bit(3)]
-        + F::ONE;
-    let phase_0_selector_next =
-        -next_row[phase_bit(0)] - next_row[phase_bit(1)] - next_row[phase_bit(2)] + F::ONE;
-    let transition_to_phase_1 = phase_0_selector * (-phase_0_selector_next + F::ONE);
-
-    let a_field = bit_decomp_32!(next_row, a_bit, F, P);
-    let b_field = bit_decomp_32!(next_row, b_bit, F, P);
-    let c_field = bit_decomp_32!(next_row, c_bit, F, P);
-    let d_field = bit_decomp_32!(next_row, d_bit, F, P);
-    let e_field = bit_decomp_32!(next_row, e_bit, F, P);
-    let f_field = bit_decomp_32!(next_row, f_bit, F, P);
-    let g_field = bit_decomp_32!(next_row, g_bit, F, P);
-    let h_field = bit_decomp_32!(next_row, h_bit, F, P);
-
-    // degree 3
-    yield_constr.constraint_transition(transition_to_phase_1 * (a_field - next_row[h_i(0)]));
-    yield_constr.constraint_transition(transition_to_phase_1 * (b_field - next_row[h_i(1)]));
-    yield_constr.constraint_transition(transition_to_phase_1 * (c_field - next_row[h_i(2)]));
-    yield_constr.constraint_transition(transition_to_phase_1 * (d_field - next_row[h_i(3)]));
-    yield_constr.constraint_transition(transition_to_phase_1 * (e_field - next_row[h_i(4)]));
-    yield_constr.constraint_transition(transition_to_phase_1 * (f_field - next_row[h_i(5)]));
-    yield_constr.constraint_transition(transition_to_phase_1 * (g_field - next_row[h_i(6)]));
-    yield_constr.constraint_transition(transition_to_phase_1 * (h_field - next_row[h_i(7)]));
-}
-
 pub(crate) fn eval_phase_2<F, P>(
     curr_row: &[P; NUM_COLS],
     next_row: &[P; NUM_COLS],
@@ -418,9 +380,12 @@ pub(crate) fn eval_phase_3<F, P>(
 {
     let in_phase_3 = curr_row[phase_bit(3)];
 
-    // copy leftmost hi to output
+    // copy leftmost hi to output, including hash and chunk idx
     // degree 3
-    yield_constr.constraint(in_phase_3 * (curr_row[OUTPUT_COL] - (curr_row[h_i(0)] + curr_row[HASH_IDX] * F::from_canonical_u64(1 << 32))));
+    let computed_output = curr_row[h_i(0)]
+        + curr_row[HASH_IDX] * F::from_canonical_u64(1 << 35)
+        + curr_row[CHUNK_IDX] * F::from_canonical_u64(1 << 32);
+    yield_constr.constraint(in_phase_3 * (curr_row[OUTPUT_COL] - computed_output));
 
     // assert output col is zero in all other phases
     yield_constr.constraint((-in_phase_3 + F::ONE) * curr_row[OUTPUT_COL]);

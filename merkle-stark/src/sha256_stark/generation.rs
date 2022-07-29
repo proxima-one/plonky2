@@ -9,6 +9,10 @@ use arrayref::{array_ref, array_mut_ref};
 
 const BLOCK_LEN: usize = 16;
 
+fn is_power_of_two(n: u64) -> bool {
+    n & (n - 1) == 0 
+}
+
 #[repr(transparent)]
 pub struct Sha2Trace<F: Field>(
     Vec<[F; NUM_COLS]>,
@@ -16,6 +20,7 @@ pub struct Sha2Trace<F: Field>(
 
 impl<F: Field> Sha2Trace<F> {
 	pub fn new(max_rows: usize) -> Sha2Trace<F> {
+        assert!(is_power_of_two(max_rows as u64), "max_rows must be a power of two");
 		Sha2Trace(
             vec![[F::ZERO; NUM_COLS]; max_rows]
         )
@@ -332,7 +337,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
             if i == 15 {
                 let w16 = wis[0];
                 wis = shift_wis(wis);
-                let mut wi = Self::gen_msg_schedule(next_row, wis[0], wis[13], w16, wis[8]);
+                let wi = Self::gen_msg_schedule(next_row, wis[0], wis[13], w16, wis[8]);
                 wis[15] = wi
             } else {
                 wis = shift_wis(wis);
@@ -395,11 +400,14 @@ impl<F: Field> Sha2TraceGenerator<F> {
     }
 
     fn gen_phase_3(&mut self, mut his: [u32; 8]) {
-        for _ in 0..7 {
+        for i in 0..7 {
             let ([curr_row, next_row], hash_idx, step) = self.get_next_window();
             Self::gen_misc(curr_row, next_row, step, hash_idx);
 
-            curr_row[OUTPUT_COL] = F::from_canonical_u32(his[0]);
+            curr_row[CHUNK_IDX] = F::from_canonical_u64(i as u64);
+            curr_row[OUTPUT_COL] = F::from_canonical_u32(his[0])
+                + F::from_canonical_u64(hash_idx as u64) * F::from_canonical_u64(1 << 35)
+                + F::from_canonical_u64(i as u64) * F::from_canonical_u64(1 << 32);
             
             for i in 0..7 {
                 next_row[h_i(i)] = F::from_canonical_u32(his[i + 1]);
@@ -411,19 +419,12 @@ impl<F: Field> Sha2TraceGenerator<F> {
         }
 
 
-        if self.curr_row_idx() < self.max_rows() - 1 {
-            let ([curr_row, next_row], hash_idx, step) = self.get_next_window();
-            Self::gen_misc(curr_row, next_row, step, hash_idx);
-            curr_row[OUTPUT_COL] = F::from_canonical_u32(his[0]);
+        let ([curr_row, next_row], hash_idx, step) = self.get_next_window();
+        Self::gen_misc(curr_row, next_row, step, hash_idx);
+        curr_row[CHUNK_IDX] = F::from_canonical_u64(7 as u64);
+        curr_row[OUTPUT_COL] = F::from_canonical_u32(his[0]) + F::from_canonical_u64(hash_idx as u64) * F::from_canonical_u64(1 << 25) + F::from_canonical_u64(7 as u64) * F::from_canonical_u64(1 << 32);
 
-            Self::gen_shift_wis(curr_row, next_row)
-        } else {
-            let i = self.curr_row_idx();
-            let curr_row = &mut (self.trace.0)[i];
-            let mut dummy_row = [F::ZERO; NUM_COLS];
-            Self::gen_misc(curr_row, &mut dummy_row, self.hash_idx, self.step);
-        }
-
+        Self::gen_shift_wis(curr_row, next_row)
     }
 
 
@@ -503,7 +504,7 @@ mod tests {
 
         let left_input = [0u32; 8];
         let right_input = [0u32; 8];
-        let mut generator = Sha2TraceGenerator::<F>::new(72);
+        let mut generator = Sha2TraceGenerator::<F>::new(128);
 
         let his = generator.gen_hash(left_input, right_input);
 
@@ -525,7 +526,7 @@ mod tests {
         let block = block_to_u32_array(block);
         let left_input = *array_ref![block, 0, 8];
         let right_input = *array_ref![block, 8, 8];
-        let mut generator = Sha2TraceGenerator::<F>::new(72);
+        let mut generator = Sha2TraceGenerator::<F>::new(128);
 
         let his = generator.gen_hash(left_input, right_input);
         assert_eq!(his, state);
