@@ -38,7 +38,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
 		let curr_row = vars.local_values;
 		let next_row = vars.next_values;
 
-        // eval_phase_0_and_1(curr_row, next_row, yield_constr);
+        eval_phase_0_and_1(curr_row, next_row, yield_constr);
 		// eval_phase_2(curr_row, next_row, yield_constr);
 		// eval_phase_3(curr_row, next_row, yield_constr);
 

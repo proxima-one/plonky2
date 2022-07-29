@@ -309,7 +309,7 @@ pub(crate) fn eval_phase_0_and_1<F, P>(
     let in_phase_0_or_1 = in_phase_0 + in_phase_1;
 
     // load left inputs in phase 0, right inputs in phase 1. Check hash idx and chunk idx.
-    let decomp_left = bit_decomp_32_at_idx!(curr_row, 8, wi_bit, F, P)
+    let decomp_left = bit_decomp_32_at_idx!(curr_row, 15, wi_bit, F, P)
         + curr_row[HASH_IDX] *  F::from_canonical_u64(1 << 35) + curr_row[CHUNK_IDX] * F::from_canonical_u64(1 << 32);
     let decomp_right = bit_decomp_32_at_idx!(curr_row, 15, wi_bit, F, P)
         + curr_row[HASH_IDX] * F::from_canonical_u64(1 << 35) + curr_row[CHUNK_IDX] * F::from_canonical_u64(1 << 32);
@@ -317,16 +317,16 @@ pub(crate) fn eval_phase_0_and_1<F, P>(
     // degree 2
     yield_constr.constraint(in_phase_0 * (decomp_left - curr_row[LEFT_INPUT_COL]));
     // degree 2
-    yield_constr.constraint(in_phase_1 * (decomp_right - curr_row[RIGHT_INPUT_COL]));
+    // yield_constr.constraint(in_phase_1 * (decomp_right - curr_row[RIGHT_INPUT_COL]));
 
     // ensure left and right inputs are zero in all other phases
-    yield_constr.constraint((-in_phase_0 + F::ONE) * curr_row[LEFT_INPUT_COL]);
-    yield_constr.constraint((-in_phase_1 + F::ONE) * curr_row[RIGHT_INPUT_COL]);
+    // yield_constr.constraint((-in_phase_0 + F::ONE) * curr_row[LEFT_INPUT_COL]);
+    // yield_constr.constraint((-in_phase_1 + F::ONE) * curr_row[RIGHT_INPUT_COL]);
 
     // ensure his stay the same
     for i in 0..8 {
         // degree 3
-        yield_constr.constraint_transition(in_phase_0 * (next_row[h_i(i)] - curr_row[h_i(i)]));
+        // yield_constr.constraint_transition(in_phase_0_or_1 * (next_row[h_i(i)] - curr_row[h_i(i)]));
     }
 }
 

@@ -290,17 +290,21 @@ impl<F: Field> Sha2TraceGenerator<F> {
 
             Self::gen_misc(curr_row, next_row, step, hash_idx);
 
-            let (input_col, zero_col, mut wi) = if i < 8 {
-                (LEFT_INPUT_COL, RIGHT_INPUT_COL, left_input[i])
+            // load input cols
+            let mut wi = if i < 8 {
+                let wi = left_input[i];
+                curr_row[LEFT_INPUT_COL] = F::from_canonical_u64(hash_idx as u64) * F::from_canonical_u64(1 << 35) + F::from_canonical_u64(i as u64) * F::from_canonical_u64(1 << 32) + F::from_canonical_u32(wi);
+                curr_row[RIGHT_INPUT_COL] = F::ZERO;
+                wi
             } else {
-                (RIGHT_INPUT_COL, LEFT_INPUT_COL, right_input[i - 8])
+                let wi = right_input[i - 8];
+                curr_row[RIGHT_INPUT_COL] = F::from_canonical_u64(hash_idx as u64) * F::from_canonical_u64(1 << 35) + F::from_canonical_u64(i as u64 - 8) * F::from_canonical_u64(1 << 32) + F::from_canonical_u32(wi);
+                curr_row[LEFT_INPUT_COL] = F::ZERO;
+                wi
             };
 
             wis[15] = wi;
 
-            // load input cols
-            curr_row[input_col] = F::from_canonical_u64((hash_idx as u64) << 35) + F::from_canonical_u64((i as u64 % 8) << 32) + F::from_canonical_u32(wi);
-            curr_row[zero_col] = F::ZERO;
 
             // load wi
 			for bit in 0..32 {
