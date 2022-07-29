@@ -246,7 +246,7 @@ where
     // degree 2
     yield_constr.constraint(in_phase_0_to_2 * (curr_row[E_NEXT_FIELD] - (d_field + temp1_minus_ki + curr_row[KI])));
     // degree 3
-    // yield_constr.constraint_transition(in_phase_0_to_2 * (curr_row[E_NEXT_FIELD] - (e_u32_next + curr_row[E_NEXT_QUOTIENT] * F::from_canonical_u64(1 << 32))));
+    yield_constr.constraint_transition(in_phase_0_to_2 * (curr_row[E_NEXT_FIELD] - (e_u32_next + curr_row[E_NEXT_QUOTIENT] * F::from_canonical_u64(1 << 32))));
 
     // temp2 := S0 + maj
     // a := temp1 + temp2
@@ -256,9 +256,9 @@ where
     let a_u32_next = bit_decomp_32!(next_row, a_bit, F, P);
     
     // degree 2
-    // yield_constr.constraint(in_phase_0_to_2 * (curr_row[A_NEXT_FIELD] - (temp2 + temp1_minus_ki + curr_row[KI])));
+    yield_constr.constraint(in_phase_0_to_2 * (curr_row[A_NEXT_FIELD] - (temp2 + temp1_minus_ki + curr_row[KI])));
     // degree 3
-    // yield_constr.constraint(in_phase_0_to_2 * (curr_row[A_NEXT_FIELD] - (a_u32_next + curr_row[A_NEXT_QUOTIENT]) * F::from_canonical_u64(1 << 32)));
+    yield_constr.constraint(in_phase_0_to_2 * (curr_row[A_NEXT_FIELD] - (a_u32_next + curr_row[A_NEXT_QUOTIENT] * F::from_canonical_u64(1 << 32))));
 
 
     // h := g
