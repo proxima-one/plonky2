@@ -1,6 +1,6 @@
 pub const NUM_PIS: usize = 0;
 pub const NUM_COLS: usize = LAST_COL + 1;
-pub const NUM_STEPS_PER_HASH: usize = 80;
+pub const NUM_STEPS_PER_HASH: usize = 72;
 
 pub const HASH_IDX: usize = 0;
 pub const CHUNK_IDX: usize = HASH_IDX + 1;
@@ -10,7 +10,7 @@ pub fn phase_bit(i: usize) -> usize {
     PHASE_BITS_START + i
 }
 
-pub const STEP_BITS_START: usize = PHASE_BITS_START + 3;
+pub const STEP_BITS_START: usize = PHASE_BITS_START + 4;
 pub fn step_bit(i: usize) -> usize {
     STEP_BITS_START + i
 }
@@ -39,7 +39,9 @@ pub fn little_s1_bit(bit: usize) -> usize {
     LITTLE_S1_START + bit
 }
 
-pub const WI_U32: usize = LITTLE_S1_START + 32;
+
+pub const KI: usize = LITTLE_S1_START + 32;
+pub const WI_U32: usize = KI + 1;
 pub const WI_FIELD: usize = WI_U32 + 1;
 pub const WI_QUOTIENT: usize = WI_FIELD + 1;
 

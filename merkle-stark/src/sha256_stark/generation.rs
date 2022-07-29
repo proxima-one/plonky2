@@ -1,10 +1,11 @@
 #![allow(clippy::many_single_char_names)]
 
-use crate::sha256_stark::layout::*;
-use plonky2::field::{packed::PackedField, types::Field};
-use core::convert::TryInto;
 use super::constants::{HASH_IV, ROUND_CONSTANTS};
-use arrayref::array_ref;
+use crate::sha256_stark::layout::*;
+use crate::util::trace_rows_to_poly_values;
+use plonky2::field::{packed::PackedField, types::Field, polynomial::PolynomialValues};
+use core::convert::TryInto;
+use arrayref::{array_ref, array_mut_ref};
 
 const BLOCK_LEN: usize = 16;
 
@@ -48,7 +49,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
         self.hash_idx * NUM_STEPS_PER_HASH + self.step
     }
 
-    fn get_next_window(&mut self) -> (&mut [F; NUM_COLS], &mut [F; NUM_COLS], usize, usize) {
+    fn get_next_window(&mut self) -> (&mut [[F; NUM_COLS]; 2], usize, usize) {
         let idx = self.curr_row_idx();
         assert!(idx < self.max_rows(), "get_next_window exceeded MAX_ROWS");
 
@@ -56,12 +57,10 @@ impl<F: Field> Sha2TraceGenerator<F> {
         let step = self.step;
         self.step += 1;
 
-        let (left, right) = self.trace.0.split_at_mut(idx + 1);
-        let curr = &mut left[left.len() - 1];
-        let next = &mut right[0];
-        (curr, next, hash_idx, step)
+        (array_mut_ref![self.trace.0, idx, 2], hash_idx, step)
     }
 
+    // returns wi
     fn gen_msg_schedule(curr_row: &mut [F; NUM_COLS], next_row: &mut [F; NUM_COLS], w15: u32, w2: u32, w16: u32, w7: u32) -> u32 {
         let mut xor_tmp_0 = rotr(w15, 7) ^ rotr(w15, 18);
         let mut s0 = xor_tmp_0  ^ (w15 >> 3);
@@ -70,7 +69,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
         let mut s1 = xor_tmp_1 ^ (w2 >> 10);
 
         let mut wi = w16.wrapping_add(s0).wrapping_add(w7).wrapping_add(s1);
-        let res = wi.clone();
+        let res = wi;
         let wi_u64 = w16 as u64 + s0 as u64 + w7 as u64 + s1 as u64;
         let quotient = wi_u64 / (1 << 32);
         for bit in 0..32 {
@@ -80,7 +79,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
             curr_row[little_s0_bit(bit)] = F::from_canonical_u32(s0 & 1);
             curr_row[little_s1_bit(bit)] = F::from_canonical_u32(s1 & 1);
 
-            next_row[wi_bit(15, bit)] = F::from_canonical_u32(wi & 1);
+            curr_row[wi_bit(15, bit)] = F::from_canonical_u32(wi & 1);
 
             xor_tmp_0 >>= 1;
             xor_tmp_1 >>= 1;
@@ -91,13 +90,6 @@ impl<F: Field> Sha2TraceGenerator<F> {
         
         curr_row[WI_FIELD] = F::from_canonical_u64(wi_u64);
         curr_row[WI_QUOTIENT] = F::from_canonical_u64(quotient);
-
-        // shift wis left by one
-        for i in 0..15 {
-            for bit in 0..32 {
-                next_row[wi_bit(i, bit)] = curr_row[wi_bit(i + 1, bit)];
-            }
-        }
 
         res
     }
@@ -152,14 +144,15 @@ impl<F: Field> Sha2TraceGenerator<F> {
 
         let (mut abcd, mut efgh) = swap(abcd, efgh);
     
-        abcd[0] = temp1.wrapping_add(temp2);
-        efgh[0] = efgh[0].wrapping_add(temp1);
-        let res = (abcd.clone(), efgh.clone());
-
         let a_next_u64 = temp1 as u64 + temp2 as u64;
         let a_next_quotient = a_next_u64 / (1 << 32);
         let e_next_u64 = efgh[0] as u64 + temp1 as u64;
         let e_next_quotient = e_next_u64 / (1 << 32);
+
+        abcd[0] = temp1.wrapping_add(temp2);
+        efgh[0] = efgh[0].wrapping_add(temp1);
+
+        let res = (abcd.clone(), efgh.clone());
 
         curr_row[A_NEXT_FIELD] = F::from_canonical_u64(a_next_u64);
         curr_row[A_NEXT_QUOTIENT] = F::from_canonical_u64(a_next_quotient);
@@ -183,6 +176,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
             efgh[0] >>= 1;
             efgh[1] >>= 1;
             efgh[2] >>= 1;
+            efgh[3] >>= 1;
         }
 
         res
@@ -195,34 +189,48 @@ impl<F: Field> Sha2TraceGenerator<F> {
 
         for i in 0..NUM_STEPS_PER_HASH {
             curr_row[step_bit(i)] = F::ZERO;
-            next_row[step_bit(i)] = F::ZERO;
         }
 
         curr_row[step_bit(step)] = F::ONE;
-        next_row[step_bit((step + 1) % NUM_STEPS_PER_HASH)] = F::ONE;
 
         match step {
             // phase 0
             0..8 => {
-                curr_row[phase_bit(0)] = F::ZERO;
+                curr_row[phase_bit(0)] = F::ONE;
                 curr_row[phase_bit(1)] = F::ZERO;
                 curr_row[phase_bit(2)] = F::ZERO;
+                curr_row[phase_bit(3)] = F::ZERO;
+                curr_row[CHUNK_IDX] = F::from_canonical_u64(step as u64);
 
                 for i in 0..8 {
                     next_row[h_i(i)] = curr_row[h_i(i)];
                 }
             },
             // phase 1
-            8..56 => {
-                curr_row[phase_bit(0)] = F::ONE;
-                curr_row[phase_bit(1)] = F::ZERO;
-                curr_row[phase_bit(2)] = F::ZERO;
-            },
-            // phase 2
-            56..72 => {
+            8..16 => {
                 curr_row[phase_bit(0)] = F::ZERO;
                 curr_row[phase_bit(1)] = F::ONE;
                 curr_row[phase_bit(2)] = F::ZERO;
+                curr_row[phase_bit(3)] = F::ZERO;
+                curr_row[CHUNK_IDX] = F::from_canonical_u64(step as u64 - 8);
+
+                for i in 0..8 {
+                    next_row[h_i(i)] = curr_row[h_i(i)];
+                }
+            }
+            // phase 2
+            16..64 => {
+                curr_row[phase_bit(0)] = F::ZERO;
+                curr_row[phase_bit(1)] = F::ZERO;
+                curr_row[phase_bit(2)] = F::ONE;
+                curr_row[phase_bit(3)] = F::ZERO;
+            },
+            // phase 3
+            64..72 => {
+                curr_row[phase_bit(0)] = F::ZERO;
+                curr_row[phase_bit(1)] = F::ZERO;
+                curr_row[phase_bit(2)] = F::ZERO;
+                curr_row[phase_bit(3)] = F::ONE;
 
                 for i in 1..16 {
                     for bit in 0..32 {
@@ -230,48 +238,62 @@ impl<F: Field> Sha2TraceGenerator<F> {
                     }
                 }
             },
-            // phase 3
-            72..80 => {
-                curr_row[phase_bit(0)] = F::ZERO;
-                curr_row[phase_bit(1)] = F::ZERO;
-                curr_row[phase_bit(2)] = F::ONE;
-
-                if step != 72 {
-                    for i in 1..8 {
-                        next_row[h_i(i)] = curr_row[h_i(i)];
-                    }
-                }
-            },
             _ => unreachable!()
         }
     }
 
-    // returns wis
-	fn gen_phase_0(&mut self, his: [u32; 8]) -> [u32; 16] {
+    // returns wis, abcd, efgh, last wi shifted out of scope
+	fn gen_phase_0_and_1(&mut self, his: [u32; 8]) -> ([u32; 16], [u32; 4], [u32; 4], u32) {
         let left_input = self.left_input; 
         let right_input = self.right_input;
         let mut wis = [0; 16];
+        let mut abcd = *array_ref![his, 0, 4];
+        let mut efgh = *array_ref![his, 4, 4];
+        let mut w16 = 0;
 
-        for i in 0..8 {
-            let (curr_row, next_row, hash_idx, step) = self.get_next_window();
+        // left inputs
+        for i in 0..16 {
+            let ([curr_row, next_row], hash_idx, step) = self.get_next_window();
 
             Self::gen_misc(curr_row, next_row, step, hash_idx);
 
-            let mut w_left = left_input[i];
-            let mut w_right = right_input[i];
-            wis[7] = w_left;
-            wis[15] = w_right;
+            // load his into a-h in the first row
+            if i == 0 {
+                let mut abcd = abcd;
+                let mut efgh = efgh;
+                for bit in 0..32 {
+                    curr_row[a_bit(bit)] = F::from_canonical_u32(abcd[0] & 1);
+                    curr_row[b_bit(bit)] = F::from_canonical_u32(abcd[1] & 1);
+                    curr_row[c_bit(bit)] = F::from_canonical_u32(abcd[2] & 1);
+                    curr_row[d_bit(bit)] = F::from_canonical_u32(abcd[3] & 1);
+                    curr_row[e_bit(bit)] = F::from_canonical_u32(efgh[0] & 1);
+                    curr_row[f_bit(bit)] = F::from_canonical_u32(efgh[1] & 1);
+                    curr_row[g_bit(bit)] = F::from_canonical_u32(efgh[2] & 1);
+                    curr_row[h_bit(bit)] = F::from_canonical_u32(efgh[3] & 1);
+
+                    for j in 0..4 {
+                        abcd[j] >>= 1;
+                        efgh[j] >>= 1;
+                    }
+                }
+        } 
+
+            let (input_col, zero_col, mut wi) = if i < 8 {
+                (LEFT_INPUT_COL, RIGHT_INPUT_COL, left_input[i])
+            } else {
+                (RIGHT_INPUT_COL, LEFT_INPUT_COL, right_input[i - 8])
+            };
+
+            wis[15] = wi;
 
             // load input cols
-            curr_row[LEFT_INPUT_COL] = F::from_canonical_u64((hash_idx as u64) << 32) + F::from_canonical_u32(w_left);
-            curr_row[RIGHT_INPUT_COL] = F::from_canonical_u64((hash_idx as u64) << 32) + F::from_canonical_u32(w_right);
+            curr_row[input_col] = F::from_canonical_u64((hash_idx as u64) << 35) + F::from_canonical_u64((i as u64 % 8) << 32) + F::from_canonical_u32(wi);
+            curr_row[zero_col] = F::ZERO;
 
-            // load wis
+            // load wi
 			for bit in 0..32 {
-				curr_row[wi_bit(7, bit)] = F::from_canonical_u32(w_left & 1);
-				curr_row[wi_bit(15, bit)] = F::from_canonical_u32(w_right & 1);
-				w_left >>= 1;
-				w_right >>= 1;
+				curr_row[wi_bit(15, bit)] = F::from_canonical_u32(wi & 1);
+				wi >>= 1;
 			}
 			
             // shift wis
@@ -286,55 +308,44 @@ impl<F: Field> Sha2TraceGenerator<F> {
                 curr_row[h_i(j)] = F::from_canonical_u32(his[j]);
             }
 
-            // set step bit
-            curr_row[step_bit(i)] = F::ONE;
-            // set phase bits
-            for bit in 0..3 {
-                curr_row[phase_bit(bit)] = F::ZERO;
-            }
+            (abcd, efgh) = Self::gen_round_fn(curr_row, next_row, wis[15], ROUND_CONSTANTS[i], abcd, efgh);
 
+            w16 = wis[0];
             wis = shift_wis(wis);
 		}
 
-        wis
+        (wis, abcd, efgh, w16)
 	}
 
-    // returns wis, abcd, efgh
-    fn gen_phase_1(&mut self, mut wis: [u32; 16], mut abcd: [u32; 4], mut efgh: [u32; 4]) -> ([u32; 16], [u32; 4], [u32; 4]) {
+    // returns wis, abcd, efgh, his
+    fn gen_phase_2(&mut self, mut w16: u32, mut wis: [u32; 16], mut abcd: [u32; 4], mut efgh: [u32; 4], mut his: [u32; 8]) -> ([u32; 16], [u32; 4], [u32; 4], [u32; 8]) {
         for i in 0..48 {
-            let (curr_row, next_row, hash_idx, step) = self.get_next_window();
+            let ([curr_row, next_row], hash_idx, step) = self.get_next_window();
             Self::gen_misc(curr_row, next_row, step, hash_idx);
 
-            let ki = ROUND_CONSTANTS[i];
-            let mut wi = Self::gen_msg_schedule(curr_row, next_row, wis[14], wis[1], wis[15], wis[6]);
+            let ki = ROUND_CONSTANTS[i + 16];
+            let mut wi = Self::gen_msg_schedule(curr_row, next_row, wis[0], wis[13], w16, wis[8]);
             (abcd, efgh) = Self::gen_round_fn(curr_row, next_row, wi, ki, abcd, efgh);
 
-            // set wi
-            for bit in 0..32 {
-                next_row[wi_bit(15, bit)] = F::from_canonical_u32(wi & 1);
-                wi >>= 1;
-            }
-
-            wis = shift_wis(wis);
+            w16 = wis[0];
             wis[15] = wi;
-        };
+            wis = shift_wis(wis);
 
-        (wis, abcd, efgh)
-    }
-
-    fn gen_phase_2(&mut self, wi: u32, mut abcd: [u32; 4], mut efgh: [u32; 4], mut his: [u32; 8]) -> ([u32; 4], [u32; 4], [u32; 8]) {
-        for i in 0..16 {
-            let (curr_row, next_row, hash_idx, step) = self.get_next_window();
-            Self::gen_misc(curr_row, next_row, step, hash_idx);
-
-            let ki = ROUND_CONSTANTS[i];
-            (abcd, efgh) = Self::gen_round_fn(curr_row, next_row, wi, ki, abcd, efgh);
-
-            if i == 15 {
+            // shift wis left by one if not in last row
+            if i != 47 {
+                for i in 0..15 {
+                    for bit in 0..32 {
+                        next_row[wi_bit(i, bit)] = curr_row[wi_bit(i + 1, bit)];
+                    }
+                }
+            }
+            
+            // update his during last row
+            if i == 47 {
                 for j in 0..4 {
-                    his[j] = his[j].wrapping_add(abcd[j]);
                     let hj_next_u64 = his[j] as u64 + abcd[j] as u64;
                     let hj_next_quotient = hj_next_u64 / (1 << 32);
+                    his[j] = his[j].wrapping_add(abcd[j]);
                     
                     curr_row[h_i_next_field(j)] = F::from_canonical_u64(hj_next_u64);
                     curr_row[h_i_next_quotient(j)] = F::from_canonical_u64(hj_next_quotient);
@@ -342,23 +353,23 @@ impl<F: Field> Sha2TraceGenerator<F> {
                 }
 
                 for j in 0..4 {
-                    his[j + 4] = his[j + 4].wrapping_add(efgh[j]);
                     let hj_next_u64 = his[j + 4] as u64 + efgh[j] as u64;
                     let hj_next_quotient = hj_next_u64 / (1 << 32);
+                    his[j + 4] = his[j + 4].wrapping_add(efgh[j]);
                     
                     curr_row[h_i_next_field(j + 4)] = F::from_canonical_u64(hj_next_u64);
                     curr_row[h_i_next_quotient(j + 4)] = F::from_canonical_u64(hj_next_quotient);
                     next_row[h_i(j + 4)] = F::from_canonical_u32(his[j + 4]); 
                 }
             }
-        }
+        };
 
-        (abcd, efgh, his)
+        (wis, abcd, efgh, his)
     }
 
     fn gen_phase_3(&mut self, mut his: [u32; 8]) {
         for _ in 0..7 {
-            let (curr_row, next_row, hash_idx, step) = self.get_next_window();
+            let ([curr_row, next_row], hash_idx, step) = self.get_next_window();
             Self::gen_misc(curr_row, next_row, step, hash_idx);
 
             curr_row[OUTPUT_COL] = F::from_canonical_u32(his[0]);
@@ -372,7 +383,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
 
 
         if self.curr_row_idx() < self.max_rows() - 1 {
-            let (curr_row, next_row, hash_idx, step) = self.get_next_window();
+            let ([curr_row, next_row], hash_idx, step) = self.get_next_window();
             Self::gen_misc(curr_row, next_row, step, hash_idx);
             curr_row[OUTPUT_COL] = F::from_canonical_u32(his[0]);
         } else {
@@ -389,18 +400,26 @@ impl<F: Field> Sha2TraceGenerator<F> {
         self.right_input = right_input;
 
         let his = HASH_IV;
-        let wis = self.gen_phase_0(his);
-        let abcd = *array_ref![his, 0, 4];
-        let efgh = *array_ref![his, 4, 4];
+        let (wis, abcd, efgh, w16) = self.gen_phase_0_and_1(his);
 
-        let (wis, abcd, efgh) = self.gen_phase_1(wis, abcd, efgh);
-        let (_, _, his) = self.gen_phase_2(wis[15], abcd, efgh, his);
+        let (wis, abcd, efgh, his) = self.gen_phase_2(w16, wis, abcd, efgh, his);
         self.gen_phase_3(his);
 
         self.hash_idx += 1;
         his
     }
 
+    pub fn into_polynomial_values(self) -> Vec<PolynomialValues<F>> {
+        trace_rows_to_poly_values(self.trace.0) 
+    }
+}
+
+pub fn block_to_u32_array(block: [u8; 64]) -> [u32; BLOCK_LEN] {
+    let mut block_u32 = [0; BLOCK_LEN];
+    for (o, chunk) in block_u32.iter_mut().zip(block.chunks_exact(4)) {
+        *o = u32::from_be_bytes(chunk.try_into().unwrap());
+    }
+    block_u32
 }
 
 #[inline(always)]
@@ -423,48 +442,316 @@ fn shift_his(mut his: [u32; 8]) -> [u32; 8] {
 
 #[inline(always)]
 fn swap(abcd: [u32; 4], efgh: [u32; 4]) -> ([u32; 4], [u32; 4]) {
-    ([0, abcd[0], abcd[1], efgh[2]], [abcd[3], efgh[0], efgh[1], abcd[2]])
+    ([0, abcd[0], abcd[1], abcd[2]], [abcd[3], efgh[0], efgh[1], efgh[2]])
 }
 
 #[inline(always)]
 fn rotr(x: u32, n: u32) -> u32 {
-    (x >> n) | (x << (32 - n))
+    x.rotate_right(n)
 }
 
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sha2::compress256;
     use generic_array::{GenericArray, typenum::U64};
     use plonky2_field::goldilocks_field::GoldilocksField;
+    use core::convert::TryInto;
 
     type F = GoldilocksField;
 
     #[test]
-    fn test_same_output() {
+    fn test_hash_of_zero() {
         let block = [0u8; 64];
-        let block_arr = GenericArray::<u8, U64>::from(block);
-
         let mut state = HASH_IV;
-        compress256(&mut state, &[block_arr]);
+
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", state[0], state[1], state[2], state[3], state[4], state[5], state[6], state[7]);
+        compress(&mut state, &[block]);
+
+        println!("\n\n");
 
         let left_input = [0u32; 8];
         let right_input = [0u32; 8];
-        let mut generator = Sha2TraceGenerator::<F>::new(80);
+        let mut generator = Sha2TraceGenerator::<F>::new(72);
 
         let his = generator.gen_hash(left_input, right_input);
 
         for i in 0..8 {
-            print!("{:b} ", his[i]);
+            print!("{:032b} ", his[i]);
         }
         println!();
 
         for i in 0..8 {
-            println!("{:b}", state[i]);
+            print!("{:032b} ", state[i]);
         }
         println!();
 
         assert_eq!(his, state);
+    }
+
+
+    #[test]
+    fn test_hash_of_something() {
+        let mut block = [0u8; 64];
+        for i in 0..64 {
+            block[i] = i as u8;
+        }
+
+        let mut state = HASH_IV;
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", state[0], state[1], state[2], state[3], state[4], state[5], state[6], state[7]);
+        compress(&mut state, &[block]);
+
+        println!("\n\n");
+
+
+        let block = block_to_u32_array(block);
+        let left_input = *array_ref![block, 0, 8];
+        let right_input = *array_ref![block, 8, 8];
+        let mut generator = Sha2TraceGenerator::<F>::new(72);
+
+        let his = generator.gen_hash(left_input, right_input);
+
+        for i in 0..8 {
+            print!("{:032b} ", his[i]);
+        }
+        println!();
+
+        for i in 0..8 {
+            print!("{:032b} ", state[i]);
+        }
+        println!();
+
+        assert_eq!(his, state);
+    }
+
+    #[inline(always)]
+    fn shl(v: [u32; 4], o: u32) -> [u32; 4] {
+        [v[0] >> o, v[1] >> o, v[2] >> o, v[3] >> o]
+    }
+
+    #[inline(always)]
+    fn shr(v: [u32; 4], o: u32) -> [u32; 4] {
+        [v[0] << o, v[1] << o, v[2] << o, v[3] << o]
+    }
+
+    #[inline(always)]
+    fn or(a: [u32; 4], b: [u32; 4]) -> [u32; 4] {
+        [a[0] | b[0], a[1] | b[1], a[2] | b[2], a[3] | b[3]]
+    }
+
+    #[inline(always)]
+    fn xor(a: [u32; 4], b: [u32; 4]) -> [u32; 4] {
+        [a[0] ^ b[0], a[1] ^ b[1], a[2] ^ b[2], a[3] ^ b[3]]
+    }
+
+    #[inline(always)]
+    fn add(a: [u32; 4], b: [u32; 4]) -> [u32; 4] {
+        [
+            a[0].wrapping_add(b[0]),
+            a[1].wrapping_add(b[1]),
+            a[2].wrapping_add(b[2]),
+            a[3].wrapping_add(b[3]),
+        ]
+    }
+
+    fn sha256load(v2: [u32; 4], v3: [u32; 4]) -> [u32; 4] {
+        [v3[3], v2[0], v2[1], v2[2]]
+    }
+
+    fn sha256swap(v0: [u32; 4]) -> [u32; 4] {
+        [v0[2], v0[3], v0[0], v0[1]]
+    }
+
+    fn sha256msg1(v0: [u32; 4], v1: [u32; 4]) -> [u32; 4] {
+        // sigma 0 on vectors
+        #[inline]
+        fn sigma0x4(x: [u32; 4]) -> [u32; 4] {
+            let t1 = or(shl(x, 7), shr(x, 25));
+            let t2 = or(shl(x, 18), shr(x, 14));
+            let t3 = shl(x, 3);
+            xor(xor(t1, t2), t3)
+        }
+
+        add(v0, sigma0x4(sha256load(v0, v1)))
+    }
+
+    fn sha256msg2(v4: [u32; 4], v3: [u32; 4]) -> [u32; 4] {
+        macro_rules! sigma1 {
+            ($a:expr) => {
+                $a.rotate_right(17) ^ $a.rotate_right(19) ^ ($a >> 10)
+            };
+        }
+
+        let [x3, x2, x1, x0] = v4;
+        let [w15, w14, _, _] = v3;
+
+        let w16 = x0.wrapping_add(sigma1!(w14));
+        let w17 = x1.wrapping_add(sigma1!(w15));
+        let w18 = x2.wrapping_add(sigma1!(w16));
+        let w19 = x3.wrapping_add(sigma1!(w17));
+
+        [w19, w18, w17, w16]
+    }
+
+    fn sha256_digest_round_x2(cdgh: [u32; 4], abef: [u32; 4], wk: [u32; 4]) -> [u32; 4] {
+        macro_rules! big_sigma0 {
+            ($a:expr) => {
+                ($a.rotate_right(2) ^ $a.rotate_right(13) ^ $a.rotate_right(22))
+            };
+        }
+        macro_rules! big_sigma1 {
+            ($a:expr) => {
+                ($a.rotate_right(6) ^ $a.rotate_right(11) ^ $a.rotate_right(25))
+            };
+        }
+        macro_rules! bool3ary_202 {
+            ($a:expr, $b:expr, $c:expr) => {
+                $c ^ ($a & ($b ^ $c))
+            };
+        } // Choose, MD5F, SHA1C
+        macro_rules! bool3ary_232 {
+            ($a:expr, $b:expr, $c:expr) => {
+                ($a & $b) ^ ($a & $c) ^ ($b & $c)
+            };
+        } // Majority, SHA1M
+
+        let [_, _, wk1, wk0] = wk;
+        let [a0, b0, e0, f0] = abef;
+        let [c0, d0, g0, h0] = cdgh;
+
+        // a round
+        let x0 = big_sigma1!(e0)
+            .wrapping_add(bool3ary_202!(e0, f0, g0))
+            .wrapping_add(wk0)
+            .wrapping_add(h0);
+        let y0 = big_sigma0!(a0).wrapping_add(bool3ary_232!(a0, b0, c0));
+        let (a1, b1, c1, d1, e1, f1, g1, h1) = (
+            x0.wrapping_add(y0),
+            a0,
+            b0,
+            c0,
+            x0.wrapping_add(d0),
+            e0,
+            f0,
+            g0,
+        );
+
+        // a round
+        let x1 = big_sigma1!(e1)
+            .wrapping_add(bool3ary_202!(e1, f1, g1))
+            .wrapping_add(wk1)
+            .wrapping_add(h1);
+        let y1 = big_sigma0!(a1).wrapping_add(bool3ary_232!(a1, b1, c1));
+        let (a2, b2, _, _, e2, f2, _, _) = (
+            x1.wrapping_add(y1),
+            a1,
+            b1,
+            c1,
+            x1.wrapping_add(d1),
+            e1,
+            f1,
+            g1,
+        );
+
+        [a2, b2, e2, f2]
+    }
+
+    fn schedule(v0: [u32; 4], v1: [u32; 4], v2: [u32; 4], v3: [u32; 4]) -> [u32; 4] {
+        let t1 = sha256msg1(v0, v1);
+        let t2 = sha256load(v2, v3);
+        let t3 = add(t1, t2);
+        sha256msg2(t3, v3)
+    }
+
+    macro_rules! rounds4 {
+        ($abef:ident, $cdgh:ident, $rest:expr, $i:expr) => {{
+            let t1 = add($rest, crate::sha256_stark::constants::K32X4[$i]);
+            $cdgh = sha256_digest_round_x2($cdgh, $abef, t1);
+            let t2 = sha256swap(t1);
+            $abef = sha256_digest_round_x2($abef, $cdgh, t2);
+        }};
+    }
+
+    macro_rules! schedule_rounds4 {
+        (
+            $abef:ident, $cdgh:ident,
+            $w0:expr, $w1:expr, $w2:expr, $w3:expr, $w4:expr,
+            $i: expr
+        ) => {{
+            $w4 = schedule($w0, $w1, $w2, $w3);
+            rounds4!($abef, $cdgh, $w4, $i);
+        }};
+    }
+
+    /// Process a block with the SHA-256 algorithm.
+    fn sha256_digest_block_u32(state: &mut [u32; 8], block: &[u32; 16]) {
+        let mut abef = [state[0], state[1], state[4], state[5]];
+        let mut cdgh = [state[2], state[3], state[6], state[7]];
+
+        // Rounds 0..64
+        let mut w0 = [block[3], block[2], block[1], block[0]];
+        let mut w1 = [block[7], block[6], block[5], block[4]];
+        let mut w2 = [block[11], block[10], block[9], block[8]];
+        let mut w3 = [block[15], block[14], block[13], block[12]];
+        let mut w4;
+
+        rounds4!(abef, cdgh, w0, 0);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+        rounds4!(abef, cdgh, w1, 1);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+        rounds4!(abef, cdgh, w2, 2);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+        rounds4!(abef, cdgh, w3, 3);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+        schedule_rounds4!(abef, cdgh, w0, w1, w2, w3, w4, 4);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+        schedule_rounds4!(abef, cdgh, w1, w2, w3, w4, w0, 5);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+        schedule_rounds4!(abef, cdgh, w2, w3, w4, w0, w1, 6);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+        schedule_rounds4!(abef, cdgh, w3, w4, w0, w1, w2, 7);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+        schedule_rounds4!(abef, cdgh, w4, w0, w1, w2, w3, 8);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+        schedule_rounds4!(abef, cdgh, w0, w1, w2, w3, w4, 9);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+        schedule_rounds4!(abef, cdgh, w1, w2, w3, w4, w0, 10);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+        schedule_rounds4!(abef, cdgh, w2, w3, w4, w0, w1, 11);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+        schedule_rounds4!(abef, cdgh, w3, w4, w0, w1, w2, 12);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+        schedule_rounds4!(abef, cdgh, w4, w0, w1, w2, w3, 13);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+        schedule_rounds4!(abef, cdgh, w0, w1, w2, w3, w4, 14);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+        schedule_rounds4!(abef, cdgh, w1, w2, w3, w4, w0, 15);
+        println!("{:032} {:032} {:032} {:032} {:032} {:032} {:032} {:032}", abef[0], abef[1], cdgh[0], cdgh[1], abef[2], abef[3], cdgh[2], cdgh[3]);
+
+        let [a, b, e, f] = abef;
+        let [c, d, g, h] = cdgh;
+
+        state[0] = state[0].wrapping_add(a);
+        state[1] = state[1].wrapping_add(b);
+        state[2] = state[2].wrapping_add(c);
+        state[3] = state[3].wrapping_add(d);
+        state[4] = state[4].wrapping_add(e);
+        state[5] = state[5].wrapping_add(f);
+        state[6] = state[6].wrapping_add(g);
+        state[7] = state[7].wrapping_add(h);
+    }
+
+    pub fn compress(state: &mut [u32; 8], blocks: &[[u8; 64]]) {
+        let mut block_u32 = [0u32; BLOCK_LEN];
+        // since LLVM can't properly use aliasing yet it will make
+        // unnecessary state stores without this copy
+        let mut state_cpy = *state;
+        for block in blocks {
+            for (o, chunk) in block_u32.iter_mut().zip(block.chunks_exact(4)) {
+                *o = u32::from_be_bytes(chunk.try_into().unwrap());
+            }
+            sha256_digest_block_u32(&mut state_cpy, &block_u32);
+        }
+        *state = state_cpy;
     }
 }
