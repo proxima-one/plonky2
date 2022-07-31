@@ -247,8 +247,6 @@ impl<F: Field> Sha2TraceGenerator<F> {
             },
             _ => unreachable!()
         }
-
-        println!("hash_idx: {}, step: {}, hash_idx_trace: {}, phase_bit(0): {}, phase_bit(3): {}", hash_idx, step, curr_row[HASH_IDX], curr_row[phase_bit(0)], curr_row[phase_bit(3)]);
     }
 
     fn gen_shift_wis(curr_row: &mut [F; NUM_COLS], next_row: &mut [F; NUM_COLS]) {
@@ -424,7 +422,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
         let ([curr_row, next_row], hash_idx, step) = self.get_next_window();
         Self::gen_misc(curr_row, next_row, step, hash_idx);
         curr_row[CHUNK_IDX] = F::from_canonical_u64(7 as u64);
-        curr_row[OUTPUT_COL] = F::from_canonical_u32(his[0]) + F::from_canonical_u64(hash_idx as u64) * F::from_canonical_u64(1 << 25) + F::from_canonical_u64(7 as u64) * F::from_canonical_u64(1 << 32);
+        curr_row[OUTPUT_COL] = F::from_canonical_u32(his[0]) + F::from_canonical_u64(hash_idx as u64) * F::from_canonical_u64(1 << 35) + F::from_canonical_u64(7 as u64) * F::from_canonical_u64(1 << 32);
 
         Self::gen_shift_wis(curr_row, next_row)
     }

@@ -317,7 +317,6 @@ pub(crate) fn eval_phase_0_and_1<F, P>(
     // degree 1
     let in_phase_0 = curr_row[phase_bit(0)];
     let in_phase_1 = curr_row[phase_bit(1)];
-    let in_phase_0_or_1 = in_phase_0 + in_phase_1;
 
     // load left inputs in phase 0, right inputs in phase 1. Check hash idx and chunk idx.
     let decomp_left = bit_decomp_32_at_idx!(curr_row, 15, wi_bit, F, P)
@@ -401,10 +400,11 @@ pub(crate) fn eval_phase_3<F, P>(
     // assert output col is zero in all other phases
     yield_constr.constraint((-in_phase_3 + F::ONE) * curr_row[OUTPUT_COL]);
 
-    // shift his left
+    // shift his left except for last row
+    let shift_his = in_phase_3 * (-curr_row[step_bit(NUM_STEPS_PER_HASH - 1)] + F::ONE);
     for i in 1..8 {
         // degree 2
-        yield_constr.constraint(in_phase_3 * (next_row[h_i(i-1)] - curr_row[h_i(i)]));
+        yield_constr.constraint_transition(shift_his * (next_row[h_i(i-1)] - curr_row[h_i(i)]));
     }
 }
 

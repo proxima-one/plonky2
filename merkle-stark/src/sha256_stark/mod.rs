@@ -43,7 +43,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
 
         eval_phase_0_and_1(curr_row, next_row, yield_constr);
 		eval_phase_2(curr_row, next_row, yield_constr);
-		// eval_phase_3(curr_row, next_row, yield_constr);
+		eval_phase_3(curr_row, next_row, yield_constr);
 
 		eval_phase_transitions(curr_row, next_row, yield_constr);
 
@@ -52,7 +52,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
 
         eval_check_his(curr_row, next_row, yield_constr);
 		eval_shift_wis(curr_row, next_row, yield_constr);
-		eval_bits_are_bits(curr_row, next_row, yield_constr);
+		// eval_bits_are_bits(curr_row, next_row, yield_constr);
     }
 
 	fn eval_ext_circuit(
