@@ -291,6 +291,17 @@ fn eval_first_row_of_hash<F, P>(
         // degree 3
         yield_constr.constraint(is_hash_start * (next_row[h_i(i)] - F::from_canonical_u32(HASH_IV[i])));
     }
+
+    // increment hash idx if we're transitioning to a new hash and next isn't padding
+    let next_is_padding = -next_row[phase_bit(0)] - next_row[phase_bit(1)] - next_row[phase_bit(2)] - next_row[phase_bit(3)] + F::ONE;
+    let is_last_step = curr_row[step_bit(NUM_STEPS_PER_HASH - 1)];
+    let transition_to_next_hash = is_last_step * (-next_is_padding + F::ONE);
+    // degree 3
+    yield_constr.constraint_transition(transition_to_next_hash * (next_row[HASH_IDX] - curr_row[HASH_IDX] - F::ONE));
+
+    // otherwise ensure hash idx stays the same unless next row is padding unles next is padding
+    // degree 3
+    yield_constr.constraint_transition((-is_last_step + F::ONE) * (-next_is_padding + F::ONE) * (next_row[HASH_IDX] - curr_row[HASH_IDX]));
 }
 
 pub(crate) fn eval_phase_0_and_1<F, P>(
@@ -452,12 +463,6 @@ pub(crate) fn eval_phase_transitions<F, P>(
         // degree 3
         yield_constr.constraint_transition((-is_padding_next + F::ONE) * (next_row[step_bit((bit + 1) % NUM_STEPS_PER_HASH)] - curr_row[step_bit(bit)]));
     }
-
-    // inc hash idx at last step or stay the same
-    // degree 3
-    yield_constr.constraint_transition(phase_0_selector_next * (next_row[HASH_IDX] - curr_row[HASH_IDX] - F::ONE) * (next_row[HASH_IDX] - curr_row[HASH_IDX]));
-    // esure hash idx stays the same outside last step
-    yield_constr.constraint_transition((-phase_0_selector_next + F::ONE) * (next_row[HASH_IDX] - curr_row[HASH_IDX]));
 
     // ensure phase stays the same when not transitioning to next phase
     for bit in 0..4 {

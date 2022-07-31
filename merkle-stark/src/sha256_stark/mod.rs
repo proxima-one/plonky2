@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
 
+use plonky2::field::{types::Field, polynomial::PolynomialValues};
 use plonky2::{field::{extension::{Extendable, FieldExtension}, packed::PackedField}, hash::hash_types::RichField, plonk::circuit_builder::CircuitBuilder};
+use plonky2_util::log2_ceil;
 
 use crate::{stark::Stark, vars::{StarkEvaluationVars, StarkEvaluationTargets}, constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer}};
 
@@ -10,7 +12,8 @@ pub mod constraints;
 pub mod generation;
 
 use constraints::{eval_phase_0_and_1, eval_phase_2, eval_phase_3, eval_msg_schedule, eval_round_fn, eval_phase_transitions, eval_shift_wis, eval_check_his, eval_bits_are_bits};
-use layout::NUM_COLS;
+use layout::{NUM_COLS, NUM_STEPS_PER_HASH};
+use generation::{Sha2TraceGenerator, to_u32_array_be};
 
 #[derive(Copy, Clone)]
 pub struct Sha2CompressionStark<F: RichField + Extendable<D>, const D: usize> {
@@ -40,7 +43,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
 
         eval_phase_0_and_1(curr_row, next_row, yield_constr);
 		eval_phase_2(curr_row, next_row, yield_constr);
-		eval_phase_3(curr_row, next_row, yield_constr);
+		// eval_phase_3(curr_row, next_row, yield_constr);
 
 		eval_phase_transitions(curr_row, next_row, yield_constr);
 
@@ -66,12 +69,39 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
     }
 }
 
+pub struct Sha2StarkCompressor {
+    inputs: Vec<([u32; 8], [u32; 8])>,
+}
+
+impl Sha2StarkCompressor {
+    pub fn new() -> Self {
+        Self { inputs: Vec::new() }
+    }
+
+    pub fn add_instance(&mut self, left_input: [u8; 32], right_input: [u8; 32]) {
+        let left = to_u32_array_be(left_input);
+        let right = to_u32_array_be(right_input);
+
+        self.inputs.push((left, right));
+    }
+
+    /// returns the generated trace against which a proof may be generated
+    pub fn generate<F: Field>(self) -> Vec<PolynomialValues<F>> {
+        let max_rows = 1 << log2_ceil(self.inputs.len() * NUM_STEPS_PER_HASH);
+        let mut generator = Sha2TraceGenerator::<F>::new(max_rows);
+        for (left, right) in self.inputs.into_iter() {
+            generator.gen_hash(left, right);
+        }
+
+        generator.into_polynomial_values()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::sha256_stark::generation::Sha2TraceGenerator;
     use crate::config::StarkConfig;
-    use crate::proof::StarkProofWithPublicInputs;
     use crate::prover::prove;
     use crate::verifier::verify_stark_proof;
 
@@ -81,7 +111,7 @@ mod tests {
 
 
     #[test]
-    fn test_stark() ->  Result<()> {
+    fn test_single() -> Result<()> {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
@@ -94,13 +124,55 @@ mod tests {
             right_input[i] = i as u32 + 8;
         }
 
-
         let mut generator = Sha2TraceGenerator::<F>::new(128);
         generator.gen_hash(left_input, right_input);
 
         let config = StarkConfig::standard_fast_config();
         let stark = S::new();
         let trace = generator.into_polynomial_values();
+        let mut timing = TimingTree::default();
+        let proof = prove::<F, C, S, D>(
+            stark,
+            &config,
+            trace,
+            [],
+            &mut timing
+        )?;
+
+        verify_stark_proof(stark, proof, &config)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_multiple() -> Result<()> {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+        type S = Sha2CompressionStark<F, D>;
+
+        let mut left_input = [0; 32];
+        let mut right_input = [0; 32];
+        for i in 0..32 {
+            left_input[i] = i as u8;
+            right_input[i] = i as u8 + 32;
+        }
+
+        let mut compressor = Sha2StarkCompressor::new();
+        compressor.add_instance(left_input, right_input);
+
+        let mut left_input = [0; 32];
+        let mut right_input = [0; 32];
+        for i in 0..32 {
+            left_input[i] = i as u8 + 64;
+            right_input[i] = i as u8 + 96;
+        }
+
+        compressor.add_instance(left_input, right_input);
+        let trace = compressor.generate();
+
+        let config = StarkConfig::standard_fast_config();
+        let stark = S::new();
         let mut timing = TimingTree::default();
         let proof = prove::<F, C, S, D>(
             stark,

@@ -247,6 +247,8 @@ impl<F: Field> Sha2TraceGenerator<F> {
             },
             _ => unreachable!()
         }
+
+        println!("hash_idx: {}, step: {}, hash_idx_trace: {}, phase_bit(0): {}, phase_bit(3): {}", hash_idx, step, curr_row[HASH_IDX], curr_row[phase_bit(0)], curr_row[phase_bit(3)]);
     }
 
     fn gen_shift_wis(curr_row: &mut [F; NUM_COLS], next_row: &mut [F; NUM_COLS]) {
@@ -427,8 +429,6 @@ impl<F: Field> Sha2TraceGenerator<F> {
         Self::gen_shift_wis(curr_row, next_row)
     }
 
-
-
     pub fn gen_hash(&mut self, left_input: [u32; 8], right_input: [u32; 8]) -> [u32; 8] {
         self.left_input = left_input;
         self.right_input = right_input;
@@ -440,16 +440,18 @@ impl<F: Field> Sha2TraceGenerator<F> {
         self.gen_phase_3(his);
 
         self.hash_idx += 1;
+        self.step = 0;
         his
     }
 
     pub fn into_polynomial_values(self) -> Vec<PolynomialValues<F>> {
         trace_rows_to_poly_values(self.trace.0) 
     }
+
 }
 
-pub fn block_to_u32_array(block: [u8; 64]) -> [u32; BLOCK_LEN] {
-    let mut block_u32 = [0; BLOCK_LEN];
+pub fn to_u32_array_be<const N: usize>(block: [u8; N * 4]) -> [u32; N] {
+    let mut block_u32 = [0; N];
     for (o, chunk) in block_u32.iter_mut().zip(block.chunks_exact(4)) {
         *o = u32::from_be_bytes(chunk.try_into().unwrap());
     }
@@ -523,7 +525,7 @@ mod tests {
         let mut state = HASH_IV;
         compress256(&mut state, &[block_arr]);
 
-        let block = block_to_u32_array(block);
+        let block: [u32; 16] = to_u32_array_be(block);
         let left_input = *array_ref![block, 0, 8];
         let right_input = *array_ref![block, 8, 8];
         let mut generator = Sha2TraceGenerator::<F>::new(128);
