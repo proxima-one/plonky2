@@ -52,7 +52,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
 
         eval_check_his(curr_row, next_row, yield_constr);
 		eval_shift_wis(curr_row, next_row, yield_constr);
-		// eval_bits_are_bits(curr_row, next_row, yield_constr);
+		eval_bits_are_bits(curr_row, next_row, yield_constr);
     }
 
 	fn eval_ext_circuit(
@@ -103,12 +103,35 @@ mod tests {
     use crate::sha256_stark::generation::Sha2TraceGenerator;
     use crate::config::StarkConfig;
     use crate::prover::prove;
+    use crate::stark_testing::{test_stark_low_degree, test_stark_circuit_constraints};
     use crate::verifier::verify_stark_proof;
 
     use plonky2::util::timing::TimingTree;
     use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
     use anyhow::Result;
 
+    #[test]
+    fn test_stark_degree() -> Result<()> {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+        type S = Sha2CompressionStark<F, D>;
+
+        let stark = S::new();
+        test_stark_low_degree(stark)
+    }
+
+    // #[test]
+    // fn test_stark_circuit() -> Result<()> {
+    //     const D: usize = 2;
+    //     type C = PoseidonGoldilocksConfig;
+    //     type F = <C as GenericConfig<D>>::F;
+    //     type S = Sha2CompressionStark<F, D>;
+
+    //     let stark = S::new();
+
+    //     test_stark_circuit_constraints::<F, C, S, D>(stark)
+    // }
 
     #[test]
     fn test_single() -> Result<()> {

@@ -23,8 +23,6 @@ pub const NUM_PHASE_1_ROWS: usize = 8;
 pub const NUM_PHASE_2_ROWS: usize = 48;
 pub const NUM_PHASE_3_ROWS: usize = 8;
 
-
-
 /// compute field_representation of a sequence of 32 bits interpreted big-endian u32 of a specific element of an trace array
 macro_rules! bit_decomp_32_at_idx {
     ($row:expr, $idx:expr, $col_fn:ident, $f:ty, $p:ty) => {
