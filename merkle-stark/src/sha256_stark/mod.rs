@@ -1,28 +1,44 @@
 use std::marker::PhantomData;
 
-use plonky2::field::{types::Field, polynomial::PolynomialValues};
-use plonky2::{field::{extension::{Extendable, FieldExtension}, packed::PackedField}, hash::hash_types::RichField, plonk::circuit_builder::CircuitBuilder};
+use plonky2::field::{polynomial::PolynomialValues, types::Field};
+use plonky2::{
+    field::{
+        extension::{Extendable, FieldExtension},
+        packed::PackedField,
+    },
+    hash::hash_types::RichField,
+    plonk::circuit_builder::CircuitBuilder,
+};
 use plonky2_util::log2_ceil;
 
-use crate::{stark::Stark, vars::{StarkEvaluationVars, StarkEvaluationTargets}, constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer}};
+use crate::{
+    constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer},
+    stark::Stark,
+    vars::{StarkEvaluationTargets, StarkEvaluationVars},
+};
 
 pub mod constants;
-pub mod layout;
 pub mod constraints;
 pub mod generation;
+pub mod layout;
 
-use constraints::{eval_phase_0_and_1, eval_phase_2, eval_phase_3, eval_msg_schedule, eval_round_fn, eval_phase_transitions, eval_shift_wis, eval_check_his, eval_bits_are_bits};
+use constraints::{
+    eval_bits_are_bits, eval_check_his, eval_msg_schedule, eval_phase_0_and_1, eval_phase_2,
+    eval_phase_3, eval_phase_transitions, eval_round_fn, eval_shift_wis,
+};
+use generation::{to_u32_array_be, Sha2TraceGenerator};
 use layout::{NUM_COLS, NUM_STEPS_PER_HASH};
-use generation::{Sha2TraceGenerator, to_u32_array_be};
 
 #[derive(Copy, Clone)]
 pub struct Sha2CompressionStark<F: RichField + Extendable<D>, const D: usize> {
-	_phantom: PhantomData<F>,
+    _phantom: PhantomData<F>,
 }
 
 impl<F: RichField + Extendable<D>, const D: usize> Sha2CompressionStark<F, D> {
     pub fn new() -> Self {
-        Self { _phantom: PhantomData }
+        Self {
+            _phantom: PhantomData,
+        }
     }
 }
 
@@ -38,33 +54,33 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
         FE: FieldExtension<D2, BaseField = F>,
         P: PackedField<Scalar = FE>,
     {
-		let curr_row = vars.local_values;
-		let next_row = vars.next_values;
+        let curr_row = vars.local_values;
+        let next_row = vars.next_values;
 
         eval_phase_0_and_1(curr_row, next_row, yield_constr);
-		eval_phase_2(curr_row, next_row, yield_constr);
-		eval_phase_3(curr_row, next_row, yield_constr);
+        eval_phase_2(curr_row, next_row, yield_constr);
+        eval_phase_3(curr_row, next_row, yield_constr);
 
-		eval_phase_transitions(curr_row, next_row, yield_constr);
+        eval_phase_transitions(curr_row, next_row, yield_constr);
 
-		eval_msg_schedule(curr_row, next_row, yield_constr);
-		eval_round_fn(curr_row, next_row, yield_constr);
+        eval_msg_schedule(curr_row, next_row, yield_constr);
+        eval_round_fn(curr_row, next_row, yield_constr);
 
         eval_check_his(curr_row, next_row, yield_constr);
-		eval_shift_wis(curr_row, next_row, yield_constr);
-		eval_bits_are_bits(curr_row, next_row, yield_constr);
+        eval_shift_wis(curr_row, next_row, yield_constr);
+        eval_bits_are_bits(curr_row, next_row, yield_constr);
     }
 
-	fn eval_ext_circuit(
+    fn eval_ext_circuit(
         &self,
         builder: &mut CircuitBuilder<F, D>,
         vars: StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
         yield_constr: &mut RecursiveConstraintConsumer<F, D>,
     ) {
-		todo!()
-	}
+        todo!()
+    }
 
-	fn constraint_degree(&self) -> usize {
+    fn constraint_degree(&self) -> usize {
         3
     }
 }
@@ -99,16 +115,16 @@ impl Sha2StarkCompressor {
 
 #[cfg(test)]
 mod tests {
+    use anyhow::Result;
+    use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
+    use plonky2::util::timing::TimingTree;
+
     use super::*;
-    use crate::sha256_stark::generation::Sha2TraceGenerator;
     use crate::config::StarkConfig;
     use crate::prover::prove;
-    use crate::stark_testing::{test_stark_low_degree, test_stark_circuit_constraints};
+    use crate::sha256_stark::generation::Sha2TraceGenerator;
+    use crate::stark_testing::{test_stark_circuit_constraints, test_stark_low_degree};
     use crate::verifier::verify_stark_proof;
-
-    use plonky2::util::timing::TimingTree;
-    use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
-    use anyhow::Result;
 
     #[test]
     fn test_stark_degree() -> Result<()> {
@@ -154,13 +170,7 @@ mod tests {
         let stark = S::new();
         let trace = generator.into_polynomial_values();
         let mut timing = TimingTree::default();
-        let proof = prove::<F, C, S, D>(
-            stark,
-            &config,
-            trace,
-            [],
-            &mut timing
-        )?;
+        let proof = prove::<F, C, S, D>(stark, &config, trace, [], &mut timing)?;
 
         verify_stark_proof(stark, proof, &config)?;
 
@@ -197,13 +207,7 @@ mod tests {
         let config = StarkConfig::standard_fast_config();
         let stark = S::new();
         let mut timing = TimingTree::default();
-        let proof = prove::<F, C, S, D>(
-            stark,
-            &config,
-            trace,
-            [],
-            &mut timing
-        )?;
+        let proof = prove::<F, C, S, D>(stark, &config, trace, [], &mut timing)?;
 
         verify_stark_proof(stark, proof, &config)?;
 
