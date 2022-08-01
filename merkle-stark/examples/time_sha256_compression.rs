@@ -1,22 +1,13 @@
 use log::{Level, LevelFilter};
 use merkle_stark::{
     config::StarkConfig,
-    constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer},
     prover::prove,
     sha256_stark::{Sha2CompressionStark, Sha2StarkCompressor},
-    stark::Stark,
-    vars::{StarkEvaluationTargets, StarkEvaluationVars},
     verifier::verify_stark_proof,
 };
 use plonky2::hash::hash_types::BytesHash;
 use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
 use plonky2::{
-    field::{
-        extension::{Extendable, FieldExtension},
-        packed::PackedField,
-    },
-    hash::hash_types::RichField,
-    plonk::circuit_builder::CircuitBuilder,
     util::timing::TimingTree,
 };
 
@@ -43,7 +34,9 @@ fn main() {
 
     let trace = compressor.generate();
 
-    let config = StarkConfig::standard_fast_config();
+    let mut config = StarkConfig::standard_fast_config();
+	config.fri_config.cap_height = 4;
+
     let stark = S::new();
     let mut timing = TimingTree::new("prove", Level::Debug);
     let proof = prove::<F, C, S, D>(stark, &config, trace, [], &mut timing).unwrap();

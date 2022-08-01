@@ -611,7 +611,6 @@ pub(crate) fn eval_phase_transitions<F, P>(
 
 pub(crate) fn eval_bits_are_bits<F, P>(
     curr_row: &[P; NUM_COLS],
-    next_row: &[P; NUM_COLS],
     yield_constr: &mut ConstraintConsumer<P>,
 ) where
     F: Field,

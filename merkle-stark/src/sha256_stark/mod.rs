@@ -68,7 +68,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
 
         eval_check_his(curr_row, next_row, yield_constr);
         eval_shift_wis(curr_row, next_row, yield_constr);
-        eval_bits_are_bits(curr_row, next_row, yield_constr);
+        eval_bits_are_bits(curr_row, yield_constr);
     }
 
     fn eval_ext_circuit(
@@ -123,7 +123,7 @@ mod tests {
     use crate::config::StarkConfig;
     use crate::prover::prove;
     use crate::sha256_stark::generation::Sha2TraceGenerator;
-    use crate::stark_testing::{test_stark_circuit_constraints, test_stark_low_degree};
+    use crate::stark_testing::test_stark_low_degree;
     use crate::verifier::verify_stark_proof;
 
     #[test]

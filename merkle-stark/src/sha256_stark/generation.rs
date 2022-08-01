@@ -3,13 +3,11 @@
 use core::convert::TryInto;
 
 use arrayref::{array_mut_ref, array_ref};
-use plonky2::field::{packed::PackedField, polynomial::PolynomialValues, types::Field};
+use plonky2::field::{polynomial::PolynomialValues, types::Field};
 
 use super::constants::{HASH_IV, ROUND_CONSTANTS};
 use crate::sha256_stark::layout::*;
 use crate::util::trace_rows_to_poly_values;
-
-const BLOCK_LEN: usize = 16;
 
 fn is_power_of_two(n: u64) -> bool {
     n & (n - 1) == 0
@@ -391,7 +389,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
 
             if i != 47 {
                 Self::gen_keep_his_same(curr_row, next_row);
-                let mut wi = Self::gen_msg_schedule(next_row, wis[0], wis[13], w16, wis[8]);
+                let wi = Self::gen_msg_schedule(next_row, wis[0], wis[13], w16, wis[8]);
                 wis[15] = wi;
             }
 
@@ -460,7 +458,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
         let his = HASH_IV;
         let (wis, abcd, efgh) = self.gen_phase_0_and_1(his);
 
-        let (wis, abcd, efgh, his) = self.gen_phase_2(wis, abcd, efgh, his);
+        let (_wis, _abcd, _efgh, his) = self.gen_phase_2(wis, abcd, efgh, his);
         self.gen_phase_3(his);
 
         self.hash_idx += 1;
@@ -514,8 +512,6 @@ fn rotr(x: u32, n: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use core::convert::TryInto;
-
     use generic_array::{typenum::U64, GenericArray};
     use plonky2_field::goldilocks_field::GoldilocksField;
     use sha2::compress256;
