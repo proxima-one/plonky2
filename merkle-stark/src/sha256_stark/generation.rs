@@ -38,7 +38,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
     pub fn new(max_rows: usize) -> Sha2TraceGenerator<F> {
         Sha2TraceGenerator {
             trace: Sha2Trace::new(max_rows),
-            hash_idx: 0,
+            hash_idx: 1, // hash_idx is 1-indexed
             left_input: [0; 8],
             right_input: [0; 8],
             step: 0,
@@ -50,7 +50,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
     }
 
     fn curr_row_idx(&self) -> usize {
-        self.hash_idx * NUM_STEPS_PER_HASH + self.step
+        (self.hash_idx - 1) * NUM_STEPS_PER_HASH + self.step
     }
 
     fn get_next_window(&mut self) -> (&mut [[F; NUM_COLS]; 2], usize, usize) {
@@ -62,6 +62,17 @@ impl<F: Field> Sha2TraceGenerator<F> {
         self.step += 1;
 
         (array_mut_ref![self.trace.0, idx, 2], hash_idx, step)
+    }
+
+    fn get_next_row(&mut self) -> (&mut [F; NUM_COLS], usize, usize) {
+        let idx = self.curr_row_idx();
+        assert!(idx < self.max_rows(), "get_next_window exceeded MAX_ROWS");
+
+        let hash_idx = self.hash_idx;
+        let step = self.step;
+        self.step += 1;
+
+        (&mut self.trace.0[idx], hash_idx, step)
     }
 
     // returns wi
@@ -200,12 +211,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
     }
 
     // fills in stuff the other fns don't at each row
-    fn gen_misc(
-        curr_row: &mut [F; NUM_COLS],
-        next_row: &mut [F; NUM_COLS],
-        step: usize,
-        hash_idx: usize,
-    ) {
+    fn gen_misc(curr_row: &mut [F; NUM_COLS], step: usize, hash_idx: usize) {
         curr_row[HASH_IDX] = F::from_canonical_u64(hash_idx as u64);
 
         for i in 0..NUM_STEPS_PER_HASH {
@@ -213,62 +219,6 @@ impl<F: Field> Sha2TraceGenerator<F> {
         }
 
         curr_row[step_bit(step)] = F::ONE;
-
-        match step {
-            // phase 0
-            0..8 => {
-                curr_row[phase_bit(0)] = F::ONE;
-                curr_row[phase_bit(1)] = F::ZERO;
-                curr_row[phase_bit(2)] = F::ZERO;
-                curr_row[phase_bit(3)] = F::ZERO;
-                curr_row[CHUNK_IDX] = F::from_canonical_u64(step as u64);
-
-                for i in 0..8 {
-                    next_row[h_i(i)] = curr_row[h_i(i)];
-                }
-            }
-            // phase 1
-            8..16 => {
-                curr_row[phase_bit(0)] = F::ZERO;
-                curr_row[phase_bit(1)] = F::ONE;
-                curr_row[phase_bit(2)] = F::ZERO;
-                curr_row[phase_bit(3)] = F::ZERO;
-                curr_row[CHUNK_IDX] = F::from_canonical_u64(step as u64 - 8);
-
-                for i in 0..8 {
-                    next_row[h_i(i)] = curr_row[h_i(i)];
-                }
-            }
-            // phase 2
-            16..64 => {
-                curr_row[phase_bit(0)] = F::ZERO;
-                curr_row[phase_bit(1)] = F::ZERO;
-                curr_row[phase_bit(2)] = F::ONE;
-                curr_row[phase_bit(3)] = F::ZERO;
-            }
-            // phase 3
-            64..72 => {
-                curr_row[phase_bit(0)] = F::ZERO;
-                curr_row[phase_bit(1)] = F::ZERO;
-                curr_row[phase_bit(2)] = F::ZERO;
-                curr_row[phase_bit(3)] = F::ONE;
-
-                for i in 1..16 {
-                    for bit in 0..32 {
-                        next_row[wi_bit(i, bit)] = curr_row[wi_bit(i, bit)];
-                    }
-                }
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn gen_shift_wis(curr_row: &mut [F; NUM_COLS], next_row: &mut [F; NUM_COLS]) {
-        for i in 0..15 {
-            for bit in 0..32 {
-                next_row[wi_bit(i, bit)] = curr_row[wi_bit(i + 1, bit)];
-            }
-        }
     }
 
     fn gen_keep_his_same(curr_row: &mut [F; NUM_COLS], next_row: &mut [F; NUM_COLS]) {
@@ -276,14 +226,19 @@ impl<F: Field> Sha2TraceGenerator<F> {
             next_row[h_i(i)] = curr_row[h_i(i)]
         }
     }
-
-    // returns wis, abcd, efgh, last wi shifted out of scope
-    fn gen_phase_0_and_1(&mut self, his: [u32; 8]) -> ([u32; 16], [u32; 4], [u32; 4]) {
+    // returns wis, abcd, efgh
+    fn gen_phase_0(&mut self, his: [u32; 8]) -> ([u32; 16], [u32; 4], [u32; 4]) {
         let left_input = self.left_input;
         let right_input = self.right_input;
-        let mut wis = [0; 16];
         let mut abcd = *array_ref![his, 0, 4];
         let mut efgh = *array_ref![his, 4, 4];
+
+        let mut wis = [0; 16];
+        for i in 0..8 {
+            wis[i] = left_input[i];
+            wis[i + 8] = right_input[i];
+        }
+        wis = rotl_wis(wis);
 
         // left inputs
         for i in 0..16 {
@@ -316,37 +271,27 @@ impl<F: Field> Sha2TraceGenerator<F> {
                 for j in 0..8 {
                     curr_row[h_i(j)] = F::from_canonical_u32(HASH_IV[j]);
                 }
+
+                // load inputs
+                for j in 0..8 {
+                    curr_row[input_i(j)] = F::from_canonical_u32(left_input[j])
+                        + F::from_canonical_u64(hash_idx as u64) * F::from_canonical_u64(1 << 32);
+
+                    curr_row[input_i(j + 8)] = F::from_canonical_u32(right_input[j])
+                        + F::from_canonical_u64(hash_idx as u64) * F::from_canonical_u64(1 << 32);
+                }
+
+                // load rotated wis
+                let mut wis = wis;
+                for j in 0..16 {
+                    for bit in 0..32 {
+                        curr_row[wi_bit(j, bit)] = F::from_canonical_u32(wis[j] & 1);
+                        wis[j] >>= 1;
+                    }
+                }
             }
 
-            Self::gen_misc(curr_row, next_row, step, hash_idx);
-
-            // load input cols
-            let mut wi = if i < 8 {
-                let wi = left_input[i];
-                curr_row[LEFT_INPUT_COL] = F::from_canonical_u64(hash_idx as u64)
-                    * F::from_canonical_u64(1 << 35)
-                    + F::from_canonical_u64(i as u64) * F::from_canonical_u64(1 << 32)
-                    + F::from_canonical_u32(wi);
-                curr_row[RIGHT_INPUT_COL] = F::ZERO;
-                wi
-            } else {
-                let wi = right_input[i - 8];
-                curr_row[RIGHT_INPUT_COL] = F::from_canonical_u64(hash_idx as u64)
-                    * F::from_canonical_u64(1 << 35)
-                    + F::from_canonical_u64(i as u64 - 8) * F::from_canonical_u64(1 << 32)
-                    + F::from_canonical_u32(wi);
-                curr_row[LEFT_INPUT_COL] = F::ZERO;
-                wi
-            };
-
-            wis[15] = wi;
-
-            // load wi
-            for bit in 0..32 {
-                curr_row[wi_bit(15, bit)] = F::from_canonical_u32(wi & 1);
-                wi >>= 1;
-            }
-
+            Self::gen_misc(curr_row, step, hash_idx);
             Self::gen_keep_his_same(curr_row, next_row);
 
             let ki = ROUND_CONSTANTS[i];
@@ -357,19 +302,31 @@ impl<F: Field> Sha2TraceGenerator<F> {
                 let w16 = wis[0];
                 wis = shift_wis(wis);
                 let wi = Self::gen_msg_schedule(next_row, wis[0], wis[13], w16, wis[8]);
-                wis[15] = wi
-            } else {
-                wis = shift_wis(wis);
-            }
+                wis[15] = wi;
 
-            Self::gen_shift_wis(curr_row, next_row);
+                // shift wis left
+                for i in 0..15 {
+                    for bit in 0..32 {
+                        next_row[wi_bit(i, bit)] = curr_row[wi_bit(i + 1, bit)];
+                    }
+                }
+            } else {
+                wis = rotl_wis(wis);
+
+                // rotate wis left
+                for i in 0..16 {
+                    for bit in 0..32 {
+                        next_row[wi_bit(i, bit)] = curr_row[wi_bit((i + 1) % 16, bit)];
+                    }
+                }
+            }
         }
 
         (wis, abcd, efgh)
     }
 
     // returns wis, abcd, efgh, his
-    fn gen_phase_2(
+    fn gen_phase_1(
         &mut self,
         mut wis: [u32; 16],
         mut abcd: [u32; 4],
@@ -378,7 +335,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
     ) -> ([u32; 16], [u32; 4], [u32; 4], [u32; 8]) {
         for i in 0..48 {
             let ([curr_row, next_row], hash_idx, step) = self.get_next_window();
-            Self::gen_misc(curr_row, next_row, step, hash_idx);
+            Self::gen_misc(curr_row, step, hash_idx);
 
             let ki = ROUND_CONSTANTS[i + 16];
             curr_row[KI] = F::from_canonical_u32(ki);
@@ -398,8 +355,8 @@ impl<F: Field> Sha2TraceGenerator<F> {
                 for j in 0..4 {
                     let hj_next_u64 = his[j] as u64 + abcd[j] as u64;
                     let hj_next_quotient = hj_next_u64 / (1 << 32);
-                    his[j] = his[j].wrapping_add(abcd[j]);
 
+                    his[j] = his[j].wrapping_add(abcd[j]);
                     curr_row[h_i_next_field(j)] = F::from_canonical_u64(hj_next_u64);
                     curr_row[h_i_next_quotient(j)] = F::from_canonical_u64(hj_next_quotient);
                     next_row[h_i(j)] = F::from_canonical_u32(his[j]);
@@ -408,47 +365,32 @@ impl<F: Field> Sha2TraceGenerator<F> {
                 for j in 0..4 {
                     let hj_next_u64 = his[j + 4] as u64 + efgh[j] as u64;
                     let hj_next_quotient = hj_next_u64 / (1 << 32);
-                    his[j + 4] = his[j + 4].wrapping_add(efgh[j]);
 
+                    his[j + 4] = his[j + 4].wrapping_add(efgh[j]);
                     curr_row[h_i_next_field(j + 4)] = F::from_canonical_u64(hj_next_u64);
                     curr_row[h_i_next_quotient(j + 4)] = F::from_canonical_u64(hj_next_quotient);
                     next_row[h_i(j + 4)] = F::from_canonical_u32(his[j + 4]);
                 }
             }
 
-            Self::gen_shift_wis(curr_row, next_row);
+            // shift wis left by one
+            for i in 0..15 {
+                for bit in 0..32 {
+                    next_row[wi_bit(i, bit)] = curr_row[wi_bit(i + 1, bit)];
+                }
+            }
         }
 
         (wis, abcd, efgh, his)
     }
 
-    fn gen_phase_3(&mut self, mut his: [u32; 8]) {
-        for i in 0..7 {
-            let ([curr_row, next_row], hash_idx, step) = self.get_next_window();
-            Self::gen_misc(curr_row, next_row, step, hash_idx);
-
-            curr_row[CHUNK_IDX] = F::from_canonical_u64(i as u64);
-            curr_row[OUTPUT_COL] = F::from_canonical_u32(his[0])
-                + F::from_canonical_u64(hash_idx as u64) * F::from_canonical_u64(1 << 35)
-                + F::from_canonical_u64(i as u64) * F::from_canonical_u64(1 << 32);
-
-            for i in 0..7 {
-                next_row[h_i(i)] = F::from_canonical_u32(his[i + 1]);
-            }
-
-            his = shift_his(his);
-
-            Self::gen_shift_wis(curr_row, next_row);
+    fn gen_last_step(&mut self, his: [u32; 8]) {
+        let (curr_row, hash_idx, step) = self.get_next_row();
+        Self::gen_misc(curr_row, step, hash_idx);
+        for i in 0..8 {
+            curr_row[output_i(i)] = F::from_canonical_u32(his[i])
+                + F::from_canonical_u64(hash_idx as u64) * F::from_canonical_u64(1 << 32);
         }
-
-        let ([curr_row, next_row], hash_idx, step) = self.get_next_window();
-        Self::gen_misc(curr_row, next_row, step, hash_idx);
-        curr_row[CHUNK_IDX] = F::from_canonical_u64(7 as u64);
-        curr_row[OUTPUT_COL] = F::from_canonical_u32(his[0])
-            + F::from_canonical_u64(hash_idx as u64) * F::from_canonical_u64(1 << 35)
-            + F::from_canonical_u64(7 as u64) * F::from_canonical_u64(1 << 32);
-
-        Self::gen_shift_wis(curr_row, next_row)
     }
 
     pub fn gen_hash(&mut self, left_input: [u32; 8], right_input: [u32; 8]) -> [u32; 8] {
@@ -456,10 +398,9 @@ impl<F: Field> Sha2TraceGenerator<F> {
         self.right_input = right_input;
 
         let his = HASH_IV;
-        let (wis, abcd, efgh) = self.gen_phase_0_and_1(his);
-
-        let (_wis, _abcd, _efgh, his) = self.gen_phase_2(wis, abcd, efgh, his);
-        self.gen_phase_3(his);
+        let (wis, abcd, efgh) = self.gen_phase_0(his);
+        let (_wis, _abcd, _efgh, his) = self.gen_phase_1(wis, abcd, efgh, his);
+        self.gen_last_step(his);
 
         self.hash_idx += 1;
         self.step = 0;
@@ -489,12 +430,12 @@ fn shift_wis(mut wis: [u32; 16]) -> [u32; 16] {
 }
 
 #[inline(always)]
-fn shift_his(mut his: [u32; 8]) -> [u32; 8] {
-    for i in 0..7 {
-        his[i] = his[i + 1];
+fn rotl_wis(wis: [u32; 16]) -> [u32; 16] {
+    let mut res = wis;
+    for i in 0..16 {
+        res[i] = wis[(i + 1) % 16];
     }
-    his[7] = 0;
-    his
+    res
 }
 
 #[inline(always)]

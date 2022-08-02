@@ -7,9 +7,7 @@ use merkle_stark::{
 };
 use plonky2::hash::hash_types::BytesHash;
 use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
-use plonky2::{
-    util::timing::TimingTree,
-};
+use plonky2::util::timing::TimingTree;
 
 const D: usize = 2;
 type C = PoseidonGoldilocksConfig;
@@ -35,7 +33,7 @@ fn main() {
     let trace = compressor.generate();
 
     let mut config = StarkConfig::standard_fast_config();
-	config.fri_config.cap_height = 4;
+    config.fri_config.cap_height = 4;
 
     let stark = S::new();
     let mut timing = TimingTree::new("prove", Level::Debug);
