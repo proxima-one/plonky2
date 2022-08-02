@@ -1,0 +1,22 @@
+[package]
+name = "plonky2_solana_verifier_lib"
+description = "standalone plonky2 verifier written to be included as a library in a solana program"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["parallel"]
+parallel = ["maybe_rayon/parallel"]
+
+[dependencies]
+plonky2 = { path = "../plonky2" }
+plonky2_util = { path = "../util" }
+anyhow = "1.0.40"
+env_logger = "0.9.0"
+itertools = "0.10.0"
+log = "0.4.14"
+maybe_rayon = { path = "../maybe_rayon"}
+
+[target.'cfg(target_os = "solana")'.dependencies]
+solana-program = { path = "../../solana/sdk/program" }
+

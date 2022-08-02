@@ -19,3 +19,6 @@ pub mod hash;
 pub mod iop;
 pub mod plonk;
 pub mod util;
+
+#[cfg(feature = "solana_verifier")]
+pub mod solana_verifier;
