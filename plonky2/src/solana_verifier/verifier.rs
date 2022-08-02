@@ -4,12 +4,12 @@ use plonky2_field::types::Field;
 
 use super::circuit_buf::CircuitBuf;
 use super::proof_buf::ProofBuf;
-use crate::buffer_verifier::fri_verifier::{
+use crate::solana_verifier::fri_verifier::{
     fri_verifier_query_round, fri_verify_proof_of_work, get_final_poly_len, populate_fri_instance,
     precompute_reduced_evals,
 };
-use crate::buffer_verifier::get_challenges::get_challenges;
-use crate::buffer_verifier::vanishing_poly::eval_vanishing_poly;
+use crate::solana_verifier::get_challenges::get_challenges;
+use crate::solana_verifier::vanishing_poly::eval_vanishing_poly;
 use crate::plonk::circuit_data::{CommonCircuitData, VerifierOnlyCircuitData};
 use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::plonk_common::reduce_with_powers;
@@ -94,16 +94,10 @@ where
         fri_rate_bits,
     )?;
 
-    #[cfg(target_os = "solana")]
-    solana_program::msg!("8");
-
     proof_buf.write_challenges(&challenges)?;
     let fri_pow_response = proof_buf.read_fri_pow_response()?;
     let fri_pow_bits = circuit_buf.read_fri_proof_of_work_bits()?;
     fri_verify_proof_of_work(fri_pow_response, fri_pow_bits)?;
-
-    #[cfg(target_os = "solana")]
-    solana_program::msg!("9");
 
     let plonk_zeta = proof_buf.read_challenge_zeta()?;
     populate_fri_instance::<C, D>(
@@ -128,6 +122,7 @@ pub fn verify_constraints<'a, 'b, C: GenericConfig<D>, const D: usize>(
 where
     [(); C::Hasher::HASH_SIZE]:,
 {
+
     let num_constants = circuit_buf.read_num_constants()?;
     let num_wires = circuit_buf.read_num_wires()?;
     let num_routed_wires = circuit_buf.read_num_routed_wires()?;
@@ -161,6 +156,9 @@ where
         public_inputs_hash: &pis_hash,
     };
 
+    #[cfg(target_os = "solana")]
+    solana_program::msg!("1");
+
     let local_zs = &openings.plonk_zs;
     let next_zs = &openings.plonk_zs_next;
     let s_sigmas = &openings.plonk_sigmas;
@@ -176,6 +174,10 @@ where
     let plonk_alphas = proof_buf.read_challenge_alphas(num_challenges)?;
     let plonk_betas = proof_buf.read_challenge_betas(num_challenges)?;
     let plonk_gammas = proof_buf.read_challenge_gammas(num_challenges)?;
+
+    #[cfg(target_os = "solana")]
+    solana_program::msg!("2");
+
     let vanishing_polys_zeta = eval_vanishing_poly::<C::F, C, D>(
         plonk_zeta,
         vars,
@@ -196,6 +198,10 @@ where
         num_challenges,
         num_routed_wires,
     );
+
+
+    #[cfg(target_os = "solana")]
+    solana_program::msg!("2");
 
     // Check each polynomial identity, of the form `vanishing(x) = Z_H(x) quotient(x)`, at zeta.
     let quotient_polys_zeta = &openings.quotient_polys;
@@ -321,7 +327,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        buffer_verifier::serialization::{serialize_circuit_data, serialize_proof_with_pis},
+        solana_verifier::serialization::{serialize_circuit_data, serialize_proof_with_pis},
         gates::noop::NoopGate,
         hash::hash_types::RichField,
         iop::witness::PartialWitness,
@@ -375,7 +381,7 @@ mod tests {
     }
 
     #[test]
-    fn test_buffer_verifier() -> Result<()> {
+    fn test_solana_verifier() -> Result<()> {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;

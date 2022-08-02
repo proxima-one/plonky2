@@ -55,26 +55,17 @@ pub(crate) fn get_challenges<
 
     let plonk_alphas = challenger.get_n_challenges(num_challenges);
 
-    #[cfg(target_os = "solana")]
-    solana_program::msg!("yo");
-
-    #[cfg(target_os = "solana")]
-    solana_program::log::sol_log_compute_units();
-
     challenger.observe_cap(quotient_polys_cap);
     let plonk_zeta = challenger.get_extension_challenge::<D>();
 
     challenger.observe_openings_iter(&mut openings.iter_fri_openings());
-
-    #[cfg(target_os = "solana")]
-    solana_program::msg!("yo");
 
     Ok(ProofChallenges {
         plonk_betas,
         plonk_gammas,
         plonk_alphas,
         plonk_zeta,
-        fri_challenges: challenger.buffer_verifier_fri_challenges::<C, D>(
+        fri_challenges: challenger.solana_verifier_fri_challenges::<C, D>(
             commit_phase_merkle_caps,
             final_poly,
             pow_witness,
@@ -86,7 +77,7 @@ pub(crate) fn get_challenges<
 }
 
 impl<F: RichField, H: Hasher<F>> Challenger<F, H> {
-    pub fn buffer_verifier_fri_challenges<C: GenericConfig<D, F = F>, const D: usize>(
+    pub fn solana_verifier_fri_challenges<C: GenericConfig<D, F = F>, const D: usize>(
         &mut self,
         commit_phase_merkle_caps: &[MerkleCap<F, C::Hasher>],
         final_poly: &PolynomialCoeffs<F::Extension>,

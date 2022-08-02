@@ -16,7 +16,7 @@ use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::plonk_common::{PlonkOracle, FRI_ORACLES};
 use crate::util::reducing::ReducingFactor;
 use crate::util::reverse_bits;
-use crate::buffer_verifier::proof_buf::ProofBuf;
+use crate::solana_verifier::proof_buf::ProofBuf;
 
 /// Computes P'(x^arity) from {P(x*g^i)}_(i=0..arity), where g is a `arity`-th root of unity
 /// and P' is the FRI reduced polynomial.
@@ -242,10 +242,6 @@ pub fn populate_fri_instance<'a, C: GenericConfig<D>, const D: usize>(
     plonk_zeta: C::FE,
 ) -> IoResult<()> {
     let num_preprocessed_polys = num_constants + num_routed_wires;
-
-    #[cfg(target_os = "solana")]
-    solana_program::msg!("{}", num_preprocessed_polys);
-
     let fri_preprocessed_polys = FriPolynomialInfo::iter_from_range(
         PlonkOracle::CONSTANTS_SIGMAS.index,
         0..num_preprocessed_polys,
@@ -254,16 +250,12 @@ pub fn populate_fri_instance<'a, C: GenericConfig<D>, const D: usize>(
     let fri_wire_polys = FriPolynomialInfo::iter_from_range(PlonkOracle::WIRES.index, 0..num_wires);
 
     let num_zs_partial_products_polys = num_challenges * (1 + num_partial_products);
-    #[cfg(target_os = "solana")]
-    solana_program::msg!("{}", num_zs_partial_products_polys);
     let fri_zs_partial_products_polys = FriPolynomialInfo::iter_from_range(
         PlonkOracle::ZS_PARTIAL_PRODUCTS.index,
         0..num_zs_partial_products_polys,
     );
 
     let num_quotient_polys = num_challenges * quotient_degree_factor;
-    #[cfg(target_os = "solana")]
-    solana_program::msg!("{}", num_quotient_polys);
     let fri_quotient_polys =
         FriPolynomialInfo::iter_from_range(PlonkOracle::QUOTIENT.index, 0..num_quotient_polys);
 

@@ -11,7 +11,7 @@ use std::{fs::File, num::ParseIntError, ops::RangeInclusive, str::FromStr};
 use anyhow::{anyhow, Context as _, Result};
 use log::{info, Level, LevelFilter};
 use plonky2::{
-    buffer_verifier::{proof_buf::ProofBuf, serialization::serialize_proof_with_pis},
+    solana_verifier::{proof_buf::ProofBuf, serialization::serialize_proof_with_pis},
     fri::reduction_strategies::FriReductionStrategy,
     fri::FriConfig,
     gates::noop::NoopGate,

@@ -289,7 +289,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        buffer_verifier::serialization::serialize_circuit_data,
+        solana_verifier::serialization::serialize_circuit_data,
         gates::noop::NoopGate,
         hash::hash_types::RichField,
         iop::witness::PartialWitness,

@@ -1,3 +1,5 @@
+use itertools::{Itertools, Chunks, TupleWindows};
+use std::iter;
 use plonky2_field::batch_util::batch_add_inplace;
 use plonky2_field::extension::{Extendable, FieldExtension};
 use plonky2_field::types::Field;
@@ -14,9 +16,10 @@ use crate::plonk::config::GenericConfig;
 use crate::plonk::plonk_common;
 use crate::plonk::plonk_common::eval_l_1_circuit;
 use crate::plonk::vars::{EvaluationTargets, EvaluationVars, EvaluationVarsBaseBatch};
-use crate::util::partial_products::{check_partial_products, check_partial_products_circuit};
+use crate::util::partial_products::check_partial_products_iter;
 use crate::util::reducing::ReducingFactorTarget;
 use crate::util::strided_view::PackedStridedView;
+
 
 /// Evaluate the vanishing polynomial at `x`. In this context, the vanishing polynomial is a random
 /// linear combination of gate constraints, plus some other terms relating to the permutation
@@ -51,6 +54,9 @@ pub(crate) fn eval_vanishing_poly<
     let constraint_terms =
         evaluate_gate_constraints::<F, C, D>(vars, num_gate_constraints, gates, selectors_info);
 
+    #[cfg(target_os = "solana")]
+    solana_program::msg!("3");
+
     // The L_1(x) (Z(x) - 1) vanishing terms.
     let mut vanishing_z_1_terms = Vec::new();
     // The terms checking the partial products.
@@ -70,29 +76,37 @@ pub(crate) fn eval_vanishing_poly<
                 let k_i = k_is[j];
                 let s_id = x.scalar_mul(k_i);
                 wire_value + s_id.scalar_mul(betas[i]) + gammas[i].into()
-            })
-            .collect::<Vec<_>>();
+            });
         let denominator_values = (0..num_routed_wires)
             .map(|j| {
                 let wire_value = vars.local_wires[j];
                 let s_sigma = s_sigmas[j];
                 wire_value + s_sigma.scalar_mul(betas[i]) + gammas[i].into()
-            })
-            .collect::<Vec<_>>();
+            });
 
         // The partial products considered for this iteration of `i`.
         let current_partial_products = &partial_products[i * num_prods..(i + 1) * num_prods];
         // Check the quotient partial products.
-        let partial_product_checks = check_partial_products(
-            &numerator_values,
-            &denominator_values,
-            current_partial_products,
-            z_x,
-            z_gx,
-            max_degree,
+
+        let product_accs = iter::once(&z_x)
+            .chain(current_partial_products.iter())
+            .chain(iter::once(&z_gx));
+       
+        let chunk_size = max_degree;
+        let numerators_chunks = numerator_values.chunks(chunk_size);
+        let denominators_chunks = denominator_values.chunks(chunk_size);
+
+        let partial_product_checks = check_partial_products_iter(
+            numerators_chunks.into_iter(),
+            denominators_chunks.into_iter(),
+            product_accs.tuple_windows(),
         );
+
         vanishing_partial_products_terms.extend(partial_product_checks);
     }
+
+    #[cfg(target_os = "solana")]
+    solana_program::msg!("4");
 
     let vanishing_terms = [
         vanishing_z_1_terms,
@@ -121,7 +135,14 @@ pub fn evaluate_gate_constraints<
     selectors_info: &SelectorsInfo,
 ) -> Vec<F::Extension> {
     let mut constraints = vec![F::Extension::ZERO; num_gate_constraints];
+
+    #[cfg(target_os = "solana")]
+    solana_program::msg!("num_gates: {}, num_gate_constraints: {}", gates.len(), num_gate_constraints);
+
     for (i, gate) in gates.iter().enumerate() {
+        #[cfg(target_os = "solana")]
+        solana_program::msg!("evaluating gate: {}", gate.0.id());
+
         let selector_index = selectors_info.selector_indices[i];
         let gate_constraints = gate.0.eval_filtered(
             vars,
@@ -137,6 +158,8 @@ pub fn evaluate_gate_constraints<
             );
             constraints[i] += c;
         }
+        #[cfg(target_os = "solana")]
+        solana_program::msg!("done!");
     }
     constraints
 }

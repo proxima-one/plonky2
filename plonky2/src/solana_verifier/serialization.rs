@@ -3,7 +3,7 @@ use std::io::Result as IoResult;
 use byteorder::{LittleEndian, WriteBytesExt};
 
 use crate::{
-    buffer_verifier::{
+    solana_verifier::{
         buf::Buffer, circuit_buf::NUM_CIRCUIT_BUF_OFFSETS, proof_buf::NUM_PROOF_BUF_OFFSETS,
     },
     gates::gate::GateBox,

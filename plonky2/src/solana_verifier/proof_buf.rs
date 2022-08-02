@@ -542,7 +542,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        buffer_verifier::{
+        solana_verifier::{
             fri_verifier::get_final_poly_len, serialization::serialize_proof_with_pis,
         },
         gates::noop::NoopGate,

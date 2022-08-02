@@ -11,7 +11,7 @@ edition = "2021"
 default-run = "generate_constants"
 
 [features]
-buffer_verifier = ["byteorder"]
+solana_verifier = ["byteorder"]
 default = ["test_utils", "log", "num/rand", "parallel"]
 parallel = ["rayon"]
 test_utils = ["rand", "rand_chacha"]

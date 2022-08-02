@@ -19,5 +19,5 @@ pub mod iop;
 pub mod plonk;
 pub mod util;
 
-#[cfg(feature = "buffer_verifier")]
-pub mod buffer_verifier;
+#[cfg(feature = "solana_verifier")]
+pub mod solana_verifier;
