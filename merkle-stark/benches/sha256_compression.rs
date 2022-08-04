@@ -1,14 +1,13 @@
-use log::{Level, LevelFilter};
+use log::LevelFilter;
 use merkle_stark::{
     config::StarkConfig,
     prover::prove,
     sha256_stark::{Sha2CompressionStark, Sha2StarkCompressor},
-    verifier::verify_stark_proof,
 };
 use plonky2::hash::hash_types::BytesHash;
 use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
 use plonky2::util::timing::TimingTree;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 
 const D: usize = 2;
 type C = PoseidonGoldilocksConfig;
