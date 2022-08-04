@@ -27,3 +27,11 @@ plonky2_field = { path = "../field" }
 [profile.release]
 lto = "fat"
 opt-level = 3
+
+[profile.bench]
+lto = "fat"
+opt-level = 3
+
+[[bench]]
+name = "sha256_compression"
+harness = false
