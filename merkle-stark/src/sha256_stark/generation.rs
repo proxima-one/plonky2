@@ -225,6 +225,9 @@ impl<F: Field> Sha2TraceGenerator<F> {
         }
 
         curr_row[step_bit(step)] = F::ONE;
+
+        curr_row[INPUT_FILTER] = F::ZERO;
+        curr_row[OUTPUT_FILTER] = F::ZERO;
     }
 
     fn gen_keep_his_same(curr_row: &mut [F; NUM_COLS], next_row: &mut [F; NUM_COLS]) {
@@ -249,6 +252,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
         // left inputs
         for i in 0..16 {
             let ([curr_row, next_row], hash_idx, step) = self.get_next_window();
+            Self::gen_misc(curr_row, step, hash_idx);
 
             if i == 0 {
                 let mut abcd = abcd;
@@ -295,9 +299,11 @@ impl<F: Field> Sha2TraceGenerator<F> {
                         wis[j] >>= 1;
                     }
                 }
+
+                // set input filter to 1
+                curr_row[INPUT_FILTER] = F::ONE;
             }
 
-            Self::gen_misc(curr_row, step, hash_idx);
             Self::gen_keep_his_same(curr_row, next_row);
 
             let ki = ROUND_CONSTANTS[i];
@@ -397,6 +403,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
             curr_row[output_i(i)] = F::from_canonical_u32(his[i])
                 + F::from_canonical_u64(hash_idx as u64) * F::from_canonical_u64(1 << 32);
         }
+        curr_row[OUTPUT_FILTER] = F::ONE;
     }
 
     pub fn gen_hash(&mut self, left_input: [u32; 8], right_input: [u32; 8]) -> [u32; 8] {

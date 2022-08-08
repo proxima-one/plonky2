@@ -12,9 +12,10 @@ pub const INPUT_START: usize = STEP_BITS_START + NUM_STEPS_PER_HASH;
 pub fn input_i(i: usize) -> usize {
     INPUT_START + i
 }
+pub const INPUT_FILTER: usize = INPUT_START + 16;
 
 pub const NUM_WIS: usize = 16;
-pub const WIS_START: usize = INPUT_START + 16;
+pub const WIS_START: usize = INPUT_FILTER + 1;
 pub fn wi_bit(i: usize, bit: usize) -> usize {
     WIS_START + i * 32 + bit
 }
@@ -174,4 +175,6 @@ pub fn output_i(i: usize) -> usize {
     OUTPUT_COLS_START + i
 }
 
-pub const LAST_COL: usize = OUTPUT_COLS_START + 7;
+pub const OUTPUT_FILTER: usize = OUTPUT_COLS_START + 8;
+
+pub const LAST_COL: usize = OUTPUT_FILTER;

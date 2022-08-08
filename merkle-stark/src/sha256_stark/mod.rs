@@ -115,14 +115,17 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
                 * (next_row[HASH_IDX] - curr_row[HASH_IDX]),
         );
 
-        // load input into wis rotated left by one at start, zero otherwise
+        // load input into wis rotated left by one at start
         for i in 0..16 {
             let decomp = bit_decomp_32_at_idx!(curr_row, i, wi_bit, FE, P)
                 + curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32);
 
             yield_constr.constraint(is_hash_start * (decomp - curr_row[input_i((i + 1) % 16)]));
-            yield_constr.constraint((P::ONES - is_hash_start) * curr_row[input_i(i)]);
         }
+
+        // set input filter to 1 iff we're at the start, zero otherwise
+        yield_constr.constraint(is_hash_start * (P::ONES - curr_row[INPUT_FILTER]));
+        yield_constr.constraint((P::ONES - is_hash_start) * curr_row[INPUT_FILTER]);
 
         // rotate wis when next step is phase 0 and we're not starting a new hash
         let rotate_wis = next_is_phase_0 * (P::ONES - next_row[step_bit(0)]);
@@ -338,6 +341,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
             );
             yield_constr.constraint((P::ONES - is_last_step) * curr_row[output_i(i)])
         }
+
+
+        // set output filter to 1 iff it's the last step, zero otherwise
+        yield_constr.constraint(is_last_step * (P::ONES - curr_row[OUTPUT_FILTER]));
+        yield_constr.constraint((P::ONES - is_last_step) * curr_row[OUTPUT_FILTER]);
 
         // message schedule to get next row's wi when next row is in phase 1
 
