@@ -87,17 +87,23 @@ impl<F: Field> Sha2TraceGenerator<F> {
         let res = wi;
         let wi_u64 = w16 as u64 + s0 as u64 + w7 as u64 + s1 as u64;
         let quotient = wi_u64 / (1 << 32);
+
+        for bit in 0..29 {
+            next_row[xor_tmp_0_bit(bit)] = F::from_canonical_u32(xor_tmp_0 & 1);
+            xor_tmp_0 >>= 1;
+        }
+
+        for bit in 0..22 {
+            next_row[xor_tmp_1_bit(bit)] = F::from_canonical_u32(xor_tmp_1 & 1);
+            xor_tmp_1 >>= 1;
+        }
         for bit in 0..32 {
-            next_row[xor_tmp_i_bit(0, bit)] = F::from_canonical_u32(xor_tmp_0 & 1);
-            next_row[xor_tmp_i_bit(1, bit)] = F::from_canonical_u32(xor_tmp_1 & 1);
 
             next_row[little_s0_bit(bit)] = F::from_canonical_u32(s0 & 1);
             next_row[little_s1_bit(bit)] = F::from_canonical_u32(s1 & 1);
 
             next_row[wi_bit(15, bit)] = F::from_canonical_u32(wi & 1);
 
-            xor_tmp_0 >>= 1;
-            xor_tmp_1 >>= 1;
             s0 >>= 1;
             s1 >>= 1;
             wi >>= 1;
@@ -141,9 +147,9 @@ impl<F: Field> Sha2TraceGenerator<F> {
         let temp2_u64 = s0 as u64 + maj as u64;
 
         for bit in 0..32 {
-            curr_row[xor_tmp_i_bit(2, bit)] = F::from_canonical_u32(xor_tmp_2 & 1);
-            curr_row[xor_tmp_i_bit(3, bit)] = F::from_canonical_u32(xor_tmp_3 & 1);
-            curr_row[xor_tmp_i_bit(4, bit)] = F::from_canonical_u32(xor_tmp_4 & 1);
+            curr_row[xor_tmp_2_bit(bit)] = F::from_canonical_u32(xor_tmp_2 & 1);
+            curr_row[xor_tmp_3_bit(bit)] = F::from_canonical_u32(xor_tmp_3 & 1);
+            curr_row[xor_tmp_4_bit(bit)] = F::from_canonical_u32(xor_tmp_4 & 1);
 
             curr_row[big_s1_bit(bit)] = F::from_canonical_u32(s1 & 1);
             curr_row[big_s0_bit(bit)] = F::from_canonical_u32(s0 & 1);

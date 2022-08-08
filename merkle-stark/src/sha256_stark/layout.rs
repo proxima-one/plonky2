@@ -19,12 +19,32 @@ pub fn wi_bit(i: usize, bit: usize) -> usize {
     WIS_START + i * 32 + bit
 }
 
-pub const XOR_TMPS_START: usize = WIS_START + 16 * 32;
-pub fn xor_tmp_i_bit(i: usize, bit: usize) -> usize {
-    XOR_TMPS_START + i * 32 + bit
+pub const XOR_TMP_0_START: usize = WIS_START + 16 * 32;
+pub fn xor_tmp_0_bit(bit: usize) -> usize {
+    XOR_TMP_0_START + bit
 }
 
-pub const LITTLE_S0_START: usize = XOR_TMPS_START + 5 * 32;
+pub const XOR_TMP_1_START: usize = XOR_TMP_0_START + 29;
+pub fn xor_tmp_1_bit(bit: usize) -> usize {
+    XOR_TMP_1_START + bit
+}
+
+pub const XOR_TMP_2_START: usize = XOR_TMP_1_START + 22;
+pub fn xor_tmp_2_bit(bit: usize) -> usize {
+    XOR_TMP_2_START + bit
+}
+
+pub const XOR_TMP_3_START: usize = XOR_TMP_2_START + 32;
+pub fn xor_tmp_3_bit(bit: usize) -> usize {
+    XOR_TMP_3_START + bit
+}
+
+pub const XOR_TMP_4_START: usize = XOR_TMP_3_START + 32;
+pub fn xor_tmp_4_bit(bit: usize) -> usize {
+    XOR_TMP_4_START + bit
+}
+
+pub const LITTLE_S0_START: usize = XOR_TMP_4_START + 32;
 pub fn little_s0_bit(bit: usize) -> usize {
     LITTLE_S0_START + bit
 }

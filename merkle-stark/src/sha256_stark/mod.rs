@@ -156,10 +156,10 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
                 curr_row[e_bit((bit + 11) % 32)],
             );
             // degree 3
-            yield_constr.constraint(is_phase_0_or_1 * (curr_row[xor_tmp_i_bit(2, bit)] - computed_bit));
+            yield_constr.constraint(is_phase_0_or_1 * (curr_row[xor_tmp_2_bit(bit)] - computed_bit));
 
             let computed_bit = xor_gen(
-                curr_row[xor_tmp_i_bit(2, bit)],
+                curr_row[xor_tmp_2_bit(bit)],
                 curr_row[e_bit((bit + 25) % 32)],
             );
             // degree 3
@@ -188,10 +188,10 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
                 curr_row[a_bit((bit + 13) % 32)],
             );
             // degree 3
-            yield_constr.constraint(is_phase_0_or_1 * (curr_row[xor_tmp_i_bit(3, bit)] - computed_bit));
+            yield_constr.constraint(is_phase_0_or_1 * (curr_row[xor_tmp_3_bit(bit)] - computed_bit));
 
             let computed_bit = xor_gen(
-                curr_row[xor_tmp_i_bit(3, bit)],
+                curr_row[xor_tmp_3_bit(bit)],
                 curr_row[a_bit((bit + 22) % 32)],
             );
             // degree 3
@@ -220,9 +220,9 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
 
             let computed_bit = xor_gen(curr_row[a_and_b_bit(bit)], curr_row[a_and_c_bit(bit)]);
             // degree 3
-            yield_constr.constraint(is_phase_0_or_1 * (curr_row[xor_tmp_i_bit(4, bit)] - computed_bit));
+            yield_constr.constraint(is_phase_0_or_1 * (curr_row[xor_tmp_4_bit(bit)] - computed_bit));
 
-            let computed_bit = xor_gen(curr_row[xor_tmp_i_bit(4, bit)], curr_row[b_and_c_bit(bit)]);
+            let computed_bit = xor_gen(curr_row[xor_tmp_4_bit(bit)], curr_row[b_and_c_bit(bit)]);
             // degree 3
             yield_constr.constraint(is_phase_0_or_1 * (curr_row[maj_bit(bit)] - computed_bit));
         }
@@ -343,7 +343,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
 
         let do_msg_schedule = next_is_phase_1;
 
-        // s0 := (w[i-15] >>> 7) xor (w[i-15] >>> 18) xor (w[i-15] >>  3)
+        // s0 := (w[i-15] >>> 7) xor (w[i-15] >>> 18) xor (w[i-15] >> 3)
         for bit in 0..29 {
             let computed_bit = xor_gen(
                 next_row[wi_bit(0, (bit + 7) % 32)],
@@ -351,11 +351,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
             );
             // degree 3
             yield_constr.constraint_transition(
-                do_msg_schedule * (next_row[xor_tmp_i_bit(0, bit)] - computed_bit),
+                do_msg_schedule * (next_row[xor_tmp_0_bit(bit)] - computed_bit),
             );
 
             let computed_bit = xor_gen(
-                next_row[xor_tmp_i_bit(0, bit)],
+                next_row[xor_tmp_0_bit(bit)],
                 next_row[wi_bit(0, bit + 3)],
             );
             // degree 3
@@ -384,11 +384,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
             );
             // degree 3
             yield_constr.constraint_transition(
-                do_msg_schedule * (next_row[xor_tmp_i_bit(1, bit)] - computed_bit),
+                do_msg_schedule * (next_row[xor_tmp_1_bit(bit)] - computed_bit),
             );
 
             let computed_bit = xor_gen(
-                next_row[xor_tmp_i_bit(1, bit)],
+                next_row[xor_tmp_1_bit(bit)],
                 next_row[wi_bit(13, bit + 10)],
             );
             // degree 3
@@ -588,12 +588,28 @@ where
     }
 
     // tmps
-    for i in 0..5 {
-        for bit in 0..32 {
-            yield_constr.constraint(
-                (P::ONES - curr_row[xor_tmp_i_bit(i, bit)]) * curr_row[xor_tmp_i_bit(i, bit)],
-            )
-        }
+    for bit in 0..29 {
+        yield_constr.constraint(
+            (P::ONES - curr_row[xor_tmp_0_bit(bit)]) * curr_row[xor_tmp_0_bit(bit)],
+        );
+    }
+    for bit in 0..22 {
+        yield_constr.constraint(
+            (P::ONES - curr_row[xor_tmp_1_bit(bit)]) * curr_row[xor_tmp_1_bit(bit)],
+        );
+    }
+    for bit in 0..32 {
+        yield_constr.constraint(
+            (P::ONES - curr_row[xor_tmp_2_bit(bit)]) * curr_row[xor_tmp_2_bit(bit)],
+        );
+
+        yield_constr.constraint(
+            (P::ONES - curr_row[xor_tmp_3_bit(bit)]) * curr_row[xor_tmp_3_bit(bit)],
+        );
+
+        yield_constr.constraint(
+            (P::ONES - curr_row[xor_tmp_4_bit(bit)]) * curr_row[xor_tmp_4_bit(bit)],
+        );
     }
 }
 
