@@ -1,3 +1,4 @@
+use criterion::{criterion_group, criterion_main, Criterion};
 use log::LevelFilter;
 use merkle_stark::{
     config::StarkConfig,
@@ -7,7 +8,6 @@ use merkle_stark::{
 use plonky2::hash::hash_types::BytesHash;
 use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
 use plonky2::util::timing::TimingTree;
-use criterion::{criterion_group, criterion_main, Criterion};
 
 const D: usize = 2;
 type C = PoseidonGoldilocksConfig;
@@ -38,11 +38,15 @@ fn bench_sha256_x16(c: &mut Criterion) {
     let stark = S::new();
 
     let mut timing = TimingTree::default();
-	c.bench_function("sha256_compress_x16", |b| {
-		b.iter_batched(|| trace.clone(), |trace| {
-			prove::<F, C, S, D>(stark, &config, trace, [], &mut timing).unwrap();
-		}, criterion::BatchSize::LargeInput);
-	});
+    c.bench_function("sha256_compress_x16", |b| {
+        b.iter_batched(
+            || trace.clone(),
+            |trace| {
+                prove::<F, C, S, D>(stark, &config, trace, [], &mut timing).unwrap();
+            },
+            criterion::BatchSize::LargeInput,
+        );
+    });
 }
 
 criterion_group!(benches, bench_sha256_x16);

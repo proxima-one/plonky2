@@ -98,7 +98,6 @@ impl<F: Field> Sha2TraceGenerator<F> {
             xor_tmp_1 >>= 1;
         }
         for bit in 0..32 {
-
             next_row[little_s0_bit(bit)] = F::from_canonical_u32(s0 & 1);
             next_row[little_s1_bit(bit)] = F::from_canonical_u32(s1 & 1);
 

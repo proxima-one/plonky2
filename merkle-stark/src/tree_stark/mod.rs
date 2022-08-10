@@ -1,6 +1,7 @@
 #![allow(clippy::needless_range_loop)]
 
 use std::marker::PhantomData;
+
 use plonky2::{
     field::{
         extension::{Extendable, FieldExtension},
@@ -9,6 +10,7 @@ use plonky2::{
     hash::hash_types::RichField,
     plonk::circuit_builder::CircuitBuilder,
 };
+
 use crate::{
     constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer},
     stark::Stark,
@@ -53,26 +55,27 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
         FE: FieldExtension<D2, BaseField = F>,
         P: PackedField<Scalar = FE>,
     {
-		let curr_row = vars.local_values;
-		let next_row = vars.next_values;
-		let pis = vars.public_inputs;
+        let curr_row = vars.local_values;
+        let next_row = vars.next_values;
+        let pis = vars.public_inputs;
 
-		// load leaves in at first row
-		for i in 0..TREE_WIDTH {
-			for word in 0..WORDS_PER_HASH {
+        // load leaves in at first row
+        for i in 0..TREE_WIDTH {
+            for word in 0..WORDS_PER_HASH {
                 // degree 1
-				yield_constr.constraint_first_row(
-					curr_row[val_i_word(i, word)] - pis[pi_leaf_i_word(i, word)]
-				);
-			}
-		}
+                yield_constr.constraint_first_row(
+                    curr_row[val_i_word(i, word)] - pis[pi_leaf_i_word(i, word)],
+                );
+            }
+        }
 
-		// set PC to 0 first row, hash idx to 1, curr half level width to TREE_WIDTH / 2
+        // set PC to 0 first row, hash idx to 1, curr half level width to TREE_WIDTH / 2
         // degree 1
         yield_constr.constraint_first_row(curr_row[PC]);
-		yield_constr.constraint_first_row(curr_row[HALF_LEVEL_WIDTH] - FE::from_canonical_u64(TREE_WIDTH as u64 / 2));
+        yield_constr.constraint_first_row(
+            curr_row[HALF_LEVEL_WIDTH] - FE::from_canonical_u64(TREE_WIDTH as u64 / 2),
+        );
         yield_constr.constraint_first_row(P::ONES - curr_row[HASH_IDX]);
-
 
         // set level flags for first row
         // 1000 => 0th row
@@ -85,7 +88,6 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
         yield_constr.constraint_first_row(curr_row[level_flag(2)]);
         yield_constr.constraint_first_row(curr_row[level_flag(3)]);
 
-       
         // set LEVEL_DONE_FLAG to 1 iff PC = HALF_LEVEL_WIDTH - 1
         let is_end_of_level = curr_row[PC] - (curr_row[HALF_LEVEL_WIDTH]);
         // degree 3
@@ -93,22 +95,40 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
 
         // each row, increment PC unless we're done with the current level
         // degree 2
-        yield_constr.constraint_transition((P::ONES - curr_row[LEVEL_DONE_FLAG]) * (next_row[PC] - (curr_row[PC] + P::ONES)));
-        
+        yield_constr.constraint_transition(
+            (P::ONES - curr_row[LEVEL_DONE_FLAG]) * (next_row[PC] - (curr_row[PC] + P::ONES)),
+        );
+
         // divide half level width by two when we reset PC
         // degree 2
-        yield_constr.constraint_transition(curr_row[LEVEL_DONE_FLAG] * (next_row[HALF_LEVEL_WIDTH] * FE::TWO - curr_row[HALF_LEVEL_WIDTH]));
+        yield_constr.constraint_transition(
+            curr_row[LEVEL_DONE_FLAG]
+                * (next_row[HALF_LEVEL_WIDTH] * FE::TWO - curr_row[HALF_LEVEL_WIDTH]),
+        );
 
-		// load leftmost two hashes in the val cols into input cols for lookup
+        // load leftmost two hashes in the val cols into input cols for lookup
         for word in 0..8 {
             // degree 1
-            yield_constr.constraint(curr_row[hash_input_0_word(word)] - (curr_row[val_i_word(0, word)] + curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32)));
-            yield_constr.constraint(curr_row[hash_input_1_word(word)] - (curr_row[val_i_word(1, word)] + curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32)));
+            yield_constr.constraint(
+                curr_row[hash_input_0_word(word)]
+                    - (curr_row[val_i_word(0, word)]
+                        + curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32)),
+            );
+            yield_constr.constraint(
+                curr_row[hash_input_1_word(word)]
+                    - (curr_row[val_i_word(1, word)]
+                        + curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32)),
+            );
         }
 
-        // load the output hash into the rightmost val col of the next row unless unless we're moving to the next level. 
+        // load the output hash into the rightmost val col of the next row unless unless we're moving to the next level.
         for word in 0..8 {
-            yield_constr.constraint_transition((P::ONES - curr_row[LEVEL_DONE_FLAG]) * (next_row[val_i_word(15, word)] - (curr_row[hash_output_word(word)]) - curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32)));
+            yield_constr.constraint_transition(
+                (P::ONES - curr_row[LEVEL_DONE_FLAG])
+                    * (next_row[val_i_word(15, word)]
+                        - (curr_row[hash_output_word(word)])
+                        - curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32)),
+            );
         }
 
         // set i/o filters to 1 except for last row (constraint_transition does the filtering for us)
@@ -120,12 +140,17 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
         for i in 0..(TREE_WIDTH - 2) {
             for word in 0..WORDS_PER_HASH {
                 // degree 2
-                yield_constr.constraint_transition((P::ONES - curr_row[LEVEL_DONE_FLAG]) * (next_row[val_i_word(i, word)] - curr_row[val_i_word(i + 2, word)]));
+                yield_constr.constraint_transition(
+                    (P::ONES - curr_row[LEVEL_DONE_FLAG])
+                        * (next_row[val_i_word(i, word)] - curr_row[val_i_word(i + 2, word)]),
+                );
             }
         }
         // zero the second to last hash in var cols of next row (the hash output went into the last one above)
         for word in 0..WORDS_PER_HASH {
-            yield_constr.constraint_transition((P::ONES - curr_row[LEVEL_DONE_FLAG]) * next_row[val_i_word(14, word)]);
+            yield_constr.constraint_transition(
+                (P::ONES - curr_row[LEVEL_DONE_FLAG]) * next_row[val_i_word(14, word)],
+            );
         }
 
         // if we're at the end of a level, coalesce the level's outputs to the left. At the last row of the 0th level, the vals will look like this:
@@ -147,7 +172,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
             curr_row[level_flag(1)],
             curr_row[level_flag(2)],
             curr_row[level_flag(3)],
-            P::ONES - curr_row[level_flag(0)] - curr_row[level_flag(1)] - curr_row[level_flag(2)] - curr_row[level_flag(3)]
+            P::ONES
+                - curr_row[level_flag(0)]
+                - curr_row[level_flag(1)]
+                - curr_row[level_flag(2)]
+                - curr_row[level_flag(3)],
         ];
 
         for level in 0..4 {
@@ -158,7 +187,8 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
                 for word in 0..WORDS_PER_HASH {
                     // degree 3
                     yield_constr.constraint_transition(
-                        sel * (next_row[val_i_word(i, word)] - curr_row[val_i_word(i + shift_amount, word)])
+                        sel * (next_row[val_i_word(i, word)]
+                            - curr_row[val_i_word(i + shift_amount, word)]),
                     )
                 }
             }
@@ -166,7 +196,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
             // append the hash from OUTPUT_COL
             for word in 0..WORDS_PER_HASH {
                 // degree 3
-                yield_constr.constraint_transition(sel * (next_row[val_i_word(next_level_width - 1, word)] - (curr_row[hash_output_word(word)]) - curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32)));
+                yield_constr.constraint_transition(
+                    sel * (next_row[val_i_word(next_level_width - 1, word)]
+                        - (curr_row[hash_output_word(word)])
+                        - curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32)),
+                );
             }
 
             // zero the rest of the next row's var cols
@@ -179,7 +213,8 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
 
         // in the last row, check that the root hash given in PIs is the same as the one sitting in the leftmost val cols
         for word in 0..WORDS_PER_HASH {
-            yield_constr.constraint_last_row(curr_row[val_i_word(0, word)] - pis[pi_root_word(word)]);
+            yield_constr
+                .constraint_last_row(curr_row[val_i_word(0, word)] - pis[pi_root_word(word)]);
         }
 
         // ensure binary flags are binary
@@ -187,13 +222,13 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
         yield_constr.constraint(curr_row[INPUT_FILTER] * (P::ONES - curr_row[INPUT_FILTER]));
         yield_constr.constraint(curr_row[OUTPUT_FILTER] * (P::ONES - curr_row[OUTPUT_FILTER]));
         for level in 0..4 {
-            yield_constr.constraint(curr_row[level_flag(level)] * (P::ONES - curr_row[level_flag(level)]));
+            yield_constr
+                .constraint(curr_row[level_flag(level)] * (P::ONES - curr_row[level_flag(level)]));
         }
 
         // ensure level selectors sum to 1 => at most one level flag is active since we checked the flags are all binary
         yield_constr.constraint(level_selectors.into_iter().sum());
-	}
-
+    }
 
     fn eval_ext_circuit(
         &self,
