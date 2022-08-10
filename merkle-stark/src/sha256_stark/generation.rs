@@ -1,4 +1,4 @@
-#![allow(clippy::many_single_char_names)]
+#![allow(clippy::needless_range_loop)]
 
 use core::convert::TryInto;
 
@@ -186,7 +186,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
         abcd[0] = temp1_u32.wrapping_add(temp2_u32);
         efgh[0] = efgh[0].wrapping_add(temp1_u32);
 
-        let res = (abcd.clone(), efgh.clone());
+        let res = (abcd, efgh);
 
         curr_row[A_NEXT_FIELD] = F::from_canonical_u64(a_next_u64);
         curr_row[A_NEXT_QUOTIENT] = F::from_canonical_u64(a_next_quotient);
@@ -243,10 +243,8 @@ impl<F: Field> Sha2TraceGenerator<F> {
         let mut efgh = *array_ref![his, 4, 4];
 
         let mut wis = [0; 16];
-        for i in 0..8 {
-            wis[i] = left_input[i];
-            wis[i + 8] = right_input[i];
-        }
+        (&mut wis)[..8].copy_from_slice(&left_input);
+        (&mut wis)[8..].copy_from_slice(&right_input);
         wis = rotl_wis(wis);
 
         // left inputs

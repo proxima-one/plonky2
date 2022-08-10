@@ -56,6 +56,12 @@ pub struct Sha2CompressionStark<F: RichField + Extendable<D>, const D: usize> {
 
 impl<F: RichField + Extendable<D>, const D: usize> Sha2CompressionStark<F, D> {
     pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<F: RichField + Extendable<D>, const D: usize> Default for Sha2CompressionStark<F, D> {
+    fn default() -> Self {
         Self {
             _phantom: PhantomData,
         }
@@ -621,13 +627,14 @@ where
     }
 }
 
+#[derive(Debug, Clone, Default)]
 pub struct Sha2StarkCompressor {
     inputs: Vec<([u32; 8], [u32; 8])>,
 }
 
 impl Sha2StarkCompressor {
     pub fn new() -> Self {
-        Self { inputs: Vec::new() }
+        Self::default()
     }
 
     pub fn add_instance(&mut self, left_input: [u8; 32], right_input: [u8; 32]) {

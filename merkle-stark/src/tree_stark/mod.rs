@@ -1,5 +1,6 @@
+#![allow(clippy::needless_range_loop)]
+
 use std::marker::PhantomData;
-use plonky2::field::{polynomial::PolynomialValues, types::Field};
 use plonky2::{
     field::{
         extension::{Extendable, FieldExtension},
@@ -26,6 +27,12 @@ pub struct MerkleTree5STARK<F: RichField + Extendable<D>, const D: usize> {
 
 impl<F: RichField + Extendable<D>, const D: usize> MerkleTree5STARK<F, D> {
     pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<F: RichField + Extendable<D>, const D: usize> Default for MerkleTree5STARK<F, D> {
+    fn default() -> Self {
         Self {
             _phantom: PhantomData,
         }

@@ -1,6 +1,5 @@
-use arrayref::{array_mut_ref, array_ref};
-use plonky2::field::{polynomial::PolynomialValues, types::Field};
-use plonky2::field::types::PrimeField64;
+use arrayref::{array_mut_ref};
+use plonky2::field::{polynomial::PolynomialValues, types::{Field, PrimeField64}};
 
 use super::layout::*;
 use crate::util::trace_rows_to_poly_values;
@@ -60,23 +59,6 @@ impl<F: Field + PrimeField64> TreeTraceGenerator<F> {
 		}
 
         (array_mut_ref![self.trace.0, idx, 2], idx, level_idx, level)
-    }
-
-    fn get_next_row(&mut self) -> (&mut [F; NUM_COLS], usize, usize, usize) {
-        let idx = self.idx;
-        assert!(idx < self.max_rows(), "get_next_window exceeded MAX_ROWS");
-
-		let level = self.level;
-		let level_idx = self.level_idx;
-
-        self.idx += 1;
-		self.level_idx += 1;
-		if self.level_idx == level_width(level + 1) {
-			self.level_idx = 0;
-			self.level += 1;
-		}
-		
-		(&mut self.trace.0[idx], idx, level_idx, level)
     }
 
 	fn gen_misc(curr_row: &mut [F; NUM_COLS], idx: usize, level_idx: usize, level: usize, max_rows: usize) {
