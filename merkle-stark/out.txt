@@ -1,9 +1,14 @@
 
-running 2 tests
+running 7 tests
 test verifier::tests::test_eval_l_1_and_l_last ... ok
-test sha256_stark::generation::tests::test_same_output ... ok
+test tree_stark::generation::tests::test_build_tree ... ok
+test sha256_stark::generation::tests::test_hash_of_zero ... ok
+test sha256_stark::generation::tests::test_hash_of_something ... ok
+test sha256_stark::tests::test_stark_degree ... ok
+test sha256_stark::tests::test_single ... ok
+test sha256_stark::tests::test_multiple ... ok
 
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.17s
 
 
 running 0 tests

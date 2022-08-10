@@ -6,7 +6,7 @@ use arrayref::{array_mut_ref, array_ref};
 use plonky2::field::{polynomial::PolynomialValues, types::Field};
 
 use super::constants::{HASH_IV, ROUND_CONSTANTS};
-use crate::sha256_stark::layout::*;
+use super::layout::*;
 use crate::util::trace_rows_to_poly_values;
 
 fn is_power_of_two(n: u64) -> bool {
