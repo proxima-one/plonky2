@@ -5,8 +5,9 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-default = ["parallel"]
+default = ["parallel", "no_ctl"]
 parallel = ["maybe_rayon/parallel"]
+no_ctl = []
 
 [dependencies]
 plonky2 = { path = "../plonky2" }
@@ -24,6 +25,8 @@ generic-array = "0.14.5"
 [dev-dependencies]
 criterion = "0.3.5"
 plonky2_field = { path = "../field" }
+rand = "0.8.5"
+rand_chacha = "0.3.1"
 
 [[bench]]
 name = "sha256_compression"

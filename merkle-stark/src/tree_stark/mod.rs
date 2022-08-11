@@ -10,9 +10,11 @@ use plonky2::{
     hash::hash_types::RichField,
     plonk::circuit_builder::CircuitBuilder,
 };
+use plonky2::field::types::Field;
 
 use crate::{
     constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer},
+    cross_table_lookup::Column,
     stark::Stark,
     vars::{StarkEvaluationTargets, StarkEvaluationVars},
 };
@@ -242,4 +244,22 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
     fn constraint_degree(&self) -> usize {
         3
     }
+}
+
+pub fn ctl_data_hash<F: Field>() -> Vec<Column<F>> {
+    Column::singles((0..WORDS_PER_HASH).map(hash_output_word)).collect()
+}
+
+pub fn ctl_filter_hash<F: Field>() -> Column<F> {
+    Column::single(OUTPUT_FILTER)
+}
+
+pub fn ctl_data<F: Field>() -> Vec<Column<F>> {
+    Column::singles((0..WORDS_PER_HASH).map(hash_input_0_word))
+        .chain(Column::singles((0..WORDS_PER_HASH).map(hash_input_1_word)))
+        .collect()
+}
+
+pub fn ctl_filter<F: Field>() -> Column<F> {
+    Column::single(INPUT_FILTER)
 }

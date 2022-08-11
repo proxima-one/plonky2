@@ -13,6 +13,7 @@ use plonky2_util::log2_ceil;
 
 use crate::{
     constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer},
+    cross_table_lookup::Column,
     stark::Stark,
     vars::{StarkEvaluationTargets, StarkEvaluationVars},
 };
@@ -656,6 +657,22 @@ impl Sha2StarkCompressor {
 
         generator.into_polynomial_values()
     }
+}
+
+pub fn ctl_data_tree<F: Field>() -> Vec<Column<F>> {
+    Column::singles((0..16).map(input_i)).collect()
+}
+
+pub fn ctl_filter_tree<F: Field>() -> Column<F> {
+    Column::single(INPUT_FILTER)
+}
+
+pub fn ctl_data<F: Field>() -> Vec<Column<F>> {
+    Column::singles((0..8).map(output_i)).collect()
+}
+
+pub fn ctl_filter<F: Field>() -> Column<F> {
+    Column::single(OUTPUT_FILTER)
 }
 
 #[cfg(test)]

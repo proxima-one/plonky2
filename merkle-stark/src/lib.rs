@@ -18,6 +18,8 @@ pub mod util;
 pub mod vanishing_poly;
 pub mod vars;
 pub mod verifier;
+pub mod cross_table_lookup;
+pub mod merkle_stark;
 
 pub mod sha256_stark;
 pub mod tree_stark;
