@@ -679,14 +679,14 @@ pub fn ctl_filter<F: Field>() -> Column<F> {
 mod tests {
     use anyhow::Result;
     use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
-    use plonky2::util::timing::TimingTree;
+    // use plonky2::util::timing::TimingTree;
 
     use super::*;
-    use crate::config::StarkConfig;
-    use crate::prover::prove;
-    use crate::sha256_stark::generation::Sha2TraceGenerator;
+    // use crate::config::StarkConfig;
+    // use crate::prover::prove;
+    // use crate::sha256_stark::generation::Sha2TraceGenerator;
     use crate::stark_testing::test_stark_low_degree;
-    use crate::verifier::verify_stark_proof;
+    // use crate::verifier::verify_stark_proof;
 
     #[test]
     fn test_stark_degree() -> Result<()> {
@@ -711,68 +711,68 @@ mod tests {
     //     test_stark_circuit_constraints::<F, C, S, D>(stark)
     // }
 
-    #[test]
-    fn test_single() -> Result<()> {
-        const D: usize = 2;
-        type C = PoseidonGoldilocksConfig;
-        type F = <C as GenericConfig<D>>::F;
-        type S = Sha2CompressionStark<F, D>;
+    // #[test]
+    // fn test_single() -> Result<()> {
+    //     const D: usize = 2;
+    //     type C = PoseidonGoldilocksConfig;
+    //     type F = <C as GenericConfig<D>>::F;
+    //     type S = Sha2CompressionStark<F, D>;
 
-        let mut left_input = [0u32; 8];
-        let mut right_input = [0u32; 8];
-        for i in 0..8 {
-            left_input[i] = i as u32;
-            right_input[i] = i as u32 + 8;
-        }
+    //     let mut left_input = [0u32; 8];
+    //     let mut right_input = [0u32; 8];
+    //     for i in 0..8 {
+    //         left_input[i] = i as u32;
+    //         right_input[i] = i as u32 + 8;
+    //     }
 
-        let mut generator = Sha2TraceGenerator::<F>::new(128);
-        generator.gen_hash(left_input, right_input);
+    //     let mut generator = Sha2TraceGenerator::<F>::new(128);
+    //     generator.gen_hash(left_input, right_input);
 
-        let config = StarkConfig::standard_fast_config();
-        let stark = S::new();
-        let trace = generator.into_polynomial_values();
-        let mut timing = TimingTree::default();
-        let proof = prove::<F, C, S, D>(stark, &config, trace, [], &mut timing)?;
+    //     let config = StarkConfig::standard_fast_config();
+    //     let stark = S::new();
+    //     let trace = generator.into_polynomial_values();
+    //     let mut timing = TimingTree::default();
+    //     let proof = prove::<F, C, S, D>(stark, &config, trace, [], &mut timing)?;
 
-        verify_stark_proof(stark, proof, &config)?;
+    //     verify_stark_proof(stark, proof, &config)?;
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
-    #[test]
-    fn test_multiple() -> Result<()> {
-        const D: usize = 2;
-        type C = PoseidonGoldilocksConfig;
-        type F = <C as GenericConfig<D>>::F;
-        type S = Sha2CompressionStark<F, D>;
+    // #[test]
+    // fn test_multiple() -> Result<()> {
+    //     const D: usize = 2;
+    //     type C = PoseidonGoldilocksConfig;
+    //     type F = <C as GenericConfig<D>>::F;
+    //     type S = Sha2CompressionStark<F, D>;
 
-        let mut left_input = [0; 32];
-        let mut right_input = [0; 32];
-        for i in 0..32 {
-            left_input[i] = i as u8;
-            right_input[i] = i as u8 + 32;
-        }
+    //     let mut left_input = [0; 32];
+    //     let mut right_input = [0; 32];
+    //     for i in 0..32 {
+    //         left_input[i] = i as u8;
+    //         right_input[i] = i as u8 + 32;
+    //     }
 
-        let mut compressor = Sha2StarkCompressor::new();
-        compressor.add_instance(left_input, right_input);
+    //     let mut compressor = Sha2StarkCompressor::new();
+    //     compressor.add_instance(left_input, right_input);
 
-        let mut left_input = [0; 32];
-        let mut right_input = [0; 32];
-        for i in 0..32 {
-            left_input[i] = i as u8 + 64;
-            right_input[i] = i as u8 + 96;
-        }
+    //     let mut left_input = [0; 32];
+    //     let mut right_input = [0; 32];
+    //     for i in 0..32 {
+    //         left_input[i] = i as u8 + 64;
+    //         right_input[i] = i as u8 + 96;
+    //     }
 
-        compressor.add_instance(left_input, right_input);
-        let trace = compressor.generate();
+    //     compressor.add_instance(left_input, right_input);
+    //     let trace = compressor.generate();
 
-        let config = StarkConfig::standard_fast_config();
-        let stark = S::new();
-        let mut timing = TimingTree::default();
-        let proof = prove::<F, C, S, D>(stark, &config, trace, [], &mut timing)?;
+    //     let config = StarkConfig::standard_fast_config();
+    //     let stark = S::new();
+    //     let mut timing = TimingTree::default();
+    //     let proof = prove::<F, C, S, D>(stark, &config, trace, [], &mut timing)?;
 
-        verify_stark_proof(stark, proof, &config)?;
+    //     verify_stark_proof(stark, proof, &config)?;
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 }
