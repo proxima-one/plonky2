@@ -79,21 +79,58 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
         );
         yield_constr.constraint_first_row(P::ONES - curr_row[HASH_IDX]);
 
+        let level_selectors = [
+            curr_row[level_flag(0)],
+            curr_row[level_flag(1)],
+            curr_row[level_flag(2)],
+            curr_row[level_flag(3)],
+            P::ONES
+                - curr_row[level_flag(0)]
+                - curr_row[level_flag(1)]
+                - curr_row[level_flag(2)]
+                - curr_row[level_flag(3)],
+        ];
+
+        let next_level_selectors = [
+            next_row[level_flag(0)],
+            next_row[level_flag(1)],
+            next_row[level_flag(2)],
+            next_row[level_flag(3)],
+            P::ONES
+                - next_row[level_flag(0)]
+                - next_row[level_flag(1)]
+                - next_row[level_flag(2)]
+                - next_row[level_flag(3)],
+        ];
+
         // set level flags for first row
         // 1000 => 0th row
         // 0100 -> 1st row
         // 0010 -> 2nd row
         // 0001 -> 3rd row
         // 0000 -> 4th row (root)
-        yield_constr.constraint_first_row(P::ONES - curr_row[level_flag(0)]);
-        yield_constr.constraint_first_row(curr_row[level_flag(1)]);
-        yield_constr.constraint_first_row(curr_row[level_flag(2)]);
-        yield_constr.constraint_first_row(curr_row[level_flag(3)]);
+        yield_constr.constraint_first_row(P::ONES - level_selectors[0]);
+        yield_constr.constraint_first_row(level_selectors[1]);
+        yield_constr.constraint_first_row(level_selectors[2]);
+        yield_constr.constraint_first_row(level_selectors[3]);
 
-        // set LEVEL_DONE_FLAG to 1 iff PC = HALF_LEVEL_WIDTH - 1
-        let is_end_of_level = curr_row[PC] - (curr_row[HALF_LEVEL_WIDTH]);
-        // degree 3
-        yield_constr.constraint(is_end_of_level * (P::ONES - curr_row[LEVEL_DONE_FLAG]));
+        let is_flag_transition_i = |i| {
+            level_selectors[i] * next_level_selectors[i + 1]
+        };
+        let flag_transition_i = |i| {
+            level_selectors[i] - next_level_selectors[i + 1]
+        };
+        let is_transition: P = (0..TREE_DEPTH-1).map(|level| is_flag_transition_i(level)).sum();
+        yield_constr.constraint_transition(curr_row[LEVEL_DONE_FLAG] - is_transition);
+
+        // abvance level flags at correct indices
+        // one_if_end_of_level is 0 during the single row for root, 
+        let one_if_end_of_level = curr_row[PC] - curr_row[HALF_LEVEL_WIDTH];
+        for level in 0..TREE_DEPTH-1 {
+            let transition = flag_transition_i(level);
+            // degree 2
+            yield_constr.constraint_transition(one_if_end_of_level * curr_row[LEVEL_DONE_FLAG] * transition);
+        }
 
         // each row, increment PC unless we're done with the current level
         // degree 2
@@ -101,22 +138,23 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
             (P::ONES - curr_row[LEVEL_DONE_FLAG]) * (next_row[PC] - (curr_row[PC] + P::ONES)),
         );
 
-        // divide half level width by two when we reset PC
-        // degree 2
+        // divide half level width by two when we reset PC unless it's the last time
+        // degree 3
         yield_constr.constraint_transition(
-            curr_row[LEVEL_DONE_FLAG]
+           curr_row[LEVEL_DONE_FLAG] * (P::ONES - next_level_selectors[4])
                 * (next_row[HALF_LEVEL_WIDTH] * FE::TWO - curr_row[HALF_LEVEL_WIDTH]),
         );
 
-        // load leftmost two hashes in the val cols into input cols for lookup
-        for word in 0..8 {
+        // load leftmost two hashes in the val cols into input cols for lookup except for last row
+        // note: constraint_transition doesn't apply to last row
+        for word in 0..WORDS_PER_HASH {
             // degree 1
-            yield_constr.constraint(
+            yield_constr.constraint_transition(
                 curr_row[hash_input_0_word(word)]
                     - (curr_row[val_i_word(0, word)]
                         + curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32)),
             );
-            yield_constr.constraint(
+            yield_constr.constraint_transition(
                 curr_row[hash_input_1_word(word)]
                     - (curr_row[val_i_word(1, word)]
                         + curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32)),
@@ -124,12 +162,12 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
         }
 
         // load the output hash into the rightmost val col of the next row unless unless we're moving to the next level.
-        for word in 0..8 {
+        for word in 0..WORDS_PER_HASH {
             yield_constr.constraint_transition(
                 (P::ONES - curr_row[LEVEL_DONE_FLAG])
                     * (next_row[val_i_word(15, word)]
-                        - (curr_row[hash_output_word(word)])
-                        - curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32)),
+                        - (curr_row[hash_output_word(word)]
+                        - curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32))),
             );
         }
 
@@ -169,21 +207,9 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
         // e.g. 1st level has a width of 8, formula gives 16 - 8 + 3 + i = 11 + i
         // `get_level_end_shift` in `layout.rs` computes this formula
 
-        let level_selectors = [
-            curr_row[level_flag(0)],
-            curr_row[level_flag(1)],
-            curr_row[level_flag(2)],
-            curr_row[level_flag(3)],
-            P::ONES
-                - curr_row[level_flag(0)]
-                - curr_row[level_flag(1)]
-                - curr_row[level_flag(2)]
-                - curr_row[level_flag(3)],
-        ];
-
         for level in 0..4 {
             let next_level_width = level_width(level + 1);
-            let sel = level_selectors[level] * curr_row[LEVEL_DONE_FLAG];
+            let sel = is_flag_transition_i(level);
             for i in 0..(next_level_width - 1) {
                 let shift_amount = get_level_end_shift(i, level);
                 for word in 0..WORDS_PER_HASH {
@@ -200,15 +226,16 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
                 // degree 3
                 yield_constr.constraint_transition(
                     sel * (next_row[val_i_word(next_level_width - 1, word)]
-                        - (curr_row[hash_output_word(word)])
-                        - curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32)),
+                        - (curr_row[hash_output_word(word)]
+                        - curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32))),
                 );
             }
 
             // zero the rest of the next row's var cols
             for i in next_level_width..TREE_WIDTH {
                 for word in 0..WORDS_PER_HASH {
-                    yield_constr.constraint_transition(next_row[val_i_word(i, word)]);
+                    // degree 3
+                    yield_constr.constraint_transition(sel * next_row[val_i_word(i, word)]);
                 }
             }
         }
@@ -229,7 +256,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
         }
 
         // ensure level selectors sum to 1 => at most one level flag is active since we checked the flags are all binary
-        yield_constr.constraint(level_selectors.into_iter().sum());
+        yield_constr.constraint(P::ONES - level_selectors.into_iter().sum::<P>());
     }
 
     fn eval_ext_circuit(
@@ -263,3 +290,69 @@ pub fn ctl_data<F: Field>() -> Vec<Column<F>> {
 pub fn ctl_filter<F: Field>() -> Column<F> {
     Column::single(INPUT_FILTER)
 }
+
+// #[cfg(test)]
+// mod tests {
+//     use anyhow::Result;
+//     use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
+//     use plonky2::util::timing::TimingTree;
+//     use plonky2_field::goldilocks_field::GoldilocksField;
+
+//     use super::*;
+//     use crate::config::StarkConfig;
+//     use crate::prover::prove;
+//     use crate::tree_stark::generation::TreeTraceGenerator;
+//     use crate::stark_testing::test_stark_low_degree;
+//     use crate::verifier::verify_stark_proof;
+
+//     #[test]
+//     fn test_stark_degree() -> Result<()> {
+//         const D: usize = 2;
+//         type C = PoseidonGoldilocksConfig;
+//         type F = <C as GenericConfig<D>>::F;
+//         type S = MerkleTree5STARK<F, D>;
+
+//         let stark = S::new();
+//         test_stark_low_degree(stark)
+//     }
+
+//     // #[test]
+//     // fn test_stark_circuit() -> Result<()> {
+//     //     const D: usize = 2;
+//     //     type C = PoseidonGoldilocksConfig;
+//     //     type F = <C as GenericConfig<D>>::F;
+//     //     type S = Sha2CompressionStark<F, D>;
+
+//     //     let stark = S::new();
+
+//     //     test_stark_circuit_constraints::<F, C, S, D>(stark)
+//     // }
+
+//     #[test]
+//     fn test_tree_stark() -> Result<()> {
+//         const D: usize = 2;
+//         type C = PoseidonGoldilocksConfig;
+//         type F = <C as GenericConfig<D>>::F;
+//         type S = MerkleTree5STARK<F, D>;
+
+//         let mut leaves = [[0; 8]; TREE_WIDTH];
+//         for i in 0..TREE_WIDTH {
+//             for word in 0..WORDS_PER_HASH {
+//                 leaves[i][word] = (i * WORDS_PER_HASH + word) as u32;
+//             }
+//         }
+
+//         let mut generator = TreeTraceGenerator::<F>::new(16, leaves);
+//         let (_root, pis) = generator.gen();
+//         let trace = generator.into_polynomial_values();
+
+//         let config = StarkConfig::standard_fast_config();
+//         let stark = S::new();
+//         let mut timing = TimingTree::default();
+//         let proof = prove::<F, C, S, D>(stark, &config, trace, pis, &mut timing)?;
+
+//         verify_stark_proof(stark, proof, &config)?;
+
+//         Ok(())
+//     }
+// }

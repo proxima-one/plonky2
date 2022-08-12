@@ -129,7 +129,7 @@ impl<F: Field + PrimeField64> TreeTraceGenerator<F> {
         }
     }
 
-    pub fn gen(&mut self) -> [u32; 8] {
+    pub fn gen(&mut self) -> ([u32; 8],[F; NUM_PUBLIC_INPUTS]) {
         let max_rows = self.max_rows();
 
         // load leaves into first row of val cols
@@ -225,15 +225,6 @@ impl<F: Field + PrimeField64> TreeTraceGenerator<F> {
                             - curr_row[HASH_IDX] * F::from_canonical_u64(1 << 32);
                     }
                 }
-
-                let mut curr_vals = Vec::new();
-                let mut next_vals = Vec::new();
-                for i in 0..16 {
-                    for word in 0..WORDS_PER_HASH {
-                        curr_vals.push(curr_row[val_i_word(i, word)]);
-                        next_vals.push(next_row[val_i_word(i, word)]);
-                    }
-                }
             }
         }
 
@@ -246,7 +237,22 @@ impl<F: Field + PrimeField64> TreeTraceGenerator<F> {
                 .expect("expected hash word to fit in u32");
         }
 
-        root
+        (root, self.get_pis(root))
+    }
+
+    fn get_pis(&self, root: [u32; WORDS_PER_HASH]) -> [F; NUM_PUBLIC_INPUTS] {
+        let mut pis = [F::ZERO; NUM_PUBLIC_INPUTS];
+        for i in 0..TREE_WIDTH {
+            for word in 0..WORDS_PER_HASH {
+                pis[pi_leaf_i_word(i, word)] = F::from_canonical_u32((&self.leaves)[i][word]);
+            }
+        }
+
+        for word in 0..WORDS_PER_HASH {
+            pis[pi_root_word(word)] = F::from_canonical_u32(root[word]);
+        }
+
+        pis
     }
 
     pub fn into_polynomial_values(self) -> Vec<PolynomialValues<F>> {
@@ -310,11 +316,15 @@ mod tests {
 
         // compute tree without generator
         let correct_root = merkle_root(&leaves[..]);
-        println!();
 
         // compute trace with generator
         let mut generator = TreeTraceGenerator::<F>::new(16, leaves);
-        let root = generator.gen();
+        let (_root, pis) = generator.gen();
+        let mut root = [0u32; 8];
+        for i in 0..WORDS_PER_HASH {
+            root[i] = pis[pi_root_word(i)].to_canonical_u64().try_into().expect("expected pi_root_word to fit in u32");
+        }
+
         assert_eq!(root, correct_root);
     }
 }
