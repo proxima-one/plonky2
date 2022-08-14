@@ -22,7 +22,7 @@ pub mod constants;
 pub mod generation;
 pub mod layout;
 
-use generation::{to_u32_array_be, Sha2TraceGenerator};
+use generation::Sha2TraceGenerator;
 use layout::*;
 
 use self::constants::{HASH_IV, ROUND_CONSTANTS};
@@ -640,10 +640,7 @@ impl Sha2StarkCompressor {
         Self::default()
     }
 
-    pub fn add_instance(&mut self, left_input: [u8; 32], right_input: [u8; 32]) {
-        let left = to_u32_array_be(left_input);
-        let right = to_u32_array_be(right_input);
-
+    pub fn add_instance(&mut self, left: [u32; 8], right: [u32; 8]) {
         self.inputs.push((left, right));
     }
 

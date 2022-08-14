@@ -5,7 +5,7 @@ use plonky2::field::{
 };
 
 use super::layout::*;
-use crate::util::trace_rows_to_poly_values;
+use crate::util::{compress, trace_rows_to_poly_values};
 
 fn is_power_of_two(n: u64) -> bool {
     n & (n - 1) == 0
@@ -79,11 +79,14 @@ impl<F: Field + PrimeField64> TreeTraceGenerator<F> {
         curr_row[HALF_LEVEL_WIDTH] = F::from_canonical_u64(half_level_width as u64);
 
         // set hash idx and lookup filters for all rows but the last
+        curr_row[HASH_IDX] = F::from_canonical_u64(idx as u64 + 1);
         if idx < max_rows - 1 {
             // hash idx is 1-indexed for domain separation
-            curr_row[HASH_IDX] = F::from_canonical_u64(idx as u64 + 1);
             curr_row[INPUT_FILTER] = F::ONE;
             curr_row[OUTPUT_FILTER] = F::ONE;
+        } else {
+            curr_row[INPUT_FILTER] = F::ZERO;
+            curr_row[OUTPUT_FILTER] = F::ZERO;
         }
 
         // set level done flag
@@ -225,6 +228,14 @@ impl<F: Field + PrimeField64> TreeTraceGenerator<F> {
                             - curr_row[HASH_IDX] * F::from_canonical_u64(1 << 32);
                     }
                 }
+
+                // let mut curr_values = Vec::new();
+                // for i in 0..TREE_WIDTH {
+                //     for word in 0..WORDS_PER_HASH {
+                //         curr_values.push(curr_row[val_i_word(i, word)]);
+                //     }
+                // }
+                // println!("curr_values: {:?}", curr_values);
             }
         }
 
@@ -258,29 +269,6 @@ impl<F: Field + PrimeField64> TreeTraceGenerator<F> {
     pub fn into_polynomial_values(self) -> Vec<PolynomialValues<F>> {
         trace_rows_to_poly_values(self.trace.0)
     }
-}
-
-fn compress(left: [u32; 8], right: [u32; 8]) -> [u32; 8] {
-    use generic_array::{typenum::U64, GenericArray};
-    use sha2::compress256;
-
-    use crate::sha256_stark::constants::HASH_IV;
-
-    let mut block = [0; 64];
-
-    for (i, elem) in left.iter().enumerate() {
-        block[i * 4..(i + 1) * 4].copy_from_slice(&elem.to_le_bytes());
-    }
-
-    let block_right = &mut block[32..];
-    for (i, elem) in right.iter().enumerate() {
-        block_right[i * 4..(i + 1) * 4].copy_from_slice(&elem.to_le_bytes());
-    }
-
-    let mut state = HASH_IV;
-    let block_arr = GenericArray::<u8, U64>::from(block);
-    compress256(&mut state, &[block_arr]);
-    state
 }
 
 #[cfg(test)]

@@ -24,7 +24,7 @@ use crate::stark::Stark;
 use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
 
 /// Represent a linear combination of columns.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Column<F: Field> {
     linear_combination: Vec<(usize, F)>,
     constant: F,
@@ -115,7 +115,7 @@ impl<F: Field> Column<F> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct TableWithColumns<F: Field> {
     table: Table,
     columns: Vec<Column<F>>,
@@ -668,6 +668,7 @@ pub(crate) mod testutils {
         cross_table_lookups: &[CrossTableLookup<F>],
     ) {
         for (i, ctl) in cross_table_lookups.iter().enumerate() {
+            println!("looking table {:?}, looked table: {:?}", ctl.looking_tables[0].table, ctl.looked_table.table);
             check_ctl(trace_poly_values, ctl, i);
         }
     }
@@ -745,9 +746,12 @@ pub(crate) mod testutils {
         table: &TableWithColumns<F>,
         multiset: &mut MultiSet<F>,
     ) {
+        println!("processing table {:?}", table.table);
         let trace = &trace_poly_values[table.table as usize];
+        println!("trace len: {:?}", trace.len());
         for i in 0..trace[0].len() {
             let filter = if let Some(column) = &table.filter_column {
+                // println!("ctl with filter col: {:?}", column);
                 column.eval_table(trace, i)
             } else {
                 F::ONE

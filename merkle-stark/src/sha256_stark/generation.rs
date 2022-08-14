@@ -422,13 +422,6 @@ impl<F: Field> Sha2TraceGenerator<F> {
     }
 }
 
-pub fn to_u32_array_be<const N: usize>(block: [u8; N * 4]) -> [u32; N] {
-    let mut block_u32 = [0; N];
-    for (o, chunk) in block_u32.iter_mut().zip(block.chunks_exact(4)) {
-        *o = u32::from_be_bytes(chunk.try_into().unwrap());
-    }
-    block_u32
-}
 
 #[inline(always)]
 fn shift_wis(mut wis: [u32; 16]) -> [u32; 16] {
@@ -465,45 +458,27 @@ fn rotr(x: u32, n: u32) -> u32 {
 mod tests {
     use generic_array::{typenum::U64, GenericArray};
     use plonky2_field::goldilocks_field::GoldilocksField;
-    use sha2::compress256;
+    use crate::util::{to_u32_array_be, compress};
 
     use super::*;
 
     type F = GoldilocksField;
 
     #[test]
-    fn test_hash_of_zero() {
-        let block = [0u8; 64];
-        let block_arr = GenericArray::<u8, U64>::from(block);
-        let mut state = HASH_IV;
-        compress256(&mut state, &[block_arr]);
-
-        let left_input = [0u32; 8];
-        let right_input = [0u32; 8];
-        let mut generator = Sha2TraceGenerator::<F>::new(128);
-
-        let his = generator.gen_hash(left_input, right_input);
-
-        assert_eq!(his, state);
-    }
-
-    #[test]
-    fn test_hash_of_something() {
-        let mut block = [0u8; 64];
-        for i in 0..64 {
-            block[i] = i as u8;
+    fn test_hash() {
+        let mut block = [0u32; 16];
+        for i in 0..16 {
+            block[i] = i as u32;
         }
-
-        let block_arr = GenericArray::<u8, U64>::from(block);
-        let mut state = HASH_IV;
-        compress256(&mut state, &[block_arr]);
-
-        let block: [u32; 16] = to_u32_array_be(block);
         let left_input = *array_ref![block, 0, 8];
         let right_input = *array_ref![block, 8, 8];
-        let mut generator = Sha2TraceGenerator::<F>::new(128);
 
+        let mut state = HASH_IV;
+        let state = compress(left_input, right_input);
+
+        let mut generator = Sha2TraceGenerator::<F>::new(128);
         let his = generator.gen_hash(left_input, right_input);
+
         assert_eq!(his, state);
     }
 }

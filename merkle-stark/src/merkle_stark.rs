@@ -28,8 +28,8 @@ impl<F: RichField + Extendable<D>, const D: usize> Default for Merkle5STARK<F, D
 impl<F: RichField + Extendable<D>, const D: usize> Merkle5STARK<F, D> {
     pub(crate) fn nums_permutation_zs(&self, config: &StarkConfig) -> Vec<usize> {
         let ans = vec![
-            self.hash_stark.num_permutation_batches(config),
             self.tree_stark.num_permutation_batches(config),
+            self.hash_stark.num_permutation_batches(config),
         ];
         debug_assert_eq!(ans.len(), Table::num_tables());
         ans
@@ -37,8 +37,8 @@ impl<F: RichField + Extendable<D>, const D: usize> Merkle5STARK<F, D> {
 
     pub(crate) fn permutation_batch_sizes(&self) -> Vec<usize> {
         let ans = vec![
-            self.hash_stark.permutation_batch_size(),
             self.tree_stark.permutation_batch_size(),
+            self.hash_stark.permutation_batch_size(),
         ];
         debug_assert_eq!(ans.len(), Table::num_tables());
         ans
@@ -47,20 +47,32 @@ impl<F: RichField + Extendable<D>, const D: usize> Merkle5STARK<F, D> {
 
 #[derive(Debug, Copy, Clone)]
 pub enum Table {
-    Hash = 0,
-    Tree = 1,
+    Tree = 0,
+    Hash = 1,
 }
 
 impl Table {
     pub(crate) fn num_tables() -> usize {
-        Table::Tree as usize + 1
+        2
     }
 }
 
 #[allow(unused)] // TODO: Should be used soon.
 pub(crate) fn all_cross_table_lookups<F: Field>() -> Vec<CrossTableLookup<F>> {
-    let mut cross_table_lookups = vec![ctl_hash(), ctl_tree()];
+    let mut cross_table_lookups = vec![ctl_tree(), ctl_hash()];
     cross_table_lookups
+}
+
+fn ctl_tree<F: Field>() -> CrossTableLookup<F> {
+    CrossTableLookup::new(
+        vec![TableWithColumns::new(
+            Table::Hash,
+            sha256_stark::ctl_data_tree(),
+            Some(sha256_stark::ctl_filter_tree()),
+        )],
+        TableWithColumns::new(Table::Tree, tree_stark::ctl_data(), Some(tree_stark::ctl_filter())),
+        None,
+    )
 }
 
 fn ctl_hash<F: Field>() -> CrossTableLookup<F> {
@@ -79,19 +91,6 @@ fn ctl_hash<F: Field>() -> CrossTableLookup<F> {
     )
 }
 
-fn ctl_tree<F: Field>() -> CrossTableLookup<F> {
-    CrossTableLookup::new(
-        vec![TableWithColumns::new(
-            Table::Hash,
-            sha256_stark::ctl_data_tree(),
-            Some(sha256_stark::ctl_filter_tree()),
-        )],
-        TableWithColumns::new(Table::Tree, tree_stark::ctl_data(), Some(tree_stark::ctl_filter())),
-        None,
-    )
-}
-
-
 #[cfg(test)]
 mod tests {
     use std::borrow::BorrowMut;
@@ -109,8 +108,8 @@ mod tests {
     use rand::{thread_rng, Rng};
 
     use crate::merkle_stark::Merkle5STARK;
-    use crate::tree_stark::{MerkleTree5STARK, layout::{TREE_WIDTH, level_width}, generation::TreeTraceGenerator};
-    use crate::sha256_stark::{Sha2CompressionStark, generation::Sha2TraceGenerator};
+    use crate::tree_stark::{MerkleTree5STARK, layout::{TREE_WIDTH, level_width, NUM_PUBLIC_INPUTS}, generation::TreeTraceGenerator};
+    use crate::sha256_stark::{Sha2CompressionStark, generation::Sha2TraceGenerator, layout::NUM_STEPS_PER_HASH};
     use crate::config::StarkConfig;
     use crate::cross_table_lookup::testutils::check_ctls;
     use crate::proof::Merkle5STARKProof;
@@ -120,6 +119,7 @@ mod tests {
     };
     use crate::stark::Stark;
     use crate::verifier::verify_proof;
+    use crate::util::compress;
 
     const D: usize = 2;
     type C = PoseidonGoldilocksConfig;
@@ -127,31 +127,39 @@ mod tests {
 
     const NUM_HASHES: usize = 15;
 
-
     fn make_tree_trace(
-        tree_stark: &MerkleTree5STARK<F, D>,
         leaves: [[u32; 8]; TREE_WIDTH]
-    ) -> Vec<PolynomialValues<F>> {
+    ) -> ([F; NUM_PUBLIC_INPUTS], [u32; 8], Vec<PolynomialValues<F>>) {
         let mut generator = TreeTraceGenerator::new(NUM_HASHES + 1, leaves);
-        generator.gen();
-        generator.into_polynomial_values()
+        let (root, pis) = generator.gen();
+        (pis, root, generator.into_polynomial_values())
     }
 
-    fn gen_merkle_root(generator: &mut Sha2TraceGenerator<F>, mut leaves: [[u32; 8]; TREE_WIDTH]) -> [u32; 8] {
-        for level in 1..5 {
-            for i in (0..level_width(level)).step_by(2) {
-                leaves[i] = generator.gen_hash(leaves[i], leaves[i + 1]);
+    fn gen_merkle_root(generator: &mut Sha2TraceGenerator<F>, leaves: [[u32; 8]; TREE_WIDTH]) -> [u32; 8] {
+        let mut leaves = leaves.to_vec();
+        while leaves.len() > 1 {
+            // println!("leaves: {:#?}", leaves);
+            let mut new_leaves = Vec::new();
+            for chunk in leaves.chunks(2) {
+                let left = chunk[0];
+                let right = chunk[1];
+                let new_leaf = generator.gen_hash(left, right);
+                let _new_leaf = compress(left, right);
+                // println!("left: {:?}, right: {:?}, new_leaf: {:?}", left, right, _new_leaf);
+                assert_eq!(new_leaf, _new_leaf);
+                new_leaves.push(new_leaf);
             }
+            leaves = new_leaves;
         }
+        // println!("leaves: {:#?}", leaves);
 
         leaves[0]
     }
 
     fn make_hash_trace(
-        hash_stark: &Sha2CompressionStark<F, D>,
         leaves: [[u32; 8]; TREE_WIDTH]
     ) -> ([u32; 8], Vec<PolynomialValues<F>>) {
-        let num_rows = 1 << log2_ceil(NUM_HASHES);
+        let num_rows = 1 << log2_ceil(NUM_HASHES * NUM_STEPS_PER_HASH);
         let mut generator = Sha2TraceGenerator::new(num_rows);
         let root = gen_merkle_root(&mut generator, leaves);
 
@@ -161,16 +169,12 @@ mod tests {
     fn get_proof(config: &StarkConfig) -> Result<(Merkle5STARK<F, D>, Merkle5STARKProof<F, C, D>)> {
         let merkle_5_stark = Merkle5STARK::default();
 
-        let num_logic_rows = 62;
-        let num_memory_ops = 1 << 5;
-
         let mut rng = thread_rng();
-        let num_keccak_perms = 2;
-
         let leaves: [[u32; 8]; TREE_WIDTH] = [(); TREE_WIDTH].map(|_| [(); 8].map(|_| rng.gen()));
 
-        let tree_trace = make_tree_trace(&merkle_5_stark.tree_stark, leaves);
-        let (root, hash_trace) = make_hash_trace(&merkle_5_stark.hash_stark, leaves);
+        let (pis, root_, tree_trace) = make_tree_trace(leaves);
+        let (root, hash_trace) = make_hash_trace(leaves);
+        assert_eq!(root, root_);
 
         let traces = vec![tree_trace, hash_trace];
         check_ctls(&traces, &merkle_5_stark.cross_table_lookups);
@@ -179,7 +183,7 @@ mod tests {
             &merkle_5_stark,
             config,
             traces,
-            vec![vec![]; 4],
+            vec![pis.to_vec(), vec![]],
             &mut TimingTree::default(),
         )?;
 
