@@ -10,11 +10,9 @@ use plonky2::{
     hash::hash_types::RichField,
     plonk::circuit_builder::CircuitBuilder,
 };
-use plonky2::field::types::Field;
 
 use crate::{
     constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer},
-    cross_table_lookup::Column,
     stark::Stark,
     vars::{StarkEvaluationTargets, StarkEvaluationVars},
 };
@@ -273,86 +271,68 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5ST
     }
 }
 
-pub fn ctl_data_hash<F: Field>() -> Vec<Column<F>> {
-    Column::singles((0..WORDS_PER_HASH).map(hash_output_word)).collect()
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+    use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
+    use plonky2::util::timing::TimingTree;
+    use plonky2_field::goldilocks_field::GoldilocksField;
+
+    use super::*;
+    use crate::config::StarkConfig;
+    use crate::prover::prove;
+    use crate::tree_stark::generation::TreeTraceGenerator;
+    use crate::stark_testing::test_stark_low_degree;
+    use crate::verifier::verify_stark_proof;
+
+    #[test]
+    fn test_stark_degree() -> Result<()> {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+        type S = MerkleTree5STARK<F, D>;
+
+        let stark = S::new();
+        test_stark_low_degree(stark)
+    }
+
+    // #[test]
+    // fn test_stark_circuit() -> Result<()> {
+    //     const D: usize = 2;
+    //     type C = PoseidonGoldilocksConfig;
+    //     type F = <C as GenericConfig<D>>::F;
+    //     type S = Sha2CompressionStark<F, D>;
+
+    //     let stark = S::new();
+
+    //     test_stark_circuit_constraints::<F, C, S, D>(stark)
+    // }
+
+    #[test]
+    fn test_tree_stark() -> Result<()> {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+        type S = MerkleTree5STARK<F, D>;
+
+        let mut leaves = [[0; 8]; TREE_WIDTH];
+        for i in 0..TREE_WIDTH {
+            for word in 0..WORDS_PER_HASH {
+                leaves[i][word] = (i * WORDS_PER_HASH + word) as u32;
+            }
+        }
+
+        let mut generator = TreeTraceGenerator::<F>::new(16, leaves);
+        let (_root, pis) = generator.gen();
+        let trace = generator.into_polynomial_values();
+
+        let config = StarkConfig::standard_fast_config();
+        let stark = S::new();
+        let mut timing = TimingTree::default();
+        let proof = prove::<F, C, S, D>(stark, &config, trace, pis, &mut timing)?;
+
+        verify_stark_proof(stark, proof, &config)?;
+
+        Ok(())
+    }
 }
-
-pub fn ctl_filter_hash<F: Field>() -> Column<F> {
-    Column::single(OUTPUT_FILTER)
-}
-
-pub fn ctl_data<F: Field>() -> Vec<Column<F>> {
-    Column::singles((0..WORDS_PER_HASH).map(hash_input_0_word))
-        .chain(Column::singles((0..WORDS_PER_HASH).map(hash_input_1_word)))
-        .collect()
-}
-
-pub fn ctl_filter<F: Field>() -> Column<F> {
-    Column::single(INPUT_FILTER)
-}
-
-// #[cfg(test)]
-// mod tests {
-//     use anyhow::Result;
-//     use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
-//     use plonky2::util::timing::TimingTree;
-//     use plonky2_field::goldilocks_field::GoldilocksField;
-
-//     use super::*;
-//     use crate::config::StarkConfig;
-//     use crate::prover::prove;
-//     use crate::tree_stark::generation::TreeTraceGenerator;
-//     use crate::stark_testing::test_stark_low_degree;
-//     use crate::verifier::verify_stark_proof;
-
-//     #[test]
-//     fn test_stark_degree() -> Result<()> {
-//         const D: usize = 2;
-//         type C = PoseidonGoldilocksConfig;
-//         type F = <C as GenericConfig<D>>::F;
-//         type S = MerkleTree5STARK<F, D>;
-
-//         let stark = S::new();
-//         test_stark_low_degree(stark)
-//     }
-
-//     // #[test]
-//     // fn test_stark_circuit() -> Result<()> {
-//     //     const D: usize = 2;
-//     //     type C = PoseidonGoldilocksConfig;
-//     //     type F = <C as GenericConfig<D>>::F;
-//     //     type S = Sha2CompressionStark<F, D>;
-
-//     //     let stark = S::new();
-
-//     //     test_stark_circuit_constraints::<F, C, S, D>(stark)
-//     // }
-
-//     #[test]
-//     fn test_tree_stark() -> Result<()> {
-//         const D: usize = 2;
-//         type C = PoseidonGoldilocksConfig;
-//         type F = <C as GenericConfig<D>>::F;
-//         type S = MerkleTree5STARK<F, D>;
-
-//         let mut leaves = [[0; 8]; TREE_WIDTH];
-//         for i in 0..TREE_WIDTH {
-//             for word in 0..WORDS_PER_HASH {
-//                 leaves[i][word] = (i * WORDS_PER_HASH + word) as u32;
-//             }
-//         }
-
-//         let mut generator = TreeTraceGenerator::<F>::new(16, leaves);
-//         let (_root, pis) = generator.gen();
-//         let trace = generator.into_polynomial_values();
-
-//         let config = StarkConfig::standard_fast_config();
-//         let stark = S::new();
-//         let mut timing = TimingTree::default();
-//         let proof = prove::<F, C, S, D>(stark, &config, trace, pis, &mut timing)?;
-
-//         verify_stark_proof(stark, proof, &config)?;
-
-//         Ok(())
-//     }
-// }

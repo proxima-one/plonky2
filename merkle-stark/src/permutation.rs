@@ -13,9 +13,6 @@ use plonky2::iop::ext_target::ExtensionTarget;
 use plonky2::iop::target::Target;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::config::{AlgebraicHasher, GenericConfig, Hasher};
-use plonky2::plonk::plonk_common::{
-    reduce_with_powers, reduce_with_powers_circuit, reduce_with_powers_ext_circuit,
-};
 use plonky2::util::reducing::{ReducingFactor, ReducingFactorTarget};
 
 use crate::config::StarkConfig;
@@ -44,57 +41,22 @@ impl PermutationPair {
 /// A single instance of a permutation check protocol.
 pub(crate) struct PermutationInstance<'a, T: Copy> {
     pub(crate) pair: &'a PermutationPair,
-    pub(crate) challenge: GrandProductChallenge<T>,
+    pub(crate) challenge: PermutationChallenge<T>,
 }
 
 /// Randomness for a single instance of a permutation check protocol.
 #[derive(Copy, Clone)]
-pub(crate) struct GrandProductChallenge<T: Copy> {
+pub(crate) struct PermutationChallenge<T: Copy> {
     /// Randomness used to combine multiple columns into one.
     pub(crate) beta: T,
     /// Random offset that's added to the beta-reduced column values.
     pub(crate) gamma: T,
 }
 
-impl<F: Field> GrandProductChallenge<F> {
-    pub(crate) fn combine<'a, FE, P, T: IntoIterator<Item = &'a P>, const D2: usize>(
-        &self,
-        terms: T,
-    ) -> P
-    where
-        FE: FieldExtension<D2, BaseField = F>,
-        P: PackedField<Scalar = FE>,
-        T::IntoIter: DoubleEndedIterator,
-    {
-        reduce_with_powers(terms, FE::from_basefield(self.beta)) + FE::from_basefield(self.gamma)
-    }
-}
-
-impl GrandProductChallenge<Target> {
-    pub(crate) fn combine_circuit<F: RichField + Extendable<D>, const D: usize>(
-        &self,
-        builder: &mut CircuitBuilder<F, D>,
-        terms: &[ExtensionTarget<D>],
-    ) -> ExtensionTarget<D> {
-        let reduced = reduce_with_powers_ext_circuit(builder, terms, self.beta);
-        let gamma = builder.convert_to_ext(self.gamma);
-        builder.add_extension(reduced, gamma)
-    }
-
-    pub(crate) fn combine_base_circuit<F: RichField + Extendable<D>, const D: usize>(
-        &self,
-        builder: &mut CircuitBuilder<F, D>,
-        terms: &[Target],
-    ) -> Target {
-        let reduced = reduce_with_powers_circuit(builder, terms, self.beta);
-        builder.add(reduced, self.gamma)
-    }
-}
-
 /// Like `PermutationChallenge`, but with `num_challenges` copies to boost soundness.
 #[derive(Clone)]
-pub(crate) struct GrandProductChallengeSet<T: Copy> {
-    pub(crate) challenges: Vec<GrandProductChallenge<T>>,
+pub(crate) struct PermutationChallengeSet<T: Copy> {
+    pub(crate) challenges: Vec<PermutationChallenge<T>>,
 }
 
 /// Compute all Z polynomials (for permutation arguments).
@@ -102,7 +64,7 @@ pub(crate) fn compute_permutation_z_polys<F, C, S, const D: usize>(
     stark: &S,
     config: &StarkConfig,
     trace_poly_values: &[PolynomialValues<F>],
-    permutation_challenge_sets: &[GrandProductChallengeSet<F>],
+    permutation_challenge_sets: &[PermutationChallengeSet<F>],
 ) -> Vec<PolynomialValues<F>>
 where
     F: RichField + Extendable<D>,
@@ -161,7 +123,7 @@ fn permutation_reduced_polys<F: Field>(
 ) -> (PolynomialValues<F>, PolynomialValues<F>) {
     let PermutationInstance {
         pair: PermutationPair { column_pairs },
-        challenge: GrandProductChallenge { beta, gamma },
+        challenge: PermutationChallenge { beta, gamma },
     } = instance;
 
     let mut reduced_lhs = PolynomialValues::constant(*gamma, degree);
@@ -185,48 +147,48 @@ fn poly_product_elementwise<F: Field>(
     product
 }
 
-fn get_grand_product_challenge<F: RichField, H: Hasher<F>>(
+fn get_permutation_challenge<F: RichField, H: Hasher<F>>(
     challenger: &mut Challenger<F, H>,
-) -> GrandProductChallenge<F> {
+) -> PermutationChallenge<F> {
     let beta = challenger.get_challenge();
     let gamma = challenger.get_challenge();
-    GrandProductChallenge { beta, gamma }
+    PermutationChallenge { beta, gamma }
 }
 
-pub(crate) fn get_grand_product_challenge_set<F: RichField, H: Hasher<F>>(
+fn get_permutation_challenge_set<F: RichField, H: Hasher<F>>(
     challenger: &mut Challenger<F, H>,
     num_challenges: usize,
-) -> GrandProductChallengeSet<F> {
+) -> PermutationChallengeSet<F> {
     let challenges = (0..num_challenges)
-        .map(|_| get_grand_product_challenge(challenger))
+        .map(|_| get_permutation_challenge(challenger))
         .collect();
-    GrandProductChallengeSet { challenges }
+    PermutationChallengeSet { challenges }
 }
 
-pub(crate) fn get_n_grand_product_challenge_sets<F: RichField, H: Hasher<F>>(
+pub(crate) fn get_n_permutation_challenge_sets<F: RichField, H: Hasher<F>>(
     challenger: &mut Challenger<F, H>,
     num_challenges: usize,
     num_sets: usize,
-) -> Vec<GrandProductChallengeSet<F>> {
+) -> Vec<PermutationChallengeSet<F>> {
     (0..num_sets)
-        .map(|_| get_grand_product_challenge_set(challenger, num_challenges))
+        .map(|_| get_permutation_challenge_set(challenger, num_challenges))
         .collect()
 }
 
-fn get_grand_product_challenge_target<
+fn get_permutation_challenge_target<
     F: RichField + Extendable<D>,
     H: AlgebraicHasher<F>,
     const D: usize,
 >(
     builder: &mut CircuitBuilder<F, D>,
     challenger: &mut RecursiveChallenger<F, H, D>,
-) -> GrandProductChallenge<Target> {
+) -> PermutationChallenge<Target> {
     let beta = challenger.get_challenge(builder);
     let gamma = challenger.get_challenge(builder);
-    GrandProductChallenge { beta, gamma }
+    PermutationChallenge { beta, gamma }
 }
 
-pub(crate) fn get_grand_product_challenge_set_target<
+fn get_permutation_challenge_set_target<
     F: RichField + Extendable<D>,
     H: AlgebraicHasher<F>,
     const D: usize,
@@ -234,14 +196,14 @@ pub(crate) fn get_grand_product_challenge_set_target<
     builder: &mut CircuitBuilder<F, D>,
     challenger: &mut RecursiveChallenger<F, H, D>,
     num_challenges: usize,
-) -> GrandProductChallengeSet<Target> {
+) -> PermutationChallengeSet<Target> {
     let challenges = (0..num_challenges)
-        .map(|_| get_grand_product_challenge_target(builder, challenger))
+        .map(|_| get_permutation_challenge_target(builder, challenger))
         .collect();
-    GrandProductChallengeSet { challenges }
+    PermutationChallengeSet { challenges }
 }
 
-pub(crate) fn get_n_grand_product_challenge_sets_target<
+pub(crate) fn get_n_permutation_challenge_sets_target<
     F: RichField + Extendable<D>,
     H: AlgebraicHasher<F>,
     const D: usize,
@@ -250,9 +212,9 @@ pub(crate) fn get_n_grand_product_challenge_sets_target<
     challenger: &mut RecursiveChallenger<F, H, D>,
     num_challenges: usize,
     num_sets: usize,
-) -> Vec<GrandProductChallengeSet<Target>> {
+) -> Vec<PermutationChallengeSet<Target>> {
     (0..num_sets)
-        .map(|_| get_grand_product_challenge_set_target(builder, challenger, num_challenges))
+        .map(|_| get_permutation_challenge_set_target(builder, challenger, num_challenges))
         .collect()
 }
 
@@ -263,7 +225,7 @@ pub(crate) fn get_n_grand_product_challenge_sets_target<
 /// chunk these arguments based on our batch size.
 pub(crate) fn get_permutation_batches<'a, T: Copy>(
     permutation_pairs: &'a [PermutationPair],
-    permutation_challenge_sets: &[GrandProductChallengeSet<T>],
+    permutation_challenge_sets: &[PermutationChallengeSet<T>],
     num_challenges: usize,
     batch_size: usize,
 ) -> Vec<Vec<PermutationInstance<'a, T>>> {
@@ -292,14 +254,14 @@ where
 {
     pub(crate) local_zs: Vec<P>,
     pub(crate) next_zs: Vec<P>,
-    pub(crate) permutation_challenge_sets: Vec<GrandProductChallengeSet<F>>,
+    pub(crate) permutation_challenge_sets: Vec<PermutationChallengeSet<F>>,
 }
 
 pub(crate) fn eval_permutation_checks<F, FE, P, C, S, const D: usize, const D2: usize>(
     stark: &S,
     config: &StarkConfig,
     vars: StarkEvaluationVars<FE, P, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
-    permutation_vars: PermutationCheckVars<F, FE, P, D2>,
+    permutation_data: PermutationCheckVars<F, FE, P, D2>,
     consumer: &mut ConstraintConsumer<P>,
 ) where
     F: RichField + Extendable<D>,
@@ -307,12 +269,14 @@ pub(crate) fn eval_permutation_checks<F, FE, P, C, S, const D: usize, const D2: 
     P: PackedField<Scalar = FE>,
     C: GenericConfig<D, F = F>,
     S: Stark<F, D>,
+    [(); S::COLUMNS]:,
+    [(); S::PUBLIC_INPUTS]:,
 {
     let PermutationCheckVars {
         local_zs,
         next_zs,
         permutation_challenge_sets,
-    } = permutation_vars;
+    } = permutation_data;
 
     // Check that Z(1) = 1;
     for &z in &local_zs {
@@ -336,7 +300,7 @@ pub(crate) fn eval_permutation_checks<F, FE, P, C, S, const D: usize, const D2: 
             .map(|instance| {
                 let PermutationInstance {
                     pair: PermutationPair { column_pairs },
-                    challenge: GrandProductChallenge { beta, gamma },
+                    challenge: PermutationChallenge { beta, gamma },
                 } = instance;
                 let mut factor = ReducingFactor::new(*beta);
                 let (lhs, rhs): (Vec<_>, Vec<_>) = column_pairs
@@ -358,7 +322,7 @@ pub(crate) fn eval_permutation_checks<F, FE, P, C, S, const D: usize, const D2: 
 pub struct PermutationCheckDataTarget<const D: usize> {
     pub(crate) local_zs: Vec<ExtensionTarget<D>>,
     pub(crate) next_zs: Vec<ExtensionTarget<D>>,
-    pub(crate) permutation_challenge_sets: Vec<GrandProductChallengeSet<Target>>,
+    pub(crate) permutation_challenge_sets: Vec<PermutationChallengeSet<Target>>,
 }
 
 pub(crate) fn eval_permutation_checks_circuit<F, S, const D: usize>(
@@ -404,7 +368,7 @@ pub(crate) fn eval_permutation_checks_circuit<F, S, const D: usize>(
                 .map(|instance| {
                     let PermutationInstance {
                         pair: PermutationPair { column_pairs },
-                        challenge: GrandProductChallenge { beta, gamma },
+                        challenge: PermutationChallenge { beta, gamma },
                     } = instance;
                     let beta_ext = builder.convert_to_ext(*beta);
                     let gamma_ext = builder.convert_to_ext(*gamma);

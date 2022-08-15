@@ -1,7 +1,5 @@
 #![allow(clippy::needless_range_loop)]
 
-use core::convert::TryInto;
-
 use arrayref::{array_mut_ref, array_ref};
 use plonky2::field::{polynomial::PolynomialValues, types::Field};
 
@@ -456,9 +454,8 @@ fn rotr(x: u32, n: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use generic_array::{typenum::U64, GenericArray};
     use plonky2_field::goldilocks_field::GoldilocksField;
-    use crate::util::{to_u32_array_be, compress};
+    use crate::util::compress;
 
     use super::*;
 
@@ -473,7 +470,6 @@ mod tests {
         let left_input = *array_ref![block, 0, 8];
         let right_input = *array_ref![block, 8, 8];
 
-        let mut state = HASH_IV;
         let state = compress(left_input, right_input);
 
         let mut generator = Sha2TraceGenerator::<F>::new(128);
