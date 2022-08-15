@@ -5,11 +5,7 @@ use plonky2::field::{
 };
 
 use super::layout::*;
-use crate::util::{compress, trace_rows_to_poly_values};
-
-fn is_power_of_two(n: u64) -> bool {
-    n & (n - 1) == 0
-}
+use crate::util::{is_power_of_two, compress, trace_rows_to_poly_values};
 
 struct TreeTrace<F: Field>(Vec<[F; NUM_COLS]>);
 

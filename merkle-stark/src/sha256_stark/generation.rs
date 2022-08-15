@@ -5,11 +5,8 @@ use plonky2::field::{polynomial::PolynomialValues, types::Field};
 
 use super::constants::{HASH_IV, ROUND_CONSTANTS};
 use super::layout::*;
-use crate::util::trace_rows_to_poly_values;
+use crate::util::{is_power_of_two, trace_rows_to_poly_values};
 
-fn is_power_of_two(n: u64) -> bool {
-    n & (n - 1) == 0
-}
 
 #[repr(transparent)]
 pub struct Sha2Trace<F: Field>(Vec<[F; NUM_COLS]>);

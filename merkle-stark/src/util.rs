@@ -3,6 +3,10 @@ use plonky2::field::polynomial::PolynomialValues;
 use plonky2::field::types::Field;
 use plonky2::util::transpose;
 
+pub fn is_power_of_two(n: u64) -> bool {
+    n & (n - 1) == 0
+}
+
 /// A helper function to transpose a row-wise trace and put it in the format that `prove` expects.
 pub fn trace_rows_to_poly_values<F: Field, const COLUMNS: usize>(
     trace_rows: Vec<[F; COLUMNS]>,
