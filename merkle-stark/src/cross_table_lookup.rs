@@ -3,7 +3,7 @@ use plonky2::field::packed::PackedField;
 use plonky2::field::extension::{Extendable, FieldExtension};
 use plonky2::field::polynomial::PolynomialValues;
 use plonky2::field::types::Field;
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 
 use crate::util::is_power_of_two;
 use crate::vars::StarkEvaluationVars;
@@ -67,45 +67,28 @@ pub trait CtlStark<F: RichField + Extendable<D>, const D: usize>: Stark<F, D> {
         P: PackedField<Scalar = FE>;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum ImportOrExport {
-	Import(Import),
-	Export(Export),
-}
-
-impl From<Import> for ImportOrExport {
-	fn from(import: Import) -> Self {
-		ImportOrExport::Import(import)
-	}
-}
-
-impl From<Export> for ImportOrExport {
-	fn from(export: Export) -> Self {
-		ImportOrExport::Export(export)
-	}
-}
-
 pub struct CtlConsumer<F: RichField + Extendable<D>, const D: usize> {
-	// false if import, true if export
-	sels: HashMap<ImportOrExport, Vec<(usize, F)>>,
+	import_sels: BTreeMap<usize, Vec<(usize, F)>>,
+	export_sels: BTreeMap<usize, Vec<(usize, F)>>,
 	trace_len: usize,
 	idx: usize
 }
 
 impl<F: RichField + Extendable<D>, const D: usize> CtlConsumer<F, D> {
 	pub(crate) fn new(imports: &[Import], exports: &[Export], trace_len: usize) -> CtlConsumer<F, D> {
-		let mut sels = HashMap::with_capacity(imports.len() + exports.len());
+		let mut import_sels = BTreeMap::with_capacity(imports.len());
+		let mut export_sels = BTreeMap::with_capacity(exports.len());
 
 		for &import in imports {
-			sels.insert(import.into(), Vec::new());
+			import_sels.insert(import.0, Vec::new());
 		}
 		for &export in exports {
-			sels.insert(export.into(), Vec::new());
+			export_sels.insert(export.0, Vec::new());
 		}
 
 		let idx = 0;
 
-		CtlConsumer { sels, trace_len, idx }
+		CtlConsumer { import_sels, export_sels, trace_len, idx }
 	}
 
 	pub(crate) fn advance(&mut self) {
@@ -114,99 +97,93 @@ impl<F: RichField + Extendable<D>, const D: usize> CtlConsumer<F, D> {
 
 	pub fn import_at_col(&mut self, col: usize, val: F) {
 		let idx = self.idx;
-		let sels = self.sels.get_mut(&ImportOrExport::Import(Import::new(col))).expect("not an import column for this CTL!");
+		let sels = self.import_sels.get_mut(&col).expect("not an import column for this CTL!");
 		sels.push((idx, val));
 	}
 
 	pub fn export_at_col(&mut self, col: usize, val: F) {
 		let idx = self.idx;
-		let sels = self.sels.get_mut(&ImportOrExport::Export(Export::new(col))).expect("not an export column for this CTL!");
+		let sels = self.export_sels.get_mut(&col).expect("not an export column for this CTL!");
 		sels.push((idx, val));
 	}
+	
 
-	fn compute_polys(self, challenges: Vec<F>) -> CtlPolynomials<F, D> {
+	fn eval_selector_polys(&self) -> CtlSelectorPolynomials<F, D> {
 		let mut import_sels = Vec::new();
 		let mut export_sels = Vec::new(); 
-		let mut import_zs = Vec::new();
-		let mut export_zs = Vec::new();
 		let mut import_cols = Vec::new();
 		let mut export_cols = Vec::new();
 
-		for (marker, active_rows) in self.sels.into_iter() {
-			match marker {
-				ImportOrExport::Import(col) => {
-					let mut sel = PolynomialValues::new(vec![F::ZERO; self.trace_len]);
-					let mut zs = vec![PolynomialValues::new(vec![F::ONE; self.trace_len]); challenges.len()];
-					let mut curr_evals = vec![F::ONE; challenges.len()];
-					let mut z_idx = 0;
-					
-					for (row, val) in active_rows {
-						sel.values[row] = F::ONE;
-
-						while z_idx < row {
-							for (i, z) in zs.iter_mut().enumerate() {
-								z.values[z_idx] = curr_evals[i];
-								z_idx += 1;
-							}
-						}
-
-
-						for (i, z) in zs.iter_mut().enumerate() {
-							curr_evals[i] *= val + challenges[i];
-							z.values[row] += curr_evals[i];
-						}
-					}
-
-					import_sels.push(sel);
-					import_zs.push(zs);
-					import_cols.push(col.0);
-				},
-				ImportOrExport::Export(col) => {
-					let mut sel = PolynomialValues::new(vec![F::ZERO; self.trace_len]);
-					let mut zs = vec![PolynomialValues::new(vec![F::ONE; self.trace_len]); challenges.len()];
-					let mut curr_evals = vec![F::ONE; challenges.len()];
-					let mut z_idx = 0;
-
-					for (row, val) in active_rows {
-						sel.values[row] = F::ONE;
-
-						while z_idx < row {
-							for (i, z) in zs.iter_mut().enumerate() {
-								z.values[z_idx] = curr_evals[i];
-								z_idx += 1;
-							}
-						}
-
-
-						for (i, z) in zs.iter_mut().enumerate() {
-							curr_evals[i] *= val + challenges[i];
-							z.values[row] += curr_evals[i];
-						}
-					}
-
-					export_sels.push(sel);
-					export_zs.push(zs);
-					export_cols.push(col.0);
-				}
+		for (col, active_rows) in self.import_sels.iter() {
+			let mut sel = PolynomialValues::new(vec![F::ZERO; self.trace_len]);
+			
+			for &(row, val) in active_rows {
+				sel.values[row] = F::ONE;
 			}
+
+			import_sels.push(sel);
+			import_cols.push(*col);
 		}
 
-		CtlPolynomials {
+		for (col, active_rows) in self.export_sels.iter() {
+			let mut sel = PolynomialValues::new(vec![F::ZERO; self.trace_len]);
+			
+			for &(row, val) in active_rows {
+				sel.values[row] = F::ONE;
+			}
+
+			export_sels.push(sel);
+			export_cols.push(*col);
+		}
+
+		CtlSelectorPolynomials {
 			import_sels,
 			export_sels,
-			import_zs,
-			export_zs,
 			import_cols,
 			export_cols
 		}
 	}
+
+	fn eval_z_polys(&self, challenges: &[F]) -> CtlZPolynomials<F, D> {
+		let mut import_zs = Vec::with_capacity(self.import_sels.len());
+		let mut export_zs = Vec::with_capacity(self.export_sels.len());
+
+		for (col, active_rows) in self.import_sels.iter() {
+			let mut zs = vec![PolynomialValues::new(vec![F::ONE; active_rows.len() + 1]); challenges.len()];
+
+			for ((i, z), &gamma) in zs.iter_mut().enumerate().zip(challenges) {
+				let mut curr_eval = F::ONE;
+				let mut prev_row = 0;
+				for &(row, val) in active_rows {
+					for _ in prev_row..row {
+						z.values.push(curr_eval);
+					}
+					prev_row = row;
+					curr_eval *= val + gamma;
+				}
+			}
+			
+			for &(row, val) in active_rows {
+				for i in prev_row..row {
+				}
+				z.values[row] = val;
+			}
+
+			import_zs.push(z);
+		}
+
+		CtlZPolynomials { import_sels, export_sels }
+	}
 }
 
-pub(crate) struct CtlPolynomials<F: RichField + Extendable<D>, const D: usize> {
+pub(crate) struct CtlSelectorPolynomials<F: RichField + Extendable<D>, const D: usize> {
 	import_cols: Vec<usize>,
 	export_cols: Vec<usize>,
-	import_zs: Vec<Vec<PolynomialValues<F>>>,
-	export_zs: Vec<Vec<PolynomialValues<F>>>,
 	import_sels: Vec<PolynomialValues<F>>,
 	export_sels: Vec<PolynomialValues<F>>,
+}
+
+pub(crate) struct CtlZPolynomials<F: RichField + Extendable<D>, const D: usize> {
+	import_zs: Vec<Vec<PolynomialValues<F>>>,
+	export_zs: Vec<Vec<PolynomialValues<F>>>,
 }
