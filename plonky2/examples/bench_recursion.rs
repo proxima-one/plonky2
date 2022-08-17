@@ -16,7 +16,7 @@ use plonky2::{
     plonk::{
         circuit_builder::CircuitBuilder,
         circuit_data::{
-            CircuitConfig, CommonCircuitData, VerifierCircuitTarget, VerifierOnlyCircuitData,
+            CircuitConfig, CommonCircuitData, VerifierCircuitData, VerifierCircuitTarget, VerifierOnlyCircuitData,
         },
         config::{AlgebraicHasher, GenericConfig, Hasher, PoseidonGoldilocksConfig},
         proof::{CompressedProofWithPublicInputs, ProofWithPublicInputs},
@@ -151,11 +151,12 @@ where
 /// Test serialization and print some size info.
 fn test_serialization<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(
     proof: &ProofWithPublicInputs<F, C, D>,
-    cd: &CommonCircuitData<F, C, D>,
+    circuit_data: &VerifierCircuitData<F, C, D>,
 ) -> Result<()>
 where
     [(); C::Hasher::HASH_SIZE]:,
 {
+    let cd = &circuit_data.common;
     let proof_bytes = proof.to_bytes()?;
     info!("Proof length: {} bytes", proof_bytes.len());
     let proof_from_bytes = ProofWithPublicInputs::from_bytes(proof_bytes, cd)?;
@@ -177,14 +178,15 @@ where
     assert_eq!(compressed_proof, compressed_proof_from_bytes);
 
     let gate_serializer = DefaultGateSerializer;
-    let common_data_bytes = cd.to_bytes(&gate_serializer)?;
+    let circuit_data_bytes = circuit_data.to_bytes(&gate_serializer)?;
     info!(
-        "Common circuit data length: {} bytes",
-        common_data_bytes.len()
+        "Verifier circuit data length: {} bytes",
+        circuit_data_bytes.len()
     );
-    let common_data_from_bytes =
-        CommonCircuitData::<F, C, D>::from_bytes(common_data_bytes, &gate_serializer)?;
-    assert_eq!(cd, &common_data_from_bytes);
+    let circuit_data_from_bytes =
+        VerifierCircuitData::<F, C, D>::from_bytes(circuit_data_bytes, &gate_serializer)?;
+    assert_eq!(circuit_data, &circuit_data_from_bytes);
+
 
     Ok(())
 }
@@ -214,14 +216,15 @@ fn benchmark(config: &CircuitConfig, log2_inner_size: usize) -> Result<()> {
 
     // Add a second layer of recursion to shrink the proof size further
     let outer = recursive_proof::<F, C, C, D>(&middle, config, None)?;
-    let (proof, _, cd) = &outer;
+    let (proof, vd, cd) = outer;
     info!(
         "Double recursion proof degree {} = 2^{}",
         cd.degree(),
         cd.degree_bits
     );
 
-    test_serialization(proof, cd)?;
+    let verifier_circuit_data = VerifierCircuitData { common: cd, verifier_only: vd };
+    test_serialization(&proof, &verifier_circuit_data)?;
 
     Ok(())
 }

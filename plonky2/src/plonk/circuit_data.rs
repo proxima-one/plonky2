@@ -176,7 +176,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
 }
 
 /// Circuit data required by the prover.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct VerifierCircuitData<
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
@@ -204,6 +204,23 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         [(); C::Hasher::HASH_SIZE]:,
     {
         compressed_proof_with_pis.verify(&self.verifier_only, &self.common)
+    }
+
+    pub fn to_bytes(&self, gate_serializer: &dyn GateSerializer<F, D>) -> anyhow::Result<Vec<u8>> {
+        let mut buffer = Buffer::new(Vec::new());
+        buffer.write_common_circuit_data(&self.common, gate_serializer)?;
+        buffer.write_verifier_only_circuit_data(&self.verifier_only)?;
+        Ok(buffer.bytes())
+    }
+
+    pub fn from_bytes(
+        bytes: Vec<u8>,
+        gate_serializer: &dyn GateSerializer<F, D>
+    ) -> anyhow::Result<VerifierCircuitData<F, C, D>> {
+        let mut buffer = Buffer::new(bytes);
+        let common = buffer.read_common_circuit_data(gate_serializer)?;
+        let verifier_only = buffer.read_verifier_only_circuit_data(common.config.fri_config.cap_height)?;
+        Ok(VerifierCircuitData { verifier_only, common })
     }
 }
 
@@ -233,10 +250,27 @@ pub struct ProverOnlyCircuitData<
 }
 
 /// Circuit data required by the verifier, but not the prover.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct VerifierOnlyCircuitData<C: GenericConfig<D>, const D: usize> {
     /// A commitment to each constant polynomial and each permutation polynomial.
     pub constants_sigmas_cap: MerkleCap<C::F, C::Hasher>,
+}
+
+impl<C: GenericConfig<D>, const D: usize> VerifierOnlyCircuitData<C, D> {
+    pub fn to_bytes(&self) -> anyhow::Result<Vec<u8>> {
+        let mut buffer = Buffer::new(Vec::new());
+        buffer.write_verifier_only_circuit_data(self)?;
+        Ok(buffer.bytes())
+    }
+
+    pub fn from_bytes(
+        bytes: Vec<u8>,
+        cap_height: usize,
+    ) -> anyhow::Result<VerifierOnlyCircuitData<C, D>> {
+        let mut buffer = Buffer::new(bytes);
+        let vd = buffer.read_verifier_only_circuit_data(cap_height)?;
+        Ok(vd)
+    }
 }
 
 /// Circuit data required by both the prover and the verifier.
