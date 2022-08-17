@@ -18,7 +18,7 @@ use crate::gates::selectors::SelectorsInfo;
 use crate::hash::hash_types::RichField;
 use crate::hash::merkle_proofs::MerkleProof;
 use crate::hash::merkle_tree::MerkleCap;
-use crate::plonk::circuit_data::{CircuitConfig, CommonCircuitData};
+use crate::plonk::circuit_data::{CircuitConfig, CommonCircuitData, VerifierOnlyCircuitData};
 use crate::plonk::config::{GenericConfig, GenericHashOut, Hasher};
 use crate::plonk::plonk_common::salt_size;
 use crate::plonk::proof::{
@@ -970,5 +970,19 @@ impl Buffer {
             fri_params,
             selectors_info,
         })
+    }
+
+    pub fn write_verifier_only_circuit_data<
+        C: GenericConfig<D>,
+        const D: usize,
+    >(&mut self, vd: &VerifierOnlyCircuitData<C, D>) -> Result<()> {
+        self.write_merkle_cap::<C::F, C::Hasher>(&vd.constants_sigmas_cap)
+    }
+    pub fn read_verifier_only_circuit_data<
+        C: GenericConfig<D>,
+        const D: usize
+    >(&mut self, cap_height: usize) -> Result<VerifierOnlyCircuitData<C, D>>  {
+        let constants_sigmas_cap = self.read_merkle_cap(cap_height)?;
+        Ok(VerifierOnlyCircuitData { constants_sigmas_cap })
     }
 }
