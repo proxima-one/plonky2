@@ -1,5 +1,3 @@
-use std::iter::once;
-
 use anyhow::{ensure, Result};
 use itertools::Itertools;
 use plonky2::field::extension::{Extendable, FieldExtension};
@@ -11,32 +9,15 @@ use plonky2::plonk::plonk_common::reduce_with_powers;
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
+// use crate::cross_table_lookup::{verify_cross_table_lookups, CtlCheckVars};
+use crate::cross_table_lookup::{CtlCheckVars};
 use crate::permutation::PermutationCheckVars;
-use crate::proof::{StarkOpeningSet, StarkProofChallenges, StarkProofWithPublicInputs};
+use crate::proof::{
+    StarkOpeningSet, StarkProofChallenges, StarkProofWithPublicInputs,
+};
 use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly;
 use crate::vars::StarkEvaluationVars;
-
-pub fn verify_stark_proof<
-    F: RichField + Extendable<D>,
-    C: GenericConfig<D, F = F>,
-    S: Stark<F, D>,
-    const D: usize,
->(
-    stark: S,
-    proof_with_pis: StarkProofWithPublicInputs<F, C, D>,
-    config: &StarkConfig,
-) -> Result<()>
-where
-    [(); S::COLUMNS]:,
-    [(); S::PUBLIC_INPUTS]:,
-    [(); C::Hasher::HASH_SIZE]:,
-{
-    ensure!(proof_with_pis.public_inputs.len() == S::PUBLIC_INPUTS);
-    let degree_bits = proof_with_pis.proof.recover_degree_bits(config);
-    let challenges = proof_with_pis.get_challenges(&stark, config, degree_bits);
-    verify_stark_proof_with_challenges(stark, proof_with_pis, challenges, degree_bits, config)
-}
 
 pub(crate) fn verify_stark_proof_with_challenges<
     F: RichField + Extendable<D>,
@@ -45,9 +26,9 @@ pub(crate) fn verify_stark_proof_with_challenges<
     const D: usize,
 >(
     stark: S,
-    proof_with_pis: StarkProofWithPublicInputs<F, C, D>,
-    challenges: StarkProofChallenges<F, D>,
-    degree_bits: usize,
+    proof_with_pis: &StarkProofWithPublicInputs<F, C, D>,
+    challenges: &StarkProofChallenges<F, D>,
+    ctl_vars: Option<&[CtlCheckVars<F, F::Extension, F::Extension, D>]>,
     config: &StarkConfig,
 ) -> Result<()>
 where
@@ -55,29 +36,34 @@ where
     [(); S::PUBLIC_INPUTS]:,
     [(); C::Hasher::HASH_SIZE]:,
 {
-    check_permutation_options(&stark, &proof_with_pis, &challenges)?;
     let StarkProofWithPublicInputs {
         proof,
         public_inputs,
     } = proof_with_pis;
+    ensure!(public_inputs.len() == S::PUBLIC_INPUTS);
     let StarkOpeningSet {
         local_values,
         next_values,
         permutation_zs,
         permutation_zs_next,
+        ctl_zs,
+        ctl_zs_next,
+        ctl_zs_last,
         quotient_polys,
     } = &proof.openings;
     let vars = StarkEvaluationVars {
         local_values: &local_values.to_vec().try_into().unwrap(),
         next_values: &next_values.to_vec().try_into().unwrap(),
         public_inputs: &public_inputs
-            .into_iter()
+            .iter()
+            .copied()
             .map(F::Extension::from_basefield)
             .collect::<Vec<_>>()
             .try_into()
             .unwrap(),
     };
 
+    let degree_bits = proof.recover_degree_bits(config);
     let (l_1, l_last) = eval_l_1_and_l_last(degree_bits, challenges.stark_zeta);
     let last = F::primitive_root_of_unity(degree_bits).inverse();
     let z_last = challenges.stark_zeta - last.into();
@@ -94,13 +80,14 @@ where
     let permutation_data = stark.uses_permutation_args().then(|| PermutationCheckVars {
         local_zs: permutation_zs.as_ref().unwrap().clone(),
         next_zs: permutation_zs_next.as_ref().unwrap().clone(),
-        permutation_challenge_sets: challenges.permutation_challenge_sets.unwrap(),
+        permutation_challenge_sets: challenges.permutation_challenge_sets.clone().unwrap(),
     });
     eval_vanishing_poly::<F, F::Extension, F::Extension, C, S, D, D>(
         &stark,
         config,
         vars,
         permutation_data,
+        ctl_vars,
         &mut consumer,
     );
     let vanishing_polys_zeta = consumer.accumulators();
@@ -123,15 +110,18 @@ where
         );
     }
 
-    let merkle_caps = once(proof.trace_cap)
+    let merkle_caps = std::iter::once(proof.trace_cap)
         .chain(proof.permutation_zs_cap)
-        .chain(once(proof.quotient_polys_cap))
+        .chain(proof.ctl_zs_cap)
+        .chain(std::iter::once(proof.quotient_polys_cap))
         .collect_vec();
 
     verify_fri_proof::<F, C, D>(
         &stark.fri_instance(
             challenges.stark_zeta,
             F::primitive_root_of_unity(degree_bits),
+            degree_bits,
+            ctl_zs_last.map(|zs| zs.len()).unwrap_or(0),
             config,
         ),
         &proof.openings.to_fri_openings(),
@@ -154,33 +144,6 @@ fn eval_l_1_and_l_last<F: Field>(log_n: usize, x: F) -> (F, F) {
     let invs = F::batch_multiplicative_inverse(&[n * (x - F::ONE), n * (g * x - F::ONE)]);
 
     (z_x * invs[0], z_x * invs[1])
-}
-
-/// Utility function to check that all permutation data wrapped in `Option`s are `Some` iff
-/// the Stark uses a permutation argument.
-fn check_permutation_options<
-    F: RichField + Extendable<D>,
-    C: GenericConfig<D, F = F>,
-    S: Stark<F, D>,
-    const D: usize,
->(
-    stark: &S,
-    proof_with_pis: &StarkProofWithPublicInputs<F, C, D>,
-    challenges: &StarkProofChallenges<F, D>,
-) -> Result<()> {
-    let options_is_some = [
-        proof_with_pis.proof.permutation_zs_cap.is_some(),
-        proof_with_pis.proof.openings.permutation_zs.is_some(),
-        proof_with_pis.proof.openings.permutation_zs_next.is_some(),
-        challenges.permutation_challenge_sets.is_some(),
-    ];
-    ensure!(
-        options_is_some
-            .into_iter()
-            .all(|b| b == stark.uses_permutation_args()),
-        "Permutation data doesn't match with Stark configuration."
-    );
-    Ok(())
 }
 
 #[cfg(test)]

@@ -70,6 +70,25 @@ where
     }
 }
 
+fn observe_traces_and_get_ctl_challenges<F, C, S, const D: usize>(
+    proofs: &[StarkProofWithPublicInputs<F, C, D>],
+    config: &StarkConfig,
+) -> Vec<F>
+where
+    F: RichField + Extendable<D>,
+    C: GenericConfig<D, F = F>,
+    S: Stark<F, D>,
+{
+    let num_challenges = config.num_challenges;
+    let mut challenger = Challenger::<F, C::Hasher>::new();
+
+    for proof in proofs {
+        challenger.observe_cap(&proof.proof.trace_cap);
+    }
+
+    challenger.get_n_challenges(config.num_challenges)
+}
+
 impl<F, C, const D: usize> StarkProofWithPublicInputs<F, C, D>
 where
     F: RichField + Extendable<D>,
@@ -98,6 +117,7 @@ where
         let StarkProof {
             trace_cap,
             permutation_zs_cap,
+            ctl_zs_cap,
             quotient_polys_cap,
             openings,
             opening_proof:
@@ -113,6 +133,7 @@ where
             stark,
             trace_cap,
             permutation_zs_cap.as_ref(),
+            ctl_zs_cap.as_ref(),
             quotient_polys_cap,
             openings,
             commit_phase_merkle_caps,
@@ -167,7 +188,8 @@ where
     challenger.observe_cap(quotient_polys_cap);
     let stark_zeta = challenger.get_extension_challenge(builder);
 
-    challenger.observe_openings(&openings.to_fri_openings());
+    let zero = builder.zero();
+    challenger.observe_openings(&openings.to_fri_openings(zero));
 
     StarkProofChallengesTarget {
         permutation_challenge_sets,

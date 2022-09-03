@@ -1,4 +1,4 @@
-use std::iter::once;
+use std::any::type_name;
 
 use anyhow::{ensure, Result};
 use itertools::Itertools;
@@ -20,29 +20,69 @@ use plonky2_util::{log2_ceil, log2_strict};
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
-use crate::permutation::PermutationCheckVars;
-use crate::permutation::{
-    compute_permutation_z_polys, get_n_permutation_challenge_sets, PermutationChallengeSet,
-};
+use crate::cross_table_lookup::{CtlCheckVars, CtlTableData, CtlData};
+use crate::permutation::{PermutationCheckVars, PermutationChallengeSet};
+use crate::permutation::compute_permutation_z_polys;
+use crate::permutation::get_n_permutation_challenge_sets;
 use crate::proof::{StarkOpeningSet, StarkProof, StarkProofWithPublicInputs};
 use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly;
 use crate::vars::StarkEvaluationVars;
 
-pub fn prove<F, C, S, const D: usize>(
-    stark: S,
+/// Compute all STARK proofs.
+pub fn get_trace_commitments<F, C, const D: usize>(
     config: &StarkConfig,
-    trace_poly_values: Vec<PolynomialValues<F>>,
+    trace_poly_values: Vec<Vec<PolynomialValues<F>>>,
+    public_inputs: Vec<Vec<F>>,
+    timing: &mut TimingTree,
+) -> Result<Vec<PolynomialBatch<F, C, D>>>
+where
+    F: RichField + Extendable<D>,
+    C: GenericConfig<D, F = F>,
+    [(); C::Hasher::HASH_SIZE]:,
+{
+    let rate_bits = config.fri_config.rate_bits;
+    let cap_height = config.fri_config.cap_height;
+
+    Ok(timed!(
+        timing,
+        "compute trace commitments",
+        trace_poly_values
+            .iter()
+            .map(|trace| {
+                PolynomialBatch::<F, C, D>::from_values(
+                    // TODO: Cloning this isn't great; consider having `from_values` accept a reference,
+                    // or having `compute_permutation_z_polys` read trace values from the `PolynomialBatch`.
+                    trace.clone(),
+                    rate_bits,
+                    false,
+                    cap_height,
+                    timing,
+                    None,
+                )
+            })
+            .collect::<Vec<_>>()
+    ))
+}
+
+/// Compute proof for a single STARK table.
+fn prove_single_table<F, C, S, const D: usize>(
+    stark: &S,
+    config: &StarkConfig,
+    trace_poly_values: &[PolynomialValues<F>],
+    trace_commitment: &PolynomialBatch<F, C, D>,
+    ctl_data: Option<&CtlTableData<F>>,
     public_inputs: [F; S::PUBLIC_INPUTS],
+    challenger: &mut Challenger<F, C::Hasher>,
     timing: &mut TimingTree,
 ) -> Result<StarkProofWithPublicInputs<F, C, D>>
 where
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
     S: Stark<F, D>,
+    [(); C::Hasher::HASH_SIZE]:,
     [(); S::COLUMNS]:,
     [(); S::PUBLIC_INPUTS]:,
-    [(); C::Hasher::HASH_SIZE]:,
 {
     let degree = trace_poly_values[0].len();
     let degree_bits = log2_strict(degree);
@@ -54,25 +94,6 @@ where
         "FRI total reduction arity is too large.",
     );
 
-    let trace_commitment = timed!(
-        timing,
-        "compute trace commitment",
-        PolynomialBatch::<F, C, D>::from_values(
-            // TODO: Cloning this isn't great; consider having `from_values` accept a reference,
-            // or having `compute_permutation_z_polys` read trace values from the `PolynomialBatch`.
-            trace_poly_values.clone(),
-            rate_bits,
-            false,
-            cap_height,
-            timing,
-            None,
-        )
-    );
-
-    let trace_cap = trace_commitment.merkle_tree.cap.clone();
-    let mut challenger = Challenger::new();
-    challenger.observe_cap(&trace_cap);
-
     // Permutation arguments.
     let permutation_zs_commitment_challenges = stark.uses_permutation_args().then(|| {
         let permutation_challenge_sets = get_n_permutation_challenge_sets(
@@ -80,6 +101,7 @@ where
             config.num_challenges,
             stark.permutation_batch_size(),
         );
+
         let permutation_z_polys = compute_permutation_z_polys::<F, C, S, D>(
             &stark,
             config,
@@ -101,6 +123,7 @@ where
         );
         (permutation_zs_commitment, permutation_challenge_sets)
     });
+
     let permutation_zs_commitment = permutation_zs_commitment_challenges
         .as_ref()
         .map(|(comm, _)| comm);
@@ -111,16 +134,35 @@ where
         challenger.observe_cap(cap);
     }
 
+    let ctl_zs_commitment = ctl_data.map(|ctl_data| {
+        PolynomialBatch::<F, C, D>::from_values(
+            ctl_data.table_zs.clone(),
+            rate_bits,
+            false,
+            config.fri_config.cap_height,
+            timing,
+            None
+        )
+    });
+
+    let ctl_zs_cap = ctl_zs_commitment.as_ref().map(|c| c.merkle_tree.cap.clone());
+    if let Some(cap) = &ctl_zs_cap {
+        challenger.observe_cap(cap);
+    }
+
+
     let alphas = challenger.get_n_challenges(config.num_challenges);
     let quotient_polys = compute_quotient_polys::<F, <F as Packable>::Packing, C, S, D>(
-        &stark,
-        &trace_commitment,
+        stark,
+        trace_commitment,
         &permutation_zs_commitment_challenges,
+        ctl_data,
         public_inputs,
         alphas,
         degree_bits,
         config,
     );
+
     let all_quotient_chunks = quotient_polys
         .into_par_iter()
         .flat_map(|mut quotient_poly| {
@@ -155,34 +197,41 @@ where
         zeta.exp_power_of_2(degree_bits) != F::Extension::ONE,
         "Opening point is in the subgroup."
     );
+
     let openings = StarkOpeningSet::new(
         zeta,
         g,
-        &trace_commitment,
+        trace_commitment,
         permutation_zs_commitment,
+        ctl_zs_commitment.as_ref(),
         &quotient_commitment,
+        degree_bits,
+        stark.num_permutation_batches(config),
     );
     challenger.observe_openings(&openings.to_fri_openings());
 
-    let initial_merkle_trees = once(&trace_commitment)
+    let initial_merkle_trees = std::iter::once(trace_commitment)
         .chain(permutation_zs_commitment)
-        .chain(once(&quotient_commitment))
+        .chain(ctl_zs_commitment.as_ref())
+        .chain(std::iter::once(&quotient_commitment))
         .collect_vec();
 
     let opening_proof = timed!(
         timing,
         "compute openings proof",
         PolynomialBatch::prove_openings(
-            &stark.fri_instance(zeta, g, config),
+            &stark.fri_instance(zeta, g, degree_bits, ctl_data.map(|data| data.table_zs.len()).unwrap_or(0), config),
             &initial_merkle_trees,
-            &mut challenger,
+            challenger,
             &fri_params,
             timing,
         )
     );
+
     let proof = StarkProof {
-        trace_cap,
+        trace_cap: trace_commitment.merkle_tree.cap.clone(),
         permutation_zs_cap,
+        ctl_zs_cap,
         quotient_polys_cap,
         openings,
         opening_proof,
@@ -196,6 +245,8 @@ where
 
 /// Computes the quotient polynomials `(sum alpha^i C_i(x)) / Z_H(x)` for `alpha` in `alphas`,
 /// where the `C_i`s are the Stark constraints.
+/// Computes the quotient polynomials `(sum alpha^i C_i(x)) / Z_H(x)` for `alpha` in `alphas`,
+/// where the `C_i`s are the Stark constraints.
 fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
     stark: &S,
     trace_commitment: &'a PolynomialBatch<F, C, D>,
@@ -203,6 +254,7 @@ fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
         PolynomialBatch<F, C, D>,
         Vec<PermutationChallengeSet<F>>,
     )>,
+    ctl_data: Option<&CtlTableData<F>>,
     public_inputs: [F; S::PUBLIC_INPUTS],
     alphas: Vec<F>,
     degree_bits: usize,
@@ -285,6 +337,9 @@ where
                     permutation_challenge_sets: permutation_challenge_sets.to_vec(),
                 },
             );
+
+            // TODO: CTL Vals
+
             eval_vanishing_poly::<F, F, P, C, S, D, 1>(
                 stark,
                 config,

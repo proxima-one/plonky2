@@ -11,6 +11,7 @@ use plonky2_util::ceil_div_usize;
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
+use crate::cross_table_lookup::{CtlImport, CtlExport};
 use crate::permutation::PermutationPair;
 use crate::vars::StarkEvaluationTargets;
 use crate::vars::StarkEvaluationVars;
@@ -83,6 +84,8 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         &self,
         zeta: F::Extension,
         g: F,
+        degree_bits: usize,
+        num_ctl_zs: usize,
         config: &StarkConfig,
     ) -> FriInstanceInfo<F, D> {
         let no_blinding_oracle = FriOracleInfo { blinding: false };
@@ -95,6 +98,15 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             FriPolynomialInfo::from_range(
                 oracle_indices.next().unwrap(),
                 0..self.num_permutation_batches(config),
+            )
+        } else {
+            vec![]
+        };
+
+        let ctl_zs_info = if num_ctl_zs > 0 {
+            FriPolynomialInfo::from_range(
+                oracle_indices.next().unwrap(),
+                0..num_ctl_zs
             )
         } else {
             vec![]
@@ -180,6 +192,16 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
 
     fn uses_permutation_args(&self) -> bool {
         !self.permutation_pairs().is_empty()
+    }
+
+    /// Columns which are to be "Imported" from another Stark, plus an optional fitler column for each
+    fn ctl_imports(&self) -> Vec<CtlImport> {
+        vec![]
+    }
+
+    /// Columns which are to be "Exported" from this Stark and made available for import in another Stark, plus an optional filter column.
+    fn ctl_exports(&self) -> Vec<CtlExport> {
+        vec![]
     }
 
     /// The number of permutation argument instances that can be combined into a single constraint.
