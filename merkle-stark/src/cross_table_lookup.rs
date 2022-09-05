@@ -17,50 +17,21 @@ use crate::stark::Stark;
 #[derive(Debug, Clone)]
 pub struct CtlTableDescriptor {
 	pub(crate) tid: TableID,
-	pub(crate) looked_cols: Vec<Col>,
-	pub(crate) looking_cols: Vec<Col>,
+	pub(crate) looked_cols: Vec<CtlColumn>,
+	pub(crate) looking_cols: Vec<CtlColumn>,
 	pub(crate) looked_tids: Vec<TableID>,
-}
-
-
-pub struct CtlExport {
-	col: usize,
-	filter_col: Option<usize>
-}
-
-impl CtlExport {
-	pub fn new(col: usize, filter_col: Option<usize>) -> CtlExport {
-		CtlExport {
-			col,
-			filter_col
-		}	
-	}
-}
-
-pub struct CtlImport {
-	col: usize,
-	filter_col: Option<usize>
-}
-
-impl CtlImport {
-	pub fn new(col: usize, filter_col: Option<usize>) -> CtlImport {
-		CtlImport {
-			col,
-			filter_col
-		}	
-	}	
 }
 
 /// Describes a column that is involved in a cross-table lookup
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Col {
+pub struct CtlColumn {
 	col: usize,
 	filter_col: Option<usize>
 }
 
-impl Col {
-    fn new(col: usize, filter_col: Option<usize>) -> Col {
-		Col {
+impl CtlColumn {
+    fn new(col: usize, filter_col: Option<usize>) -> CtlColumn {
+		CtlColumn {
 			col,
 			filter_col
 		}
@@ -84,18 +55,11 @@ impl Into<usize> for TableID {
 	}
 }
 
-/// Represents a set traces from different STARKs which ferform cross-table lookups against each other.
-/// the ith element of `table_descriptors` represents the ith element of `trarce_poly_values`.
-pub struct CtlTraces<'a, F: RichField + Extendable<D>, const D: usize> {
-	trace_poly_valueses: &'a [Vec<PolynomialValues<F>>],
-	ctl_descriptors: Vec<CtlTableDescriptor>,
-}
-
 // the preprocessed polynomials necessary for a single CTL argument
 #[derive(Debug, Clone)]
 pub(crate) struct CtlInstanceData<F: Field> {
-	looking_col: Col,
-	looked_col: Col,
+	looking_col: CtlColumn,
+	looked_col: CtlColumn,
 	looking_tid: TableID,
 	looked_tid: TableID,
 	// `num_challenges` z polys for the column in the looked (source) trace
@@ -113,7 +77,7 @@ pub(crate) struct CtlData<F: Field> {
 
 #[derive(Debug, Clone)]
 pub(crate) struct CtlTableData<F: Field> {
-	pub(crate) cols: Vec<Col>,
+	pub(crate) cols: Vec<CtlColumn>,
 	pub(crate) table_zs: Vec<PolynomialValues<F>>,
 	// challenges used for the CTLs in this table
 	pub(crate) challenges: Vec<F>
@@ -145,8 +109,7 @@ pub(crate) fn ctl_data_by_table<F: Field>(ctl_data: CtlData<F>, num_tables: usiz
 }
 
 // compute the preprocessed polynomials necessary for the lookup argument given CTL traces and table descriptors
-fn get_ctl_data<'a, F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(config: &StarkConfig, ctl_traces: CtlTraces<F, D>, challenger: &mut Challenger<F, C::Hasher>) -> CtlData<F> {
-	let CtlTraces { trace_poly_valueses, ctl_descriptors } = ctl_traces;
+fn get_ctl_data<'a, F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(config: &StarkConfig, trace_poly_valueses: &[Vec<PolynomialValues<F>>], ctl_descriptors: &[CtlTableDescriptor], challenger: &mut Challenger<F, C::Hasher>) -> CtlData<F> {
 	let mut instances = Vec::new();
 	for descriptor in ctl_descriptors.iter(){
 		let looking_tid = descriptor.tid;
@@ -244,7 +207,7 @@ where
     pub(crate) local_zs: Vec<P>,
     pub(crate) next_zs: Vec<P>,
     pub(crate) challenges: &'a [F],
-	pub(crate) cols: &'a [Col],
+	pub(crate) cols: &'a [CtlColumn],
 }
 
 pub(crate) fn eval_cross_table_lookup_checks<F, FE, P, C, S, const D: usize, const D2: usize>(

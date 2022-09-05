@@ -20,7 +20,7 @@ use plonky2_util::{log2_ceil, log2_strict};
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
-use crate::cross_table_lookup::{CtlCheckVars, CtlTableData, CtlData, Col};
+use crate::cross_table_lookup::{CtlCheckVars, CtlTableData, CtlData, CtlColumn};
 use crate::permutation::{PermutationCheckVars, PermutationChallengeSet};
 use crate::permutation::compute_permutation_z_polys;
 use crate::permutation::get_n_permutation_challenge_sets;
@@ -339,7 +339,7 @@ fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
     ctl_zs_commitment_challenges_cols: &'a Option<(
         PolynomialBatch<F, C, D>,
         Vec<F>,
-        Vec<Col>,
+        Vec<CtlColumn>,
     )>,
     public_inputs: [F; S::PUBLIC_INPUTS],
     alphas: Vec<F>,
