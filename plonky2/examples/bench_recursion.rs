@@ -89,7 +89,7 @@ where
 
     let mut timing = TimingTree::new("prove", Level::Debug);
     let proof = prove(&data.prover_only, &data.common, inputs, &mut timing)?;
-    timing.print();
+
     data.verify(proof.clone())?;
 
     Ok((proof, data.verifier_only, data.common))
@@ -143,7 +143,9 @@ where
     let proof = prove(&data.prover_only, &data.common, pw, &mut timing)?;
     timing.print();
 
+    let timing = TimingTree::new("verify", Level::Debug);
     data.verify(proof.clone())?;
+    timing.print();
 
     Ok((proof, data.verifier_only, data.common))
 }

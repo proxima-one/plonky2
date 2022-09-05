@@ -276,7 +276,6 @@ mod tests {
     use anyhow::Result;
     use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
     use plonky2::util::timing::TimingTree;
-    use plonky2_field::goldilocks_field::GoldilocksField;
 
     use super::*;
     use crate::config::StarkConfig;
