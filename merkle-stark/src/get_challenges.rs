@@ -10,13 +10,54 @@ use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::config::{AlgebraicHasher, GenericConfig};
 
 use crate::config::StarkConfig;
+use crate::cross_table_lookup::CtlTableDescriptor;
 use crate::permutation::{
     get_n_permutation_challenge_sets, get_n_permutation_challenge_sets_target,
 };
 use crate::proof::*;
 use crate::stark::Stark;
 
-fn get_challenges<F, C, S, const D: usize>(
+// makes a challenger and overves the trace caps
+pub(crate) fn start_all_proof_challenges<F, C, const D: usize>(
+    trace_caps: &[MerkleCap<F, C::Hasher>],
+) -> Challenger<F, C::Hasher>
+where
+    F: RichField + Extendable<D>,
+    C: GenericConfig<D, F = F>,
+{
+    let mut challenger = Challenger::<F, C::Hasher>::new();
+
+    for cap in trace_caps {
+        challenger.observe_cap(cap);
+    }
+
+    return challenger
+}
+
+// assumes `start_all_proof_challenges` was used to get the challenger
+pub(crate) fn get_ctl_challenges_by_table<F, C, const D: usize>(
+    challenger: &mut Challenger<F, C::Hasher>,
+    table_descriptors: &[CtlTableDescriptor],
+    num_challenges: usize,
+) -> Vec<Vec<F>>
+where
+    F: RichField + Extendable<D>,
+    C: GenericConfig<D, F = F>,
+{
+    let mut res = vec![Vec::new(); table_descriptors.len()];
+    for descriptor in table_descriptors.iter() {
+        let looking_tid = descriptor.tid;
+        for looked_tid in descriptor.looked_tids.iter() {
+            let challenges = challenger.get_n_challenges(num_challenges);
+            res[looking_tid.0].extend(challenges.clone());
+            res[looked_tid.0].extend(challenges);
+        }
+    }
+
+    res
+}
+
+pub(crate) fn get_challenges_no_ctl<F, C, S, const D: usize>(
     stark: &S,
     trace_cap: &MerkleCap<F, C::Hasher>,
     permutation_zs_cap: Option<&MerkleCap<F, C::Hasher>>,
@@ -60,6 +101,7 @@ where
         permutation_challenge_sets,
         stark_alphas,
         stark_zeta,
+        ctl_challenges: None,
         fri_challenges: challenger.fri_challenges::<C, D>(
             commit_phase_merkle_caps,
             final_poly,
@@ -96,19 +138,19 @@ where
 {
     // TODO: Should be used later in compression?
     #![allow(dead_code)]
-    pub(crate) fn fri_query_indices<S: Stark<F, D>>(
+    pub(crate) fn fri_query_indices_no_ctl<S: Stark<F, D>>(
         &self,
         stark: &S,
         config: &StarkConfig,
         degree_bits: usize,
     ) -> Vec<usize> {
-        self.get_challenges(stark, config, degree_bits)
+        self.get_challenges_no_ctl(stark, config, degree_bits)
             .fri_challenges
             .fri_query_indices
     }
 
     /// Computes all Fiat-Shamir challenges used in the STARK proof.
-    pub(crate) fn get_challenges<S: Stark<F, D>>(
+    pub(crate) fn get_challenges_no_ctl<S: Stark<F, D>>(
         &self,
         stark: &S,
         config: &StarkConfig,
@@ -129,11 +171,12 @@ where
                 },
         } = &self.proof;
 
-        get_challenges::<F, C, S, D>(
+        assert!(ctl_zs_cap.is_none(), "CTLs not supported in `get_challenges_no_ctl`");
+
+        get_challenges_no_ctl::<F, C, S, D>(
             stark,
             trace_cap,
             permutation_zs_cap.as_ref(),
-            ctl_zs_cap.as_ref(),
             quotient_polys_cap,
             openings,
             commit_phase_merkle_caps,

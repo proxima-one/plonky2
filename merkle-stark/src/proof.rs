@@ -108,6 +108,9 @@ pub(crate) struct StarkProofChallenges<F: RichField + Extendable<D>, const D: us
     /// Randomness used in any permutation arguments.
     pub permutation_challenge_sets: Option<Vec<PermutationChallengeSet<F>>>,
 
+    /// Randomness used in CTLs, if any
+    pub ctl_challenges: Option<Vec<F>>,
+
     /// Random values used to combine STARK constraints.
     pub stark_alphas: Vec<F>,
 
@@ -205,7 +208,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
                 .copied()
                 .collect_vec(),
         };
-        let ctl_last_batch = self.ctl_zs_last.map(|zs| {
+        let ctl_last_batch = self.ctl_zs_last.as_ref().map(|zs| {
             FriOpeningBatch {
                 values: zs
                     .iter()

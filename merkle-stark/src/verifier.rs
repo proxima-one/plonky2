@@ -19,16 +19,14 @@ use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly;
 use crate::vars::StarkEvaluationVars;
 
-pub(crate) fn verify_stark_proof_with_challenges<
+pub fn verify_stark_proof_no_ctl<
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
     S: Stark<F, D>,
     const D: usize,
 >(
-    stark: S,
+    stark: &S,
     proof_with_pis: &StarkProofWithPublicInputs<F, C, D>,
-    challenges: &StarkProofChallenges<F, D>,
-    ctl_vars: Option<&[CtlCheckVars<F, F::Extension, F::Extension, D>]>,
     config: &StarkConfig,
 ) -> Result<()>
 where
@@ -36,6 +34,32 @@ where
     [(); S::PUBLIC_INPUTS]:,
     [(); C::Hasher::HASH_SIZE]:,
 {
+    ensure!(proof_with_pis.public_inputs.len() == S::PUBLIC_INPUTS);
+    let degree_bits = proof_with_pis.proof.recover_degree_bits(config);
+    let challenges = proof_with_pis.get_challenges_no_ctl(stark, config, degree_bits);
+    verify_stark_proof_with_challenges(stark, proof_with_pis, &challenges, None, config)
+}
+
+pub(crate) fn verify_stark_proof_with_challenges<
+    F: RichField + Extendable<D>,
+    C: GenericConfig<D, F = F>,
+    S: Stark<F, D>,
+    const D: usize,
+>(
+    stark: &S,
+    proof_with_pis: &StarkProofWithPublicInputs<F, C, D>,
+    challenges: &StarkProofChallenges<F, D>,
+    ctl_vars: Option<CtlCheckVars<F, F::Extension, F::Extension, D>>,
+    config: &StarkConfig,
+) -> Result<()>
+where
+    [(); S::COLUMNS]:,
+    [(); S::PUBLIC_INPUTS]:,
+    [(); C::Hasher::HASH_SIZE]:,
+{
+
+    assert!(ctl_vars.is_none(), "CTL not yet supported");
+
     let StarkProofWithPublicInputs {
         proof,
         public_inputs,
@@ -46,8 +70,8 @@ where
         next_values,
         permutation_zs,
         permutation_zs_next,
-        ctl_zs,
-        ctl_zs_next,
+        ctl_zs: _,
+        ctl_zs_next: _,
         ctl_zs_last,
         quotient_polys,
     } = &proof.openings;
@@ -77,16 +101,17 @@ where
         l_1,
         l_last,
     );
-    let permutation_data = stark.uses_permutation_args().then(|| PermutationCheckVars {
+    let permutation_vars = stark.uses_permutation_args().then(|| PermutationCheckVars {
         local_zs: permutation_zs.as_ref().unwrap().clone(),
         next_zs: permutation_zs_next.as_ref().unwrap().clone(),
         permutation_challenge_sets: challenges.permutation_challenge_sets.clone().unwrap(),
     });
+
     eval_vanishing_poly::<F, F::Extension, F::Extension, C, S, D, D>(
         &stark,
         config,
         vars,
-        permutation_data,
+        permutation_vars,
         ctl_vars,
         &mut consumer,
     );
@@ -110,10 +135,10 @@ where
         );
     }
 
-    let merkle_caps = std::iter::once(proof.trace_cap)
-        .chain(proof.permutation_zs_cap)
-        .chain(proof.ctl_zs_cap)
-        .chain(std::iter::once(proof.quotient_polys_cap))
+    let merkle_caps = std::iter::once(proof.trace_cap.clone())
+        .chain(proof.permutation_zs_cap.clone())
+        .chain(proof.ctl_zs_cap.clone())
+        .chain(std::iter::once(proof.quotient_polys_cap.clone()))
         .collect_vec();
 
     verify_fri_proof::<F, C, D>(
@@ -121,7 +146,7 @@ where
             challenges.stark_zeta,
             F::primitive_root_of_unity(degree_bits),
             degree_bits,
-            ctl_zs_last.map(|zs| zs.len()).unwrap_or(0),
+            ctl_zs_last.as_ref().map(|zs| zs.len()).unwrap_or(0),
             config,
         ),
         &proof.openings.to_fri_openings(),

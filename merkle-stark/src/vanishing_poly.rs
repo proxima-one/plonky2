@@ -18,8 +18,8 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
     stark: &S,
     config: &StarkConfig,
     vars: StarkEvaluationVars<FE, P, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
-    permutation_data: Option<PermutationCheckVars<F, FE, P, D2>>,
-    ctl_data: Option<&[CtlCheckVars<F, FE, P, D2>]>,
+    permutation_vars: Option<PermutationCheckVars<F, FE, P, D2>>,
+    ctl_data: Option<CtlCheckVars<F, FE, P, D2>>,
     consumer: &mut ConstraintConsumer<P>,
 ) where
     F: RichField + Extendable<D>,
@@ -31,7 +31,7 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
     [(); S::PUBLIC_INPUTS]:,
 {
     stark.eval_packed_generic(vars, consumer);
-    if let Some(permutation_data) = permutation_data {
+    if let Some(permutation_data) = permutation_vars {
         eval_permutation_checks::<F, FE, P, C, S, D, D2>(
             stark,
             config,
@@ -42,33 +42,33 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
     }
 
     if let Some(ctl_data) = ctl_data {
-        eval_cross_table_lookup_checks::<F, FE, P, C, S, D, D2>(vars, ctl_data, consumer);
+        eval_cross_table_lookup_checks::<F, FE, P, C, S, D, D2>(vars, ctl_data, consumer, config.num_challenges);
     }
 }
 
-pub(crate) fn eval_vanishing_poly_circuit<F, C, S, const D: usize>(
-    builder: &mut CircuitBuilder<F, D>,
-    stark: &S,
-    config: &StarkConfig,
-    vars: StarkEvaluationTargets<D, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
-    permutation_data: Option<PermutationCheckDataTarget<D>>,
-    consumer: &mut RecursiveConstraintConsumer<F, D>,
-) where
-    F: RichField + Extendable<D>,
-    C: GenericConfig<D, F = F>,
-    S: Stark<F, D>,
-    [(); S::COLUMNS]:,
-    [(); S::PUBLIC_INPUTS]:,
-{
-    stark.eval_ext_circuit(builder, vars, consumer);
-    if let Some(permutation_data) = permutation_data {
-        eval_permutation_checks_circuit::<F, S, D>(
-            builder,
-            stark,
-            config,
-            vars,
-            permutation_data,
-            consumer,
-        );
-    }
-}
+// pub(crate) fn eval_vanishing_poly_circuit<F, C, S, const D: usize>(
+//     builder: &mut CircuitBuilder<F, D>,
+//     stark: &S,
+//     config: &StarkConfig,
+//     vars: StarkEvaluationTargets<D, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
+//     permutation_data: Option<PermutationCheckDataTarget<D>>,
+//     consumer: &mut RecursiveConstraintConsumer<F, D>,
+// ) where
+//     F: RichField + Extendable<D>,
+//     C: GenericConfig<D, F = F>,
+//     S: Stark<F, D>,
+//     [(); S::COLUMNS]:,
+//     [(); S::PUBLIC_INPUTS]:,
+// {
+//     stark.eval_ext_circuit(builder, vars, consumer);
+//     if let Some(permutation_data) = permutation_data {
+//         eval_permutation_checks_circuit::<F, S, D>(
+//             builder,
+//             stark,
+//             config,
+//             vars,
+//             permutation_data,
+//             consumer,
+//         );
+//     }
+// }

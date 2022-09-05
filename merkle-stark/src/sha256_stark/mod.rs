@@ -663,10 +663,10 @@ mod tests {
 
     use super::*;
     use crate::config::StarkConfig;
-    use crate::prover::prove;
+    use crate::prover::prove_no_ctl;
     use crate::sha256_stark::generation::Sha2TraceGenerator;
     use crate::stark_testing::test_stark_low_degree;
-    use crate::verifier::verify_stark_proof;
+    use crate::verifier::verify_stark_proof_no_ctl;
 
     #[test]
     fn test_stark_degree() -> Result<()> {
@@ -712,9 +712,9 @@ mod tests {
         let stark = S::new();
         let trace = generator.into_polynomial_values();
         let mut timing = TimingTree::default();
-        let proof = prove::<F, C, S, D>(stark, &config, trace, [], &mut timing)?;
+        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing)?;
 
-        verify_stark_proof(stark, proof, &config)?;
+        verify_stark_proof_no_ctl(&stark, &proof, &config)?;
 
         Ok(())
     }
@@ -747,9 +747,9 @@ mod tests {
         let config = StarkConfig::standard_fast_config();
         let stark = S::new();
         let mut timing = TimingTree::default();
-        let proof = prove::<F, C, S, D>(stark, &config, trace, [], &mut timing)?;
+        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing)?;
 
-        verify_stark_proof(stark, proof, &config)?;
+        verify_stark_proof_no_ctl(&stark, &proof, &config)?;
 
         Ok(())
     }

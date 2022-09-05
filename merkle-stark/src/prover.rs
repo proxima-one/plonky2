@@ -20,7 +20,7 @@ use plonky2_util::{log2_ceil, log2_strict};
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
-use crate::cross_table_lookup::{CtlCheckVars, CtlTableData, CtlData};
+use crate::cross_table_lookup::{CtlCheckVars, CtlTableData, CtlData, Col};
 use crate::permutation::{PermutationCheckVars, PermutationChallengeSet};
 use crate::permutation::compute_permutation_z_polys;
 use crate::permutation::get_n_permutation_challenge_sets;
@@ -29,11 +29,30 @@ use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly;
 use crate::vars::StarkEvaluationVars;
 
-/// Compute all STARK proofs.
-pub fn get_trace_commitments<F, C, const D: usize>(
+/// Make a new challenger, compute all STARK trace commitments and observe them in the challenger
+pub fn start_all_proof<F, C, const D: usize>(
     config: &StarkConfig,
-    trace_poly_values: Vec<Vec<PolynomialValues<F>>>,
-    public_inputs: Vec<Vec<F>>,
+    trace_poly_values: &[Vec<PolynomialValues<F>>],
+    timing: &mut TimingTree,
+) -> Result<(Vec<PolynomialBatch<F, C, D>>, Challenger<F, C::Hasher>)>
+where
+    F: RichField + Extendable<D>,
+    C: GenericConfig<D, F = F>,
+    [(); C::Hasher::HASH_SIZE]:,
+{
+    let trace_commitments = compute_trace_commitments(config, trace_poly_values, timing)?;
+    let mut challenger = Challenger::<F, C::Hasher>::new();
+    for cap in trace_commitments.iter().map(|c| &c.merkle_tree.cap) {
+        challenger.observe_cap(cap);
+    }
+
+    Ok((trace_commitments, challenger))
+}
+
+// Compute all STARK trace commitments.
+fn compute_trace_commitments<F, C, const D: usize>(
+    config: &StarkConfig,
+    trace_poly_values: &[Vec<PolynomialValues<F>>],
     timing: &mut TimingTree,
 ) -> Result<Vec<PolynomialBatch<F, C, D>>>
 where
@@ -65,7 +84,57 @@ where
     ))
 }
 
+/// Compute proof for a STARK with no CTLs
+pub fn prove_no_ctl<F, C, S, const D: usize>(
+    stark: &S,
+    config: &StarkConfig,
+    trace_poly_values: &[PolynomialValues<F>],
+    public_inputs: [F; S::PUBLIC_INPUTS],
+    timing: &mut TimingTree,
+) -> Result<StarkProofWithPublicInputs<F, C, D>>
+where
+    F: RichField + Extendable<D>,
+    C: GenericConfig<D, F = F>,
+    S: Stark<F, D>,
+    [(); C::Hasher::HASH_SIZE]:,
+    [(); S::COLUMNS]:,
+    [(); S::PUBLIC_INPUTS]:,
+{
+    let rate_bits = config.fri_config.rate_bits;
+    let cap_height = config.fri_config.cap_height;
+
+    let trace_commitment = timed!(
+        timing,
+        "compute trace commitment",
+        PolynomialBatch::<F, C, D>::from_values(
+            // TODO: Cloning this isn't great; consider having `from_values` accept a reference,
+            // or having `compute_permutation_z_polys` read trace values from the `PolynomialBatch`.
+            trace_poly_values.to_vec(),
+            rate_bits,
+            false,
+            cap_height,
+            timing,
+            None,
+        )
+    );
+
+    let mut challenger = Challenger::<F, C::Hasher>::new();
+    challenger.observe_cap(&trace_commitment.merkle_tree.cap);
+
+    prove_single_table(
+        stark,
+        config,
+        trace_poly_values,
+        &trace_commitment,
+        None,
+        public_inputs,
+        &mut challenger,
+        timing
+    )
+}
+
 /// Compute proof for a single STARK table.
+/// NOTE: this this function assumes the trace cap has been already observed by the challenger
 fn prove_single_table<F, C, S, const D: usize>(
     stark: &S,
     config: &StarkConfig,
@@ -97,7 +166,7 @@ where
     // Permutation arguments.
     let permutation_zs_commitment_challenges = stark.uses_permutation_args().then(|| {
         let permutation_challenge_sets = get_n_permutation_challenge_sets(
-            &mut challenger,
+            challenger,
             config.num_challenges,
             stark.permutation_batch_size(),
         );
@@ -134,29 +203,42 @@ where
         challenger.observe_cap(cap);
     }
 
-    let ctl_zs_commitment = ctl_data.map(|ctl_data| {
-        PolynomialBatch::<F, C, D>::from_values(
-            ctl_data.table_zs.clone(),
-            rate_bits,
-            false,
-            config.fri_config.cap_height,
+    let ctl_zs_commitment_challenges_cols = ctl_data.map(|ctl_data| {
+        // shift the zs to up one root of unity so z(omega^1) = evals[0] rather tan z(omega^0) = evals[1] 
+        let shift = F::primitive_root_of_unity(degree_bits);
+        let zs = timed!(
             timing,
-            None
-        )
+            "coset IFFT for CTL Zs",
+            ctl_data.table_zs.iter().cloned().map(|z| z.coset_ifft(shift)).collect_vec()
+        );
+        let commitment = timed!(
+            timing,
+            "compute CTL Z commitments",
+            PolynomialBatch::<F, C, D>::from_coeffs(
+                zs,
+                rate_bits,
+                false,
+                config.fri_config.cap_height,
+                timing,
+                None
+            )
+        );
+        let challenges = ctl_data.challenges.clone();
+        (commitment, challenges, ctl_data.cols.clone())
     });
 
+    let ctl_zs_commitment = ctl_zs_commitment_challenges_cols.as_ref().map(|(comm, _, _)| comm);
     let ctl_zs_cap = ctl_zs_commitment.as_ref().map(|c| c.merkle_tree.cap.clone());
     if let Some(cap) = &ctl_zs_cap {
         challenger.observe_cap(cap);
     }
-
 
     let alphas = challenger.get_n_challenges(config.num_challenges);
     let quotient_polys = compute_quotient_polys::<F, <F as Packable>::Packing, C, S, D>(
         stark,
         trace_commitment,
         &permutation_zs_commitment_challenges,
-        ctl_data,
+        &ctl_zs_commitment_challenges_cols,
         public_inputs,
         alphas,
         degree_bits,
@@ -203,7 +285,7 @@ where
         g,
         trace_commitment,
         permutation_zs_commitment,
-        ctl_zs_commitment.as_ref(),
+        ctl_zs_commitment,
         &quotient_commitment,
         degree_bits,
         stark.num_permutation_batches(config),
@@ -212,7 +294,7 @@ where
 
     let initial_merkle_trees = std::iter::once(trace_commitment)
         .chain(permutation_zs_commitment)
-        .chain(ctl_zs_commitment.as_ref())
+        .chain(ctl_zs_commitment)
         .chain(std::iter::once(&quotient_commitment))
         .collect_vec();
 
@@ -254,7 +336,11 @@ fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
         PolynomialBatch<F, C, D>,
         Vec<PermutationChallengeSet<F>>,
     )>,
-    ctl_data: Option<&CtlTableData<F>>,
+    ctl_zs_commitment_challenges_cols: &'a Option<(
+        PolynomialBatch<F, C, D>,
+        Vec<F>,
+        Vec<Col>,
+    )>,
     public_inputs: [F; S::PUBLIC_INPUTS],
     alphas: Vec<F>,
     degree_bits: usize,
@@ -330,7 +416,7 @@ where
                 next_values: &get_trace_values_packed(i_next_start),
                 public_inputs: &public_inputs,
             };
-            let permutation_check_data = permutation_zs_commitment_challenges.as_ref().map(
+            let permutation_check_vars = permutation_zs_commitment_challenges.as_ref().map(
                 |(permutation_zs_commitment, permutation_challenge_sets)| PermutationCheckVars {
                     local_zs: permutation_zs_commitment.get_lde_values_packed(i_start, step),
                     next_zs: permutation_zs_commitment.get_lde_values_packed(i_next_start, step),
@@ -339,12 +425,24 @@ where
             );
 
             // TODO: CTL Vals
+            let ctl_vars = ctl_zs_commitment_challenges_cols.as_ref().map(|(commitment, challenges, cols)| {
+                 let local_zs = commitment.get_lde_values_packed(i_start, step);
+                 let next_zs = commitment.get_lde_values_packed(i_next_start, step);
+                 
+                 CtlCheckVars {
+                    local_zs,
+                    next_zs,
+                    challenges,
+                    cols
+                 }
+            });
 
             eval_vanishing_poly::<F, F, P, C, S, D, 1>(
                 stark,
                 config,
                 vars,
-                permutation_check_data,
+                permutation_check_vars,
+                ctl_vars,
                 &mut consumer,
             );
             let mut constraints_evals = consumer.accumulators();
