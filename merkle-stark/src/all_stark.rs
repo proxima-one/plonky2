@@ -15,8 +15,9 @@ use crate::proof::StarkProofWithPublicInputs;
 use crate::stark::Stark;
 
 /// This trait is implemented by multi-trace STARKs that use cross-table lookups
-/// This trait is used to configure which columns are to look up which other columns by the user.
-pub trait CtlStark<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> {
+/// This trait is used to configure which columns are to look up which other columns.
+/// This trait should only be implemented via the `all_stark` macro in the `all_stark` crate
+pub trait CtlStark {
 	fn new(config: StarkConfig) -> Self;
 
 	/// returns the number of tables in this multi-trace STARK
@@ -33,22 +34,10 @@ pub struct AllProof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, co
 }
 
 /// This trait is implemented by multi-trace STARKs that use cross-table lookups
-/// This trait should only be implemented via the `impl_all_stark` macro.
-pub trait AllStark<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>: CtlStark<F, C, D> {
-	fn prove(&self, config: &StarkConfig, public_inputs: &[Vec<F>], timing: &mut TimingTree) -> Result<AllProof<F, C, D>>;
-	fn verify(&self, inputs: &[F], proof: &AllProof<F, C, D>) -> Result<()>;	
-}
-
-
-/// This macro implements the `AllStark` trait for a given marker struct and a list of types that implement `Stark`
-/// intended usage:
-/// ```
-///     use crate::{MyStark0, MyStark1, MyStark2};
-/// 
-///     struct MyAllStark;
-///     impl_all_stark!(MyAllStark, MyStark0, MyStark1, MyStark1);
-// TODO: turn this into a proc macro so the user can wire the tables together in a declarative way
-#[macro_export]
-macro_rules! impl_all_stark {
-	() => { }
+/// This trait should only be implemented via the `all_stark` macro in the `all_stark` crate
+pub trait AllStark<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>: CtlStark {
+	// a type containing all of the `Stark` implementors for this multi-table STARK.
+	type Starks;
+	fn prove(&self, starks: &Self::Starks, config: &StarkConfig, trace_poly_valueses: &[Vec<PolynomialValues<F>>], public_inputs: &[Vec<F>], timing: &mut TimingTree) -> Result<AllProof<F, C, D>>;
+	fn verify(&self, starks: &Self::Starks, inputs: &[F], proof: &AllProof<F, C, D>) -> Result<()>;	
 }

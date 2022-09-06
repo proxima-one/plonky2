@@ -76,7 +76,7 @@ pub(crate) struct CtlData<F: Field> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct CtlTableData<F: Field> {
+pub struct CtlTableData<F: Field> {
 	pub(crate) cols: Vec<CtlColumn>,
 	pub(crate) table_zs: Vec<PolynomialValues<F>>,
 	// challenges used for the CTLs in this table
@@ -109,9 +109,9 @@ pub(crate) fn ctl_data_by_table<F: Field>(ctl_data: CtlData<F>, num_tables: usiz
 }
 
 // compute the preprocessed polynomials necessary for the lookup argument given CTL traces and table descriptors
-fn get_ctl_data<'a, F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(config: &StarkConfig, trace_poly_valueses: &[Vec<PolynomialValues<F>>], ctl_descriptors: &[CtlTableDescriptor], challenger: &mut Challenger<F, C::Hasher>) -> CtlData<F> {
+fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(config: &StarkConfig, trace_poly_valueses: &[Vec<PolynomialValues<F>>], ctl_descriptors: &[CtlTableDescriptor], challenger: &mut Challenger<F, C::Hasher>) -> CtlData<F> {
 	let mut instances = Vec::new();
-	for descriptor in ctl_descriptors.iter(){
+	for descriptor in ctl_descriptors.iter() {
 		let looking_tid = descriptor.tid;
 		for (&looking_col, (&looked_col, &looked_tid)) in descriptor.looking_cols.iter().zip(descriptor.looked_cols.iter().zip(descriptor.looked_tids.iter())) {
 			let challenges = challenger.get_n_challenges(config.num_challenges);
