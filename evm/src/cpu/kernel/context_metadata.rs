@@ -17,10 +17,16 @@ pub(crate) enum ContextMetadata {
     Caller = 6,
     /// The value (in wei) deposited by the caller.
     CallValue = 7,
+    /// Whether this context was created by `STATICCALL`, in which case state changes are
+    /// prohibited.
+    Static = 8,
+    /// Pointer to the initial version of the state trie, at the creation of this context. Used when
+    /// we need to revert a context. See also `StorageTrieCheckpointPointers`.
+    StateTrieCheckpointPointer = 9,
 }
 
 impl ContextMetadata {
-    pub(crate) const COUNT: usize = 8;
+    pub(crate) const COUNT: usize = 10;
 
     pub(crate) fn all() -> [Self; Self::COUNT] {
         [
@@ -32,6 +38,8 @@ impl ContextMetadata {
             Self::CodeSize,
             Self::Caller,
             Self::CallValue,
+            Self::Static,
+            Self::StateTrieCheckpointPointer,
         ]
     }
 
@@ -46,6 +54,8 @@ impl ContextMetadata {
             ContextMetadata::CodeSize => "CTX_METADATA_CODE_SIZE",
             ContextMetadata::Caller => "CTX_METADATA_CALLER",
             ContextMetadata::CallValue => "CTX_METADATA_CALL_VALUE",
+            ContextMetadata::Static => "CTX_METADATA_STATIC",
+            ContextMetadata::StateTrieCheckpointPointer => "CTX_METADATA_STATE_TRIE_CHECKPOINT_PTR",
         }
     }
 }

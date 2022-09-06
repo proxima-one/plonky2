@@ -2,15 +2,15 @@ pub mod aggregator;
 pub mod assembler;
 mod ast;
 mod constants;
-mod context_metadata;
+pub(crate) mod context_metadata;
 mod cost_estimator;
-mod global_metadata;
+pub(crate) mod global_metadata;
 pub(crate) mod keccak_util;
 mod opcodes;
 mod optimizer;
 mod parser;
 pub mod prover_input;
-mod stack_manipulation;
+pub mod stack;
 mod txn_fields;
 mod utils;
 

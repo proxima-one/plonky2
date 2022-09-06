@@ -134,15 +134,28 @@ impl<'a> Interpreter<'a> {
     }
 
     pub(crate) fn get_txn_field(&self, field: NormalizedTxnField) -> U256 {
-        self.memory.context_memory[0].segments[Segment::TxnFields as usize].content[field as usize]
+        self.memory.context_memory[0].segments[Segment::TxnFields as usize].get(field as usize)
+    }
+
+    pub(crate) fn set_txn_field(&mut self, field: NormalizedTxnField, value: U256) {
+        self.memory.context_memory[0].segments[Segment::TxnFields as usize]
+            .set(field as usize, value);
     }
 
     pub(crate) fn get_txn_data(&self) -> &[U256] {
         &self.memory.context_memory[0].segments[Segment::TxnData as usize].content
     }
 
+    pub(crate) fn get_rlp_memory(&self) -> Vec<u8> {
+        self.memory.context_memory[self.context].segments[Segment::RlpRaw as usize]
+            .content
+            .iter()
+            .map(|x| x.as_u32() as u8)
+            .collect()
+    }
+
     pub(crate) fn set_rlp_memory(&mut self, rlp: Vec<u8>) {
-        self.memory.context_memory[0].segments[Segment::RlpRaw as usize].content =
+        self.memory.context_memory[self.context].segments[Segment::RlpRaw as usize].content =
             rlp.into_iter().map(U256::from).collect();
     }
 
@@ -237,7 +250,7 @@ impl<'a> Interpreter<'a> {
             0x58 => todo!(),                                           // "GETPC",
             0x59 => todo!(),                                           // "MSIZE",
             0x5a => todo!(),                                           // "GAS",
-            0x5b => (),                                                // "JUMPDEST",
+            0x5b => self.run_jumpdest(),                               // "JUMPDEST",
             0x5c => todo!(),                                           // "GET_STATE_ROOT",
             0x5d => todo!(),                                           // "SET_STATE_ROOT",
             0x5e => todo!(),                                           // "GET_RECEIPT_ROOT",
@@ -381,7 +394,6 @@ impl<'a> Interpreter<'a> {
     }
 
     fn run_byte(&mut self) {
-        dbg!("byte");
         let i = self.pop();
         let x = self.pop();
         let result = if i > 32.into() {
@@ -476,6 +488,10 @@ impl<'a> Interpreter<'a> {
         if !b.is_zero() {
             self.jump_to(x);
         }
+    }
+
+    fn run_jumpdest(&mut self) {
+        assert!(!self.kernel_mode, "JUMPDEST is not needed in kernel code");
     }
 
     fn jump_to(&mut self, offset: usize) {
