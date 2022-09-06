@@ -31,7 +31,7 @@ pub trait CtlStark {
 
 pub struct AllProof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>{
 	proofs: Vec<StarkProofWithPublicInputs<F, C, D>>,
-	table_descriptors: Vec<CtlTableDescriptor>,
+	table_descriptors: Vec<CtlDescriptor>,
 }
 
 /// This trait is implemented by multi-trace STARKs that use cross-table lookups

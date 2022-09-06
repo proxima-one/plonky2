@@ -6,7 +6,7 @@ use plonky2::field::types::Field;
 use plonky2::iop::challenger::Challenger;
 use plonky2::plonk::config::GenericConfig;
 use maybe_rayon::*;
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use std::collections::{HashMap, BTreeMap};
 
 use crate::config::StarkConfig;
@@ -20,7 +20,7 @@ use crate::stark::Stark;
 pub struct CtlDescriptor {
 	/// instances of CTLs, where a column in one table "looks up" a column in another table
 	/// represented as pairs of columns where the LHS is a column in this table and the RHS is a column in another tabe
-	instances: Vec<(CtlColumn, CtlColumn)>,
+	pub(crate) instances: Vec<(CtlColumn, CtlColumn)>,
 }
 
 impl CtlDescriptor {
@@ -32,8 +32,11 @@ impl CtlDescriptor {
 /// Describes a column that is involved in a cross-table lookup
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CtlColumn {
-	tid: TableID,
-	col: usize,
+	/// table ID for the table that this column belongs to
+	pub tid: TableID,
+	/// column index for the column
+	pub col: usize,
+	/// column index for the corresponding filter, if any
 	filter_col: Option<usize>
 }
 
@@ -66,7 +69,7 @@ impl Into<usize> for TableID {
 
 #[derive(Debug, Clone)]
 pub(crate) struct CtlData<F: Field> {
-	instances: Vec<CtlTableData<F>>
+	by_table: Vec<CtlTableData<F>>
 }
 
 #[derive(Debug, Clone)]
@@ -80,12 +83,12 @@ pub struct CtlTableData<F: Field> {
 // compute the preprocessed polynomials necessary for the lookup argument given CTL traces and table descriptors
 fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(config: &StarkConfig, trace_poly_valueses: &[Vec<PolynomialValues<F>>], ctl_descriptor: &CtlDescriptor, challenger: &mut Challenger<F, C::Hasher>) -> CtlData<F> {
 	let num_tables = trace_poly_valueses.len();
-	let mut instances = ctl_descriptor.instances.iter().map(|_| challenger.get_n_challenges(config.num_challenges)).zip(ctl_descriptor.instances.iter().cloned()).collect_vec();
+	let instances = ctl_descriptor.instances.iter().map(|_| challenger.get_n_challenges(config.num_challenges)).zip(ctl_descriptor.instances.iter().cloned()).collect_vec();
 
-	let compute_z_poly = |gamma: F, col: usize, filter_col: Option<usize>| -> PolynomialValues<F> {
+	let compute_z_poly = |gamma: F, table_idx: usize, col: usize, filter_col: Option<usize>| -> PolynomialValues<F> {
 		match filter_col {
 			None => {
-				let col_values = &trace_poly_valueses[looked_tid.0][looked_col.col].values;
+				let col_values = &trace_poly_valueses[table_idx][col].values;
 				let values = std::iter::once(F::ONE).chain(
 					col_values.iter().scan(F::ONE, |prev, &eval| {
 						let next = *prev * (eval + gamma);
@@ -94,12 +97,12 @@ fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const 
 					})
 				).collect();
 
-				Polynomialvalues::from_values(values)
+				PolynomialValues::new(values)
 			},
 			Some(filter_col) => {
 				let mut values = vec![F::ONE];
-				let col_values = &trace_poly_valueses[looked_tid.0][looked_col.col].values;
-				let filter_col_values = &trace_poly_valueses[looked_tid.0][filter_col].values;
+				let col_values = &trace_poly_valueses[table_idx][col].values;
+				let filter_col_values = &trace_poly_valueses[table_idx][filter_col].values;
 
 				for (&eval, &filter) in col_values.iter().zip(filter_col_values.iter()) {
 					let prev = values.last().unwrap();
@@ -112,108 +115,40 @@ fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const 
 					}
 				}
 
-				Polynomialvalues::from_values(values)
+				PolynomialValues::new(values)
 			}
 		}
 	};
 
-	let (looking_zs, looked_zs) = instances.par_iter().flat_map_iter(|(challenges, (looking_col, looked_col))| {
-		let looking_zs = challenges.iter().map(|gamma| {
-			let z = compute_z_poly(gamma, looking_col.col, looking_col.filter_col);
-			(looking_col.tid, z)
+	let instances = instances.into_par_iter().flat_map_iter(|(challenges, (looking_col, looked_col))| {
+		let looking = challenges.clone().into_iter().map(move |gamma| {
+			let z = compute_z_poly(gamma, looking_col.tid.0, looking_col.col, looking_col.filter_col);
+			(looking_col.tid, looking_col, z)
 		});
 		
-		let looked_zs = challenges.iter().map(|gamma| {
-			let z = compute_z_poly(gamma, looked_col.col, looked_col.filter_col);
-			(looked_col.tid, z)
+		let looked = challenges.clone().into_iter().map(move |gamma| {
+			let z = compute_z_poly(gamma, looked_col.tid.0, looked_col.col, looked_col.filter_col);
+			(looked_col.tid, looked_col, z)
 		});
+		
+		looking.zip(looked).zip(challenges.into_iter())
+	}).collect::<Vec<_>>();
 
-		looking_zs.zip(looked_zs)
-	}).unzip_into_vecs();
-	
-	for descriptor in ctl_descriptors.iter() {
-		for (&looking_col, (&looked_col, &looked_tid)) in descriptor.looking_cols.iter().zip(descriptor.looked_cols.iter().zip(descriptor.looked_tids.iter())) {
-			let challenges = challenger.get_n_challenges(config.num_challenges);
-			let looked_zs = challenges.iter().map(|&gamma| {
-				match looked_col.filter_col {
-					None => {
-						let col_values = &trace_poly_valueses[looked_tid.0][looked_col.col].values;
-						std::iter::once(F::ONE).chain(
-							col_values.iter().scan(F::ONE, |prev, &eval| {
-								let next = *prev * (eval + gamma);
-								*prev = next;
-								Some(next)
-							})
-						).collect()
-					}
-					Some(filter_col) => {
-						let mut values = vec![F::ONE];
-						let col_values = &trace_poly_valueses[looked_tid.0][looked_col.col].values;
-						let filter_col_values = &trace_poly_valueses[looked_tid.0][filter_col].values;
+	let mut by_table = vec![CtlTableData { cols: Vec::new(), table_zs: Vec::new(), challenges: Vec::new() }; num_tables];
+	for (((looking_tid, looking_col, looking_z), (looked_tid, looked_col, looked_z)), gamma) in instances {
+		let table = &mut by_table[looking_tid.0];
+		table.cols.push(looking_col);
+		table.table_zs.push(looking_z);
+		table.challenges.push(gamma);
 
-						for (&eval, &filter) in col_values.iter().zip(filter_col_values.iter()) {
-							let prev = values.last().unwrap();
-							if filter == F::ONE {
-								values.push(*prev * (eval + gamma));
-							} else if filter == F::ZERO {
-								values.push(*prev);
-							} else {
-								panic!("non-binary filter col!")
-							}
-						}
-
-						values
-					}
-				}
-			}).map(PolynomialValues::new).collect();
-
-			let looking_zs = challenges.iter().map(|&gamma| {
-				match looking_col.filter_col {
-					None => {
-						let col_values = &trace_poly_valueses[looking_tid.0][looking_col.col].values;
-						std::iter::once(F::ONE).chain(
-							col_values.iter().scan(F::ONE, |prev, &eval| {
-								let next = *prev * (eval + gamma);
-								*prev = next;
-								Some(next)
-							})
-						).collect()
-					}
-					Some(filter_col) => {
-						let mut values = vec![F::ONE];
-						let col_values = &trace_poly_valueses[looking_tid.0][looking_col.col].values;
-						let filter_col_values = &trace_poly_valueses[looking_tid.0][filter_col].values;
-
-						for (&eval, &filter) in col_values.iter().zip(filter_col_values.iter()) {
-							let prev = values.last().unwrap();
-							if filter == F::ONE {
-								values.push(*prev * (eval + gamma));
-							} else if filter == F::ZERO {
-								values.push(*prev);
-							} else {
-								panic!("non-binary filter col!")
-							}
-						}
-
-						values
-					}
-				}
-			}).map(PolynomialValues::new).collect();
-
-			instances.push(CtlInstanceData {
-				looked_col,
-				looking_col,
-				looked_tid,
-				looking_tid,
-				looked_zs,
-				looking_zs,
-				challenges,
-			})
-		}
+		let table = &mut by_table[looked_tid.0];
+		table.cols.push(looked_col);
+		table.table_zs.push(looked_z);
+		table.challenges.push(gamma);
 	}
-
+	
 	CtlData {
-		instances,
+		by_table,
 	}
 }
 

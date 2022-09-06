@@ -10,7 +10,7 @@ use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::config::{AlgebraicHasher, GenericConfig};
 
 use crate::config::StarkConfig;
-use crate::cross_table_lookup::CtlTableDescriptor;
+use crate::cross_table_lookup::CtlDescriptor;
 use crate::permutation::{
     get_n_permutation_challenge_sets, get_n_permutation_challenge_sets_target,
 };
@@ -37,21 +37,23 @@ where
 // assumes `start_all_proof_challenges` was used to get the challenger
 pub(crate) fn get_ctl_challenges_by_table<F, C, const D: usize>(
     challenger: &mut Challenger<F, C::Hasher>,
-    table_descriptors: &[CtlTableDescriptor],
+    ctl_descriptor: CtlDescriptor,
+    num_tables: usize,
     num_challenges: usize,
 ) -> Vec<Vec<F>>
 where
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
 {
-    let mut res = vec![Vec::new(); table_descriptors.len()];
-    for descriptor in table_descriptors.iter() {
-        let looking_tid = descriptor.tid;
-        for looked_tid in descriptor.looked_tids.iter() {
-            let challenges = challenger.get_n_challenges(num_challenges);
-            res[looking_tid.0].extend(challenges.clone());
-            res[looked_tid.0].extend(challenges);
-        }
+    let mut res = vec![Vec::new(); num_tables];
+    let instances = ctl_descriptor.instances
+        .iter()
+        .map(|_| challenger.get_n_challenges(num_challenges))
+        .zip(ctl_descriptor.instances.iter());
+
+    for (challenges, (looking_col, looked_col)) in instances {
+        res[looking_col.tid.0].extend(challenges.clone());
+        res[looked_col.tid.0].extend(challenges);
     }
 
     res
