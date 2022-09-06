@@ -41,7 +41,7 @@ pub struct CtlColumn {
 }
 
 impl CtlColumn {
-    fn new(tid: TableID, col: usize, filter_col: Option<usize>) -> CtlColumn {
+    pub fn new(tid: TableID, col: usize, filter_col: Option<usize>) -> CtlColumn {
 		CtlColumn {
 			tid,
 			col,
