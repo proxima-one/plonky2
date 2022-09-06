@@ -16,7 +16,7 @@ use crate::stark::Stark;
 
 /// This trait is implemented by multi-trace STARKs that use cross-table lookups
 /// This trait is used to configure which columns are to look up which other columns.
-/// This trait should only be implemented via the `all_stark` macro in the `all_stark` crate
+/// It is highly reccomended to implement this trait via the `derive(AllStark)` macro in the `all_stark_derive` crate
 pub trait CtlStark {
 	fn new(config: StarkConfig) -> Self;
 
@@ -34,7 +34,7 @@ pub struct AllProof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, co
 }
 
 /// This trait is implemented by multi-trace STARKs that use cross-table lookups
-/// This trait should only be implemented via the `all_stark` macro in the `all_stark` crate
+/// It is highly reccomended to implement this trait via the `derive(AllStark)` macro in the `all_stark_derive` crate
 pub trait AllStark<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>: CtlStark {
 	// a type containing all of the `Stark` implementors for this multi-table STARK.
 	type Starks;
