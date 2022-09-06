@@ -23,17 +23,17 @@ pub mod layout;
 use layout::*;
 
 #[derive(Copy, Clone)]
-pub struct MerkleTree5STARK<F: RichField + Extendable<D>, const D: usize> {
+pub struct Tree5Stark<F: RichField + Extendable<D>, const D: usize> {
     _phantom: PhantomData<F>,
 }
 
-impl<F: RichField + Extendable<D>, const D: usize> MerkleTree5STARK<F, D> {
+impl<F: RichField + Extendable<D>, const D: usize> Tree5Stark<F, D> {
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-impl<F: RichField + Extendable<D>, const D: usize> Default for MerkleTree5STARK<F, D> {
+impl<F: RichField + Extendable<D>, const D: usize> Default for Tree5Stark<F, D> {
     fn default() -> Self {
         Self {
             _phantom: PhantomData,
@@ -43,7 +43,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Default for MerkleTree5STARK<
 
 // Padding unnecessary since we're doing always 2^n - 1 hashes for some n, and we have 1 row per hash + 1 for output
 
-impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for MerkleTree5STARK<F, D> {
+impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Tree5Stark<F, D> {
     const COLUMNS: usize = NUM_COLS;
     const PUBLIC_INPUTS: usize = NUM_PUBLIC_INPUTS;
 
@@ -290,7 +290,7 @@ mod tests {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        type S = MerkleTree5STARK<F, D>;
+        type S = Tree5Stark<F, D>;
 
         let stark = S::new();
         test_stark_low_degree(stark)
@@ -313,7 +313,7 @@ mod tests {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
-        type S = MerkleTree5STARK<F, D>;
+        type S = Tree5Stark<F, D>;
 
         let mut leaves = [[0; 8]; TREE_WIDTH];
         for i in 0..TREE_WIDTH {

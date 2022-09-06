@@ -12,6 +12,7 @@ pub mod permutation;
 pub mod proof;
 pub mod prover;
 // pub mod recursive_verifier;
+pub mod merkle_stark;
 pub mod all_stark;
 pub mod stark;
 pub mod stark_testing;

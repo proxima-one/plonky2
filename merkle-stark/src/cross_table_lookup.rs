@@ -5,6 +5,8 @@ use plonky2::field::polynomial::PolynomialValues;
 use plonky2::field::types::Field;
 use plonky2::iop::challenger::Challenger;
 use plonky2::plonk::config::GenericConfig;
+use maybe_rayon::*;
+use itertools::Itertools;
 use std::collections::{HashMap, BTreeMap};
 
 use crate::config::StarkConfig;
@@ -15,23 +17,30 @@ use crate::stark::Stark;
 
 // represents the imports and exports for a stark table relying on a cross-table lookup
 #[derive(Debug, Clone)]
-pub struct CtlTableDescriptor {
-	pub(crate) tid: TableID,
-	pub(crate) looked_cols: Vec<CtlColumn>,
-	pub(crate) looking_cols: Vec<CtlColumn>,
-	pub(crate) looked_tids: Vec<TableID>,
+pub struct CtlDescriptor {
+	/// instances of CTLs, where a column in one table "looks up" a column in another table
+	/// represented as pairs of columns where the LHS is a column in this table and the RHS is a column in another tabe
+	instances: Vec<(CtlColumn, CtlColumn)>,
+}
+
+impl CtlDescriptor {
+	pub fn from_instances(instances: Vec<(CtlColumn, CtlColumn)>) -> Self {
+		CtlDescriptor { instances }
+	}
 }
 
 /// Describes a column that is involved in a cross-table lookup
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CtlColumn {
+	tid: TableID,
 	col: usize,
 	filter_col: Option<usize>
 }
 
 impl CtlColumn {
-    fn new(col: usize, filter_col: Option<usize>) -> CtlColumn {
+    fn new(tid: TableID, col: usize, filter_col: Option<usize>) -> CtlColumn {
 		CtlColumn {
+			tid,
 			col,
 			filter_col
 		}
@@ -55,24 +64,9 @@ impl Into<usize> for TableID {
 	}
 }
 
-// the preprocessed polynomials necessary for a single CTL argument
-#[derive(Debug, Clone)]
-pub(crate) struct CtlInstanceData<F: Field> {
-	looking_col: CtlColumn,
-	looked_col: CtlColumn,
-	looking_tid: TableID,
-	looked_tid: TableID,
-	// `num_challenges` z polys for the column in the looked (source) trace
-	looked_zs: Vec<PolynomialValues<F>>,
-	// `num_challenges` z polys for the column in the looking (destination) trace 
-	looking_zs: Vec<PolynomialValues<F>>,
-	// challenges used for the CTLs
-	challenges: Vec<F>
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct CtlData<F: Field> {
-	instances: Vec<CtlInstanceData<F>>
+	instances: Vec<CtlTableData<F>>
 }
 
 #[derive(Debug, Clone)]
@@ -83,36 +77,61 @@ pub struct CtlTableData<F: Field> {
 	pub(crate) challenges: Vec<F>
 }
 
-pub(crate) fn ctl_data_by_table<F: Field>(ctl_data: CtlData<F>, num_tables: usize) -> Vec<CtlTableData<F>> {
-	let mut res = vec![
-		CtlTableData::<F> {
-			cols: vec![],
-			table_zs: vec![],
-			challenges: vec![]
-		};
-		num_tables
-	];
-	
-	for instance in ctl_data.instances {
-		let td = &mut res[instance.looking_tid.0];
-		td.table_zs.extend(instance.looking_zs);
-		td.challenges.extend(instance.challenges.clone());
-		td.cols.push(instance.looking_col);
-
-		let td = &mut res[instance.looked_tid.0];
-		td.table_zs.extend(instance.looked_zs);
-		td.challenges.extend(instance.challenges);
-		td.cols.push(instance.looked_col);
-	}
-
-	res
-}
-
 // compute the preprocessed polynomials necessary for the lookup argument given CTL traces and table descriptors
-fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(config: &StarkConfig, trace_poly_valueses: &[Vec<PolynomialValues<F>>], ctl_descriptors: &[CtlTableDescriptor], challenger: &mut Challenger<F, C::Hasher>) -> CtlData<F> {
-	let mut instances = Vec::new();
+fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(config: &StarkConfig, trace_poly_valueses: &[Vec<PolynomialValues<F>>], ctl_descriptor: &CtlDescriptor, challenger: &mut Challenger<F, C::Hasher>) -> CtlData<F> {
+	let num_tables = trace_poly_valueses.len();
+	let mut instances = ctl_descriptor.instances.iter().map(|_| challenger.get_n_challenges(config.num_challenges)).zip(ctl_descriptor.instances.iter().cloned()).collect_vec();
+
+	let compute_z_poly = |gamma: F, col: usize, filter_col: Option<usize>| -> PolynomialValues<F> {
+		match filter_col {
+			None => {
+				let col_values = &trace_poly_valueses[looked_tid.0][looked_col.col].values;
+				let values = std::iter::once(F::ONE).chain(
+					col_values.iter().scan(F::ONE, |prev, &eval| {
+						let next = *prev * (eval + gamma);
+						*prev = next;
+						Some(next)
+					})
+				).collect();
+
+				Polynomialvalues::from_values(values)
+			},
+			Some(filter_col) => {
+				let mut values = vec![F::ONE];
+				let col_values = &trace_poly_valueses[looked_tid.0][looked_col.col].values;
+				let filter_col_values = &trace_poly_valueses[looked_tid.0][filter_col].values;
+
+				for (&eval, &filter) in col_values.iter().zip(filter_col_values.iter()) {
+					let prev = values.last().unwrap();
+					if filter == F::ONE {
+						values.push(*prev * (eval + gamma));
+					} else if filter == F::ZERO {
+						values.push(*prev);
+					} else {
+						panic!("non-binary filter col!")
+					}
+				}
+
+				Polynomialvalues::from_values(values)
+			}
+		}
+	};
+
+	let (looking_zs, looked_zs) = instances.par_iter().flat_map_iter(|(challenges, (looking_col, looked_col))| {
+		let looking_zs = challenges.iter().map(|gamma| {
+			let z = compute_z_poly(gamma, looking_col.col, looking_col.filter_col);
+			(looking_col.tid, z)
+		});
+		
+		let looked_zs = challenges.iter().map(|gamma| {
+			let z = compute_z_poly(gamma, looked_col.col, looked_col.filter_col);
+			(looked_col.tid, z)
+		});
+
+		looking_zs.zip(looked_zs)
+	}).unzip_into_vecs();
+	
 	for descriptor in ctl_descriptors.iter() {
-		let looking_tid = descriptor.tid;
 		for (&looking_col, (&looked_col, &looked_tid)) in descriptor.looking_cols.iter().zip(descriptor.looked_cols.iter().zip(descriptor.looked_tids.iter())) {
 			let challenges = challenger.get_n_challenges(config.num_challenges);
 			let looked_zs = challenges.iter().map(|&gamma| {
