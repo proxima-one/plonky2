@@ -35,7 +35,7 @@ pub struct AllProof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, co
 }
 
 /// This trait is implemented by multi-trace STARKs that use cross-table lookups
-/// The `derive(AllStark)` macro in the `all_stark_derive` crate can be used to auto-implement this.
+/// TODO: `derive(AllStark)` macro in a new `all_stark_derive` crate that can be used to auto-implement this.
 pub trait AllStark<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>: CtlStark {
 	// a type containing all of the `Stark` implementors for this multi-table STARK.
 	type Starks;
