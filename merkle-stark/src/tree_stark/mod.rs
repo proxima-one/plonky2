@@ -112,22 +112,22 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Tree5Stark<F,
         yield_constr.constraint_first_row(level_selectors[2]);
         yield_constr.constraint_first_row(level_selectors[3]);
 
-        let is_flag_transition_i = |i| {
-            level_selectors[i] * next_level_selectors[i + 1]
-        };
-        let flag_transition_i = |i| {
-            level_selectors[i] - next_level_selectors[i + 1]
-        };
-        let is_transition: P = (0..TREE_DEPTH-1).map(|level| is_flag_transition_i(level)).sum();
+        let is_flag_transition_i = |i| level_selectors[i] * next_level_selectors[i + 1];
+        let flag_transition_i = |i| level_selectors[i] - next_level_selectors[i + 1];
+        let is_transition: P = (0..TREE_DEPTH - 1)
+            .map(|level| is_flag_transition_i(level))
+            .sum();
         yield_constr.constraint_transition(curr_row[LEVEL_DONE_FLAG] - is_transition);
 
         // abvance level flags at correct indices
-        // one_if_end_of_level is 0 during the single row for root, 
+        // one_if_end_of_level is 0 during the single row for root,
         let one_if_end_of_level = curr_row[PC] - curr_row[HALF_LEVEL_WIDTH];
-        for level in 0..TREE_DEPTH-1 {
+        for level in 0..TREE_DEPTH - 1 {
             let transition = flag_transition_i(level);
             // degree 2
-            yield_constr.constraint_transition(one_if_end_of_level * curr_row[LEVEL_DONE_FLAG] * transition);
+            yield_constr.constraint_transition(
+                one_if_end_of_level * curr_row[LEVEL_DONE_FLAG] * transition,
+            );
         }
 
         // each row, increment PC unless we're done with the current level
@@ -139,7 +139,8 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Tree5Stark<F,
         // divide half level width by two when we reset PC unless it's the last time
         // degree 3
         yield_constr.constraint_transition(
-           curr_row[LEVEL_DONE_FLAG] * (P::ONES - next_level_selectors[4])
+            curr_row[LEVEL_DONE_FLAG]
+                * (P::ONES - next_level_selectors[4])
                 * (next_row[HALF_LEVEL_WIDTH] * FE::TWO - curr_row[HALF_LEVEL_WIDTH]),
         );
 
@@ -165,7 +166,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Tree5Stark<F,
                 (P::ONES - curr_row[LEVEL_DONE_FLAG])
                     * (next_row[val_i_word(15, word)]
                         - (curr_row[hash_output_word(word)]
-                        - curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32))),
+                            - curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32))),
             );
         }
 
@@ -225,7 +226,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Tree5Stark<F,
                 yield_constr.constraint_transition(
                     sel * (next_row[val_i_word(next_level_width - 1, word)]
                         - (curr_row[hash_output_word(word)]
-                        - curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32))),
+                            - curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32))),
                 );
             }
 
@@ -281,8 +282,8 @@ mod tests {
     use super::*;
     use crate::config::StarkConfig;
     use crate::prover::prove_no_ctl;
-    use crate::tree_stark::generation::TreeTraceGenerator;
     use crate::stark_testing::test_stark_low_degree;
+    use crate::tree_stark::generation::TreeTraceGenerator;
     use crate::verifier::verify_stark_proof_no_ctl;
 
     #[test]

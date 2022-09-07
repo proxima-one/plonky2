@@ -19,7 +19,7 @@ use crate::stark::Stark;
 
 // makes a challenger and overves the trace caps
 pub fn start_all_proof_challenger<'a, F, C, I, const D: usize>(
-    trace_caps: I
+    trace_caps: I,
 ) -> Challenger<F, C::Hasher>
 where
     I: Iterator<Item = &'a MerkleCap<F, C::Hasher>>,
@@ -33,7 +33,7 @@ where
         challenger.observe_cap(cap);
     }
 
-    return challenger
+    return challenger;
 }
 
 // assumes `start_all_proof_challenges` was used to get the challenger
@@ -48,7 +48,8 @@ where
     C: GenericConfig<D, F = F>,
 {
     let mut res = vec![Vec::new(); num_tables];
-    let instances = ctl_descriptor.instances
+    let instances = ctl_descriptor
+        .instances
         .iter()
         .map(|_| challenger.get_n_challenges(num_challenges))
         .zip(ctl_descriptor.instances.iter());
@@ -175,7 +176,10 @@ where
                 },
         } = &self.proof;
 
-        assert!(ctl_zs_cap.is_none(), "CTLs not supported in `get_challenges_no_ctl`");
+        assert!(
+            ctl_zs_cap.is_none(),
+            "CTLs not supported in `get_challenges_no_ctl`"
+        );
 
         get_challenges_no_ctl::<F, C, S, D>(
             stark,

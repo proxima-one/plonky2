@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use maybe_rayon::*;
 use plonky2::field::extension::{Extendable, FieldExtension};
+use plonky2::field::types::Field;
 use plonky2::fri::oracle::PolynomialBatch;
 use plonky2::fri::proof::{
     CompressedFriProof, FriChallenges, FriChallengesTarget, FriProof, FriProofTarget,
@@ -13,7 +14,6 @@ use plonky2::hash::merkle_tree::MerkleCap;
 use plonky2::iop::ext_target::ExtensionTarget;
 use plonky2::iop::target::Target;
 use plonky2::plonk::config::GenericConfig;
-use plonky2::field::types::Field;
 
 use crate::config::StarkConfig;
 use crate::permutation::PermutationChallengeSet;
@@ -179,11 +179,11 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
             permutation_zs_next: permutation_zs_commitment.map(|c| eval_commitment(zeta_next, c)),
             ctl_zs: ctl_zs_commitment.map(|c| eval_commitment(zeta, c)),
             ctl_zs_next: ctl_zs_commitment.map(|c| eval_commitment(zeta_next, c)),
-            ctl_zs_last: ctl_zs_commitment.map(|c| eval_commitment_base(
-                F::primitive_root_of_unity(degree_bits).inverse(),
-                c,
-            )[num_permutation_zs..]
-                .to_vec()),
+            ctl_zs_last: ctl_zs_commitment.map(|c| {
+                eval_commitment_base(F::primitive_root_of_unity(degree_bits).inverse(), c)
+                    [num_permutation_zs..]
+                    .to_vec()
+            }),
             quotient_polys: eval_commitment(zeta, quotient_commitment),
         }
     }
@@ -208,16 +208,14 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
                 .copied()
                 .collect_vec(),
         };
-        let ctl_last_batch = self.ctl_zs_last.as_ref().map(|zs| {
-            FriOpeningBatch {
-                values: zs
-                    .iter()
-                    .copied()
-                    .map(F::Extension::from_basefield)
-                    .collect(),
-            }
+        let ctl_last_batch = self.ctl_zs_last.as_ref().map(|zs| FriOpeningBatch {
+            values: zs
+                .iter()
+                .copied()
+                .map(F::Extension::from_basefield)
+                .collect(),
         });
-        
+
         let mut batches = vec![zeta_batch, zeta_next_batch];
         if let Some(ctl_last_batch) = ctl_last_batch {
             batches.push(ctl_last_batch);

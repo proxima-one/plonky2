@@ -10,11 +10,9 @@ use plonky2::plonk::plonk_common::reduce_with_powers;
 use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
 // use crate::cross_table_lookup::{verify_cross_table_lookups, CtlCheckVars};
-use crate::cross_table_lookup::{CtlCheckVars};
+use crate::cross_table_lookup::CtlCheckVars;
 use crate::permutation::PermutationCheckVars;
-use crate::proof::{
-    StarkOpeningSet, StarkProofChallenges, StarkProofWithPublicInputs,
-};
+use crate::proof::{StarkOpeningSet, StarkProofChallenges, StarkProofWithPublicInputs};
 use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly;
 use crate::vars::StarkEvaluationVars;
@@ -57,7 +55,6 @@ where
     [(); S::PUBLIC_INPUTS]:,
     [(); C::Hasher::HASH_SIZE]:,
 {
-
     assert!(ctl_vars.is_none(), "CTL not yet supported");
 
     let StarkProofWithPublicInputs {

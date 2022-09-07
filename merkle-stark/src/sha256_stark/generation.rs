@@ -7,7 +7,6 @@ use super::constants::{HASH_IV, ROUND_CONSTANTS};
 use super::layout::*;
 use crate::util::{is_power_of_two, trace_rows_to_poly_values};
 
-
 #[repr(transparent)]
 pub struct Sha2Trace<F: Field>(Vec<[F; NUM_COLS]>);
 
@@ -417,7 +416,6 @@ impl<F: Field> Sha2TraceGenerator<F> {
     }
 }
 
-
 #[inline(always)]
 fn shift_wis(mut wis: [u32; 16]) -> [u32; 16] {
     for i in 0..15 {
@@ -452,9 +450,9 @@ fn rotr(x: u32, n: u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use plonky2_field::goldilocks_field::GoldilocksField;
-    use crate::util::compress;
 
     use super::*;
+    use crate::util::compress;
 
     type F = GoldilocksField;
 

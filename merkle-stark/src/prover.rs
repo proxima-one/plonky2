@@ -20,10 +20,10 @@ use plonky2_util::{log2_ceil, log2_strict};
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
-use crate::cross_table_lookup::{CtlCheckVars, CtlTableData, CtlData, CtlColumn};
-use crate::permutation::{PermutationCheckVars, PermutationChallengeSet};
+use crate::cross_table_lookup::{CtlCheckVars, CtlColumn, CtlData, CtlTableData};
 use crate::permutation::compute_permutation_z_polys;
 use crate::permutation::get_n_permutation_challenge_sets;
+use crate::permutation::{PermutationChallengeSet, PermutationCheckVars};
 use crate::proof::{StarkOpeningSet, StarkProof, StarkProofWithPublicInputs};
 use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly;
@@ -129,7 +129,7 @@ where
         None,
         public_inputs,
         &mut challenger,
-        timing
+        timing,
     )
 }
 
@@ -204,12 +204,17 @@ where
     }
 
     let ctl_zs_commitment_challenges_cols = ctl_data.map(|ctl_data| {
-        // shift the zs to up one root of unity so z(omega^1) = evals[0] rather tan z(omega^0) = evals[1] 
+        // shift the zs to up one root of unity so z(omega^1) = evals[0] rather tan z(omega^0) = evals[1]
         let shift = F::primitive_root_of_unity(degree_bits);
         let zs = timed!(
             timing,
             "coset IFFT for CTL Zs",
-            ctl_data.table_zs.iter().cloned().map(|z| z.coset_ifft(shift)).collect_vec()
+            ctl_data
+                .table_zs
+                .iter()
+                .cloned()
+                .map(|z| z.coset_ifft(shift))
+                .collect_vec()
         );
         let commitment = timed!(
             timing,
@@ -227,8 +232,12 @@ where
         (commitment, challenges, ctl_data.cols.clone())
     });
 
-    let ctl_zs_commitment = ctl_zs_commitment_challenges_cols.as_ref().map(|(comm, _, _)| comm);
-    let ctl_zs_cap = ctl_zs_commitment.as_ref().map(|c| c.merkle_tree.cap.clone());
+    let ctl_zs_commitment = ctl_zs_commitment_challenges_cols
+        .as_ref()
+        .map(|(comm, _, _)| comm);
+    let ctl_zs_cap = ctl_zs_commitment
+        .as_ref()
+        .map(|c| c.merkle_tree.cap.clone());
     if let Some(cap) = &ctl_zs_cap {
         challenger.observe_cap(cap);
     }
@@ -302,7 +311,13 @@ where
         timing,
         "compute openings proof",
         PolynomialBatch::prove_openings(
-            &stark.fri_instance(zeta, g, degree_bits, ctl_data.map(|data| data.table_zs.len()).unwrap_or(0), config),
+            &stark.fri_instance(
+                zeta,
+                g,
+                degree_bits,
+                ctl_data.map(|data| data.table_zs.len()).unwrap_or(0),
+                config
+            ),
             &initial_merkle_trees,
             challenger,
             &fri_params,
@@ -425,17 +440,20 @@ where
             );
 
             // TODO: CTL Vals
-            let ctl_vars = ctl_zs_commitment_challenges_cols.as_ref().map(|(commitment, challenges, cols)| {
-                 let local_zs = commitment.get_lde_values_packed(i_start, step);
-                 let next_zs = commitment.get_lde_values_packed(i_next_start, step);
-                 
-                 CtlCheckVars {
-                    local_zs,
-                    next_zs,
-                    challenges,
-                    cols
-                 }
-            });
+            let ctl_vars =
+                ctl_zs_commitment_challenges_cols
+                    .as_ref()
+                    .map(|(commitment, challenges, cols)| {
+                        let local_zs = commitment.get_lde_values_packed(i_start, step);
+                        let next_zs = commitment.get_lde_values_packed(i_next_start, step);
+
+                        CtlCheckVars {
+                            local_zs,
+                            next_zs,
+                            challenges,
+                            cols,
+                        }
+                    });
 
             eval_vanishing_poly::<F, F, P, C, S, D, 1>(
                 stark,

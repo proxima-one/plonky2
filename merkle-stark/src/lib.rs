@@ -12,15 +12,15 @@ pub mod permutation;
 pub mod proof;
 pub mod prover;
 // pub mod recursive_verifier;
-pub mod merkle_stark;
 pub mod all_stark;
+pub mod cross_table_lookup;
+pub mod merkle_stark;
 pub mod stark;
 pub mod stark_testing;
 pub mod util;
 pub mod vanishing_poly;
 pub mod vars;
 pub mod verifier;
-pub mod cross_table_lookup;
 
 pub mod sha256_stark;
 pub mod tree_stark;

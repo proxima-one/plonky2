@@ -6,7 +6,7 @@ use plonky2::plonk::config::GenericConfig;
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
-use crate::cross_table_lookup::{CtlCheckVars, eval_cross_table_lookup_checks};
+use crate::cross_table_lookup::{eval_cross_table_lookup_checks, CtlCheckVars};
 use crate::permutation::{
     eval_permutation_checks, eval_permutation_checks_circuit, PermutationCheckDataTarget,
     PermutationCheckVars,
@@ -42,7 +42,12 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
     }
 
     if let Some(ctl_data) = ctl_data {
-        eval_cross_table_lookup_checks::<F, FE, P, C, S, D, D2>(vars, ctl_data, consumer, config.num_challenges);
+        eval_cross_table_lookup_checks::<F, FE, P, C, S, D, D2>(
+            vars,
+            ctl_data,
+            consumer,
+            config.num_challenges,
+        );
     }
 }
 

@@ -103,10 +103,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         };
 
         let ctl_zs_info = if num_ctl_zs > 0 {
-            FriPolynomialInfo::from_range(
-                oracle_indices.next().unwrap(),
-                0..num_ctl_zs
-            )
+            FriPolynomialInfo::from_range(oracle_indices.next().unwrap(), 0..num_ctl_zs)
         } else {
             vec![]
         };

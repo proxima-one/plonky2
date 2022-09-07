@@ -5,7 +5,7 @@ use plonky2::field::{
 };
 
 use super::layout::*;
-use crate::util::{is_power_of_two, compress, trace_rows_to_poly_values};
+use crate::util::{compress, is_power_of_two, trace_rows_to_poly_values};
 
 struct TreeTrace<F: Field>(Vec<[F; NUM_COLS]>);
 
@@ -128,7 +128,7 @@ impl<F: Field + PrimeField64> TreeTraceGenerator<F> {
         }
     }
 
-    pub fn gen(&mut self) -> ([u32; 8],[F; NUM_PUBLIC_INPUTS]) {
+    pub fn gen(&mut self) -> ([u32; 8], [F; NUM_PUBLIC_INPUTS]) {
         let max_rows = self.max_rows();
 
         // load leaves into first row of val cols
@@ -306,7 +306,10 @@ mod tests {
         let (_root, pis) = generator.gen();
         let mut root = [0u32; 8];
         for i in 0..WORDS_PER_HASH {
-            root[i] = pis[pi_root_word(i)].to_canonical_u64().try_into().expect("expected pi_root_word to fit in u32");
+            root[i] = pis[pi_root_word(i)]
+                .to_canonical_u64()
+                .try_into()
+                .expect("expected pi_root_word to fit in u32");
         }
 
         assert_eq!(root, correct_root);
