@@ -7,7 +7,7 @@ use plonky2::plonk::config::{GenericConfig, Hasher};
 
 use crate::all_stark::{AllProof, AllStark, CtlStark};
 use crate::config::StarkConfig;
-use crate::cross_table_lookup::{get_ctl_data, CtlColumn, CtlDescriptor, TableID, CtlCheckVars};
+use crate::cross_table_lookup::{get_ctl_data, CtlCheckVars, CtlColumn, CtlDescriptor, TableID};
 use crate::get_challenges::{get_ctl_challenges_by_table, start_all_proof_challenger};
 use crate::prover::{prove_single_table, start_all_proof};
 use crate::sha256_stark::layout as sha2_layout;
@@ -128,13 +128,16 @@ where
         let mut proofs = Vec::with_capacity(trace_poly_valueses.len());
 
         let stark = &starks.0;
-        let pis = public_inputses[TREE_TID.0].clone().try_into().map_err(|v: Vec<F>| {
-            anyhow!(
-                "tree stark expected {} public inputs, got {} instead",
-                Tree5Stark::<F, D>::PUBLIC_INPUTS,
-                v.len()
-            )
-        })?;
+        let pis = public_inputses[TREE_TID.0]
+            .clone()
+            .try_into()
+            .map_err(|v: Vec<F>| {
+                anyhow!(
+                    "tree stark expected {} public inputs, got {} instead",
+                    Tree5Stark::<F, D>::PUBLIC_INPUTS,
+                    v.len()
+                )
+            })?;
         let proof = prove_single_table(
             stark,
             config,
@@ -148,13 +151,16 @@ where
         proofs.push(proof);
 
         let stark = &starks.1;
-        let pis = public_inputses[HASH_TID.0].clone().try_into().map_err(|v: Vec<F>| {
-            anyhow!(
-                "tree stark expected {} public inputs, got {} instead",
-                Tree5Stark::<F, D>::PUBLIC_INPUTS,
-                v.len()
-            )
-        })?;
+        let pis = public_inputses[HASH_TID.0]
+            .clone()
+            .try_into()
+            .map_err(|v: Vec<F>| {
+                anyhow!(
+                    "tree stark expected {} public inputs, got {} instead",
+                    Tree5Stark::<F, D>::PUBLIC_INPUTS,
+                    v.len()
+                )
+            })?;
         let proof = prove_single_table(
             stark,
             config,
@@ -192,11 +198,8 @@ where
         );
         debug_assert!(ctl_challenges[TREE_TID.0].len() == num_tables);
 
-        let ctl_vars = CtlCheckVars::from_proofs(
-            &all_proof.proofs,
-            &ctl_descriptor,
-            &ctl_challenges,
-        );
+        let ctl_vars =
+            CtlCheckVars::from_proofs(&all_proof.proofs, &ctl_descriptor, &ctl_challenges);
 
         debug_assert!(ctl_vars.len() == num_tables);
 

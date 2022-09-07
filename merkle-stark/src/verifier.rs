@@ -49,8 +49,8 @@ pub fn verify_stark_proof_with_ctl<
     proof_with_pis: &StarkProofWithPublicInputs<F, C, D>,
     ctl_vars: &CtlCheckVars<F, F::Extension, F::Extension, D>,
     challenger: &mut Challenger<F, C::Hasher>,
-    config: &StarkConfig
-) -> Result<()> 
+    config: &StarkConfig,
+) -> Result<()>
 where
     [(); S::COLUMNS]:,
     [(); S::PUBLIC_INPUTS]:,
@@ -58,7 +58,8 @@ where
 {
     ensure!(proof_with_pis.public_inputs.len() == S::PUBLIC_INPUTS);
     let degree_bits = proof_with_pis.proof.recover_degree_bits(config);
-    let challenges = proof_with_pis.get_all_stark_challenges(stark, config, challenger, degree_bits);
+    let challenges =
+        proof_with_pis.get_all_stark_challenges(stark, config, challenger, degree_bits);
     verify_stark_proof_with_challenges(stark, proof_with_pis, &challenges, Some(ctl_vars), config)
 }
 

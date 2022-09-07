@@ -210,16 +210,32 @@ where
         ctl_challenges: &[Vec<F>],
     ) -> Vec<Self> {
         let num_tables = proofs.len();
-        let mut ctl_zs = proofs.iter().map(|p| {
+        let mut ctl_zs = proofs
+            .iter()
+            .map(|p| {
                 let openings = &p.proof.openings;
                 let ctl_zs = openings.ctl_zs.as_ref().expect("no ctl openings!").iter();
-                let ctl_zs_next = openings.ctl_zs_next.as_ref().expect("no ctl openings!").iter();
+                let ctl_zs_next = openings
+                    .ctl_zs_next
+                    .as_ref()
+                    .expect("no ctl openings!")
+                    .iter();
                 ctl_zs.zip(ctl_zs_next)
             })
             .collect_vec();
-    
-        let mut res = vec![CtlCheckVars { local_zs: Vec::new(), next_zs: Vec::new(), challenges: Vec::new(), cols: Vec::new() }; num_tables];
-        for (&(looking, looked), challenges) in ctl_descriptor.instances.iter().zip(ctl_challenges.iter()) {
+
+        let mut res = vec![
+            CtlCheckVars {
+                local_zs: Vec::new(),
+                next_zs: Vec::new(),
+                challenges: Vec::new(),
+                cols: Vec::new()
+            };
+            num_tables
+        ];
+        for (&(looking, looked), challenges) in
+            ctl_descriptor.instances.iter().zip(ctl_challenges.iter())
+        {
             for &gamma in challenges {
                 let (&looking_z, &looking_z_next) = ctl_zs[looking.tid.0].next().unwrap();
                 let mut vars = &mut res[looking.tid.0];
@@ -234,7 +250,7 @@ where
                 vars.next_zs.push(looked_z_next);
                 vars.challenges.push(gamma);
                 vars.cols.push(looked);
-            } 
+            }
         }
 
         res

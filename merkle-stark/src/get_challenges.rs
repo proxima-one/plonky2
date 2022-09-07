@@ -73,7 +73,7 @@ pub(crate) fn get_single_table_challenges<F, C, S, const D: usize>(
     final_poly: &PolynomialCoeffs<F::Extension>,
     pow_witness: F,
     config: &StarkConfig,
-    degree_bits: usize, 
+    degree_bits: usize,
 ) -> StarkProofChallenges<F, D>
 where
     F: RichField + Extendable<D>,
@@ -203,9 +203,8 @@ where
             .fri_query_indices
     }
 
-
     /// Computes Fiat-Shamir challenges for this specific proof within an `AllProof`
-    pub(crate)  fn get_all_stark_challenges<S: Stark<F, D>>(
+    pub(crate) fn get_all_stark_challenges<S: Stark<F, D>>(
         &self,
         stark: &S,
         config: &StarkConfig,
