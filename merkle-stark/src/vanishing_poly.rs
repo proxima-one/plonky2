@@ -19,7 +19,7 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
     config: &StarkConfig,
     vars: StarkEvaluationVars<FE, P, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
     permutation_vars: Option<PermutationCheckVars<F, FE, P, D2>>,
-    ctl_data: Option<CtlCheckVars<F, FE, P, D2>>,
+    ctl_vars: Option<&CtlCheckVars<F, FE, P, D2>>,
     consumer: &mut ConstraintConsumer<P>,
 ) where
     F: RichField + Extendable<D>,
@@ -41,10 +41,10 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
         );
     }
 
-    if let Some(ctl_data) = ctl_data {
+    if let Some(ctl_vars) = ctl_vars {
         eval_cross_table_lookup_checks::<F, FE, P, C, S, D, D2>(
             vars,
-            ctl_data,
+            ctl_vars,
             consumer,
             config.num_challenges,
         );

@@ -439,13 +439,14 @@ where
                 },
             );
 
-            // TODO: CTL Vals
             let ctl_vars =
                 ctl_zs_commitment_challenges_cols
                     .as_ref()
                     .map(|(commitment, challenges, cols)| {
                         let local_zs = commitment.get_lde_values_packed(i_start, step);
                         let next_zs = commitment.get_lde_values_packed(i_next_start, step);
+                        let challenges = challenges.clone();
+                        let cols = cols.clone();
 
                         CtlCheckVars {
                             local_zs,
@@ -460,7 +461,7 @@ where
                 config,
                 vars,
                 permutation_check_vars,
-                ctl_vars,
+                ctl_vars.as_ref(),
                 &mut consumer,
             );
             let mut constraints_evals = consumer.accumulators();

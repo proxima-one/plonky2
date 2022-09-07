@@ -4,6 +4,7 @@ use plonky2::field::extension::{Extendable, FieldExtension};
 use plonky2::field::types::Field;
 use plonky2::fri::verifier::verify_fri_proof;
 use plonky2::hash::hash_types::RichField;
+use plonky2::iop::challenger::Challenger;
 use plonky2::plonk::config::{GenericConfig, Hasher};
 use plonky2::plonk::plonk_common::reduce_with_powers;
 
@@ -34,8 +35,31 @@ where
 {
     ensure!(proof_with_pis.public_inputs.len() == S::PUBLIC_INPUTS);
     let degree_bits = proof_with_pis.proof.recover_degree_bits(config);
-    let challenges = proof_with_pis.get_challenges_no_ctl(stark, config, degree_bits);
+    let challenges = proof_with_pis.get_stark_challenges(stark, config, degree_bits);
     verify_stark_proof_with_challenges(stark, proof_with_pis, &challenges, None, config)
+}
+
+pub fn verify_stark_proof_with_ctl<
+    F: RichField + Extendable<D>,
+    C: GenericConfig<D, F = F>,
+    S: Stark<F, D>,
+    const D: usize,
+>(
+    stark: &S,
+    proof_with_pis: &StarkProofWithPublicInputs<F, C, D>,
+    ctl_vars: &CtlCheckVars<F, F::Extension, F::Extension, D>,
+    challenger: &mut Challenger<F, C::Hasher>,
+    config: &StarkConfig
+) -> Result<()> 
+where
+    [(); S::COLUMNS]:,
+    [(); S::PUBLIC_INPUTS]:,
+    [(); C::Hasher::HASH_SIZE]:,
+{
+    ensure!(proof_with_pis.public_inputs.len() == S::PUBLIC_INPUTS);
+    let degree_bits = proof_with_pis.proof.recover_degree_bits(config);
+    let challenges = proof_with_pis.get_all_stark_challenges(stark, config, challenger, degree_bits);
+    verify_stark_proof_with_challenges(stark, proof_with_pis, &challenges, Some(ctl_vars), config)
 }
 
 pub(crate) fn verify_stark_proof_with_challenges<
@@ -47,7 +71,7 @@ pub(crate) fn verify_stark_proof_with_challenges<
     stark: &S,
     proof_with_pis: &StarkProofWithPublicInputs<F, C, D>,
     challenges: &StarkProofChallenges<F, D>,
-    ctl_vars: Option<CtlCheckVars<F, F::Extension, F::Extension, D>>,
+    ctl_vars: Option<&CtlCheckVars<F, F::Extension, F::Extension, D>>,
     config: &StarkConfig,
 ) -> Result<()>
 where

@@ -7,7 +7,7 @@ use plonky2::plonk::config::{GenericConfig, Hasher};
 
 use crate::all_stark::{AllProof, AllStark, CtlStark};
 use crate::config::StarkConfig;
-use crate::cross_table_lookup::{get_ctl_data, CtlColumn, CtlDescriptor, TableID};
+use crate::cross_table_lookup::{get_ctl_data, CtlColumn, CtlDescriptor, TableID, CtlCheckVars};
 use crate::get_challenges::{get_ctl_challenges_by_table, start_all_proof_challenger};
 use crate::prover::{prove_single_table, start_all_proof};
 use crate::sha256_stark::layout as sha2_layout;
@@ -15,6 +15,7 @@ use crate::sha256_stark::Sha2CompressionStark;
 use crate::stark::Stark;
 use crate::tree_stark::layout as tree_layout;
 use crate::tree_stark::Tree5Stark;
+use crate::verifier::verify_stark_proof_with_ctl;
 
 pub const TREE_TID: TableID = TableID(0);
 pub const HASH_TID: TableID = TableID(1);
@@ -127,7 +128,7 @@ where
         let mut proofs = Vec::with_capacity(trace_poly_valueses.len());
 
         let stark = &starks.0;
-        let pis = public_inputses[0].clone().try_into().map_err(|v: Vec<F>| {
+        let pis = public_inputses[TREE_TID.0].clone().try_into().map_err(|v: Vec<F>| {
             anyhow!(
                 "tree stark expected {} public inputs, got {} instead",
                 Tree5Stark::<F, D>::PUBLIC_INPUTS,
@@ -137,9 +138,9 @@ where
         let proof = prove_single_table(
             stark,
             config,
-            &trace_poly_valueses[0],
-            &trace_commitments[0],
-            Some(&ctl_data.by_table[0]),
+            &trace_poly_valueses[TREE_TID.0],
+            &trace_commitments[TREE_TID.0],
+            Some(&ctl_data.by_table[TREE_TID.0]),
             pis,
             &mut challenger,
             timing,
@@ -147,7 +148,7 @@ where
         proofs.push(proof);
 
         let stark = &starks.1;
-        let pis = public_inputses[1].clone().try_into().map_err(|v: Vec<F>| {
+        let pis = public_inputses[HASH_TID.0].clone().try_into().map_err(|v: Vec<F>| {
             anyhow!(
                 "tree stark expected {} public inputs, got {} instead",
                 Tree5Stark::<F, D>::PUBLIC_INPUTS,
@@ -157,9 +158,9 @@ where
         let proof = prove_single_table(
             stark,
             config,
-            &trace_poly_valueses[1],
-            &trace_commitments[1],
-            Some(&ctl_data.by_table[1]),
+            &trace_poly_valueses[HASH_TID.0],
+            &trace_commitments[HASH_TID.0],
+            Some(&ctl_data.by_table[HASH_TID.0]),
             pis,
             &mut challenger,
             timing,
@@ -173,10 +174,10 @@ where
         &self,
         starks: &Self::Starks,
         config: &StarkConfig,
-        proof: &AllProof<F, C, D>,
+        all_proof: &AllProof<F, C, D>,
     ) -> anyhow::Result<()> {
         let mut challenger = start_all_proof_challenger::<F, C, _, D>(
-            proof.proofs.iter().map(|proof| &proof.proof.trace_cap),
+            all_proof.proofs.iter().map(|proof| &proof.proof.trace_cap),
         );
 
         let num_tables = self.num_tables();
@@ -185,13 +186,28 @@ where
         let ctl_descriptor = self.get_ctl_descriptor();
         let ctl_challenges = get_ctl_challenges_by_table::<F, C, D>(
             &mut challenger,
-            ctl_descriptor,
+            &ctl_descriptor,
             num_tables,
             num_challenges,
         );
+        debug_assert!(ctl_challenges[TREE_TID.0].len() == num_tables);
 
-        // TODO: CtlCheckVars::from_proofs
-        // TODO: verify_single_table
-        todo!()
+        let ctl_vars = CtlCheckVars::from_proofs(
+            &all_proof.proofs,
+            &ctl_descriptor,
+            &ctl_challenges,
+        );
+
+        debug_assert!(ctl_vars.len() == num_tables);
+
+        let stark = &starks.0;
+        let proof = &all_proof.proofs[TREE_TID.0];
+        verify_stark_proof_with_ctl(stark, proof, &ctl_vars[TREE_TID.0], &mut challenger, config)?;
+
+        let stark = &starks.1;
+        let proof = &all_proof.proofs[HASH_TID.0];
+        verify_stark_proof_with_ctl(stark, proof, &ctl_vars[HASH_TID.0], &mut challenger, config)?;
+
+        Ok(())
     }
 }

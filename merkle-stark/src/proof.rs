@@ -108,9 +108,6 @@ pub(crate) struct StarkProofChallenges<F: RichField + Extendable<D>, const D: us
     /// Randomness used in any permutation arguments.
     pub permutation_challenge_sets: Option<Vec<PermutationChallengeSet<F>>>,
 
-    /// Randomness used in CTLs, if any
-    pub ctl_challenges: Option<Vec<F>>,
-
     /// Random values used to combine STARK constraints.
     pub stark_alphas: Vec<F>,
 

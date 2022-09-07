@@ -12,6 +12,7 @@ use plonky2::plonk::config::GenericConfig;
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
+use crate::proof::StarkProofWithPublicInputs;
 use crate::stark::Stark;
 use crate::util::is_power_of_two;
 use crate::vars::StarkEvaluationVars;
@@ -26,7 +27,7 @@ pub struct CtlDescriptor {
 
 impl CtlDescriptor {
     pub fn from_instances(instances: Vec<(CtlColumn, CtlColumn)>) -> Self {
-        CtlDescriptor { instances }
+        Self { instances }
     }
 }
 
@@ -186,7 +187,8 @@ pub fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, co
     CtlData { by_table }
 }
 
-pub(crate) struct CtlCheckVars<'a, F, FE, P, const D2: usize>
+#[derive(Debug, Clone)]
+pub struct CtlCheckVars<F, FE, P, const D2: usize>
 where
     F: Field,
     FE: FieldExtension<D2, BaseField = F>,
@@ -194,13 +196,54 @@ where
 {
     pub(crate) local_zs: Vec<P>,
     pub(crate) next_zs: Vec<P>,
-    pub(crate) challenges: &'a [F],
-    pub(crate) cols: &'a [CtlColumn],
+    pub(crate) challenges: Vec<F>,
+    pub(crate) cols: Vec<CtlColumn>,
+}
+
+impl<F, const D: usize> CtlCheckVars<F, F::Extension, F::Extension, D>
+where
+    F: RichField + Extendable<D>,
+{
+    pub fn from_proofs<C: GenericConfig<D, F = F>>(
+        proofs: &[StarkProofWithPublicInputs<F, C, D>],
+        ctl_descriptor: &CtlDescriptor,
+        ctl_challenges: &[Vec<F>],
+    ) -> Vec<Self> {
+        let num_tables = proofs.len();
+        let mut ctl_zs = proofs.iter().map(|p| {
+                let openings = &p.proof.openings;
+                let ctl_zs = openings.ctl_zs.as_ref().expect("no ctl openings!").iter();
+                let ctl_zs_next = openings.ctl_zs_next.as_ref().expect("no ctl openings!").iter();
+                ctl_zs.zip(ctl_zs_next)
+            })
+            .collect_vec();
+    
+        let mut res = vec![CtlCheckVars { local_zs: Vec::new(), next_zs: Vec::new(), challenges: Vec::new(), cols: Vec::new() }; num_tables];
+        for (&(looking, looked), challenges) in ctl_descriptor.instances.iter().zip(ctl_challenges.iter()) {
+            for &gamma in challenges {
+                let (&looking_z, &looking_z_next) = ctl_zs[looking.tid.0].next().unwrap();
+                let mut vars = &mut res[looking.tid.0];
+                vars.local_zs.push(looking_z);
+                vars.next_zs.push(looking_z_next);
+                vars.challenges.push(gamma);
+                vars.cols.push(looking);
+
+                let (&looked_z, &looked_z_next) = ctl_zs[looked.tid.0].next().unwrap();
+                vars = &mut res[looked.tid.0];
+                vars.local_zs.push(looked_z);
+                vars.next_zs.push(looked_z_next);
+                vars.challenges.push(gamma);
+                vars.cols.push(looked);
+            } 
+        }
+
+        res
+    }
 }
 
 pub(crate) fn eval_cross_table_lookup_checks<F, FE, P, C, S, const D: usize, const D2: usize>(
     vars: StarkEvaluationVars<FE, P, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
-    ctl_vars: CtlCheckVars<F, FE, P, D2>,
+    ctl_vars: &CtlCheckVars<F, FE, P, D2>,
     consumer: &mut ConstraintConsumer<P>,
     num_challenges: usize,
 ) where
@@ -214,7 +257,7 @@ pub(crate) fn eval_cross_table_lookup_checks<F, FE, P, C, S, const D: usize, con
 {
     let zs_chunks = ctl_vars.local_zs.chunks_exact(num_challenges);
     let zs_chunks_next = ctl_vars.next_zs.chunks_exact(num_challenges);
-    let challenge_cols = ctl_vars.challenges.iter().zip(ctl_vars.cols);
+    let challenge_cols = ctl_vars.challenges.iter().zip(ctl_vars.cols.iter());
     for ((zs, zs_next), (&gamma, col)) in zs_chunks.zip(zs_chunks_next).zip(challenge_cols) {
         let sel = col
             .filter_col
