@@ -68,8 +68,8 @@ impl Into<usize> for TableID {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct CtlData<F: Field> {
-	by_table: Vec<CtlTableData<F>>
+pub struct CtlData<F: Field> {
+	pub by_table: Vec<CtlTableData<F>>
 }
 
 #[derive(Debug, Clone)]
@@ -81,7 +81,7 @@ pub struct CtlTableData<F: Field> {
 }
 
 // compute the preprocessed polynomials necessary for the lookup argument given CTL traces and table descriptors
-fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(config: &StarkConfig, trace_poly_valueses: &[Vec<PolynomialValues<F>>], ctl_descriptor: &CtlDescriptor, challenger: &mut Challenger<F, C::Hasher>) -> CtlData<F> {
+pub fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(config: &StarkConfig, trace_poly_valueses: &[Vec<PolynomialValues<F>>], ctl_descriptor: &CtlDescriptor, challenger: &mut Challenger<F, C::Hasher>) -> CtlData<F> {
 	let num_tables = trace_poly_valueses.len();
 	let instances = ctl_descriptor.instances.iter().map(|_| challenger.get_n_challenges(config.num_challenges)).zip(ctl_descriptor.instances.iter().cloned()).collect_vec();
 

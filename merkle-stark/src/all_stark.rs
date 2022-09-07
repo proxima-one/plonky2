@@ -31,8 +31,7 @@ pub trait CtlStark {
 
 /// an aggregate multi-table STARK proof.
 pub struct AllProof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>{
-	proofs: Vec<StarkProofWithPublicInputs<F, C, D>>,
-	table_descriptors: Vec<CtlDescriptor>,
+	pub proofs: Vec<StarkProofWithPublicInputs<F, C, D>>,
 }
 
 /// This trait is implemented by multi-trace STARKs that use cross-table lookups
@@ -40,6 +39,6 @@ pub struct AllProof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, co
 pub trait AllStark<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>: CtlStark {
 	// a type containing all of the `Stark` implementors for this multi-table STARK.
 	type Starks;
-	fn prove(&self, starks: &Self::Starks, config: &StarkConfig, trace_poly_valueses: &[Vec<PolynomialValues<F>>], public_inputs: &[Vec<F>], timing: &mut TimingTree) -> Result<AllProof<F, C, D>>;
-	fn verify(&self, starks: &Self::Starks, inputs: &[F], proof: &AllProof<F, C, D>) -> Result<()>;	
+	fn prove(&self, starks: &Self::Starks, config: &StarkConfig, trace_poly_valueses: &[Vec<PolynomialValues<F>>], public_inputses: &[Vec<F>], timing: &mut TimingTree) -> Result<AllProof<F, C, D>>;
+	fn verify(&self, starks: &Self::Starks, config: &StarkConfig, proof: &AllProof<F, C, D>) -> Result<()>;	
 }

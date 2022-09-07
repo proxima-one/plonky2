@@ -18,12 +18,14 @@ use crate::proof::*;
 use crate::stark::Stark;
 
 // makes a challenger and overves the trace caps
-pub(crate) fn start_all_proof_challenges<F, C, const D: usize>(
-    trace_caps: &[MerkleCap<F, C::Hasher>],
+pub fn start_all_proof_challenger<'a, F, C, I, const D: usize>(
+    trace_caps: I
 ) -> Challenger<F, C::Hasher>
 where
+    I: Iterator<Item = &'a MerkleCap<F, C::Hasher>>,
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
+    <C as GenericConfig<D>>::Hasher: 'a,
 {
     let mut challenger = Challenger::<F, C::Hasher>::new();
 
@@ -35,7 +37,7 @@ where
 }
 
 // assumes `start_all_proof_challenges` was used to get the challenger
-pub(crate) fn get_ctl_challenges_by_table<F, C, const D: usize>(
+pub fn get_ctl_challenges_by_table<F, C, const D: usize>(
     challenger: &mut Challenger<F, C::Hasher>,
     ctl_descriptor: CtlDescriptor,
     num_tables: usize,
