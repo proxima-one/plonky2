@@ -211,6 +211,8 @@ where
         let proof = &all_proof.proofs[HASH_TID.0];
         verify_stark_proof_with_ctl(stark, proof, &ctl_vars[HASH_TID.0], &mut challenger, config)?;
 
-        Ok(())
+        // TODO: check ctl wraparound constraints
+
+        todo!()
     }
 }
