@@ -14,7 +14,7 @@ type C = PoseidonGoldilocksConfig;
 type F = <C as GenericConfig<D>>::F;
 type S = Sha2CompressionStark<F, D>;
 
-const NUM_HASHES: usize = 63;
+const NUM_HASHES: usize = 1023;
 
 fn main() {
     let mut builder = env_logger::Builder::from_default_env();
@@ -32,8 +32,7 @@ fn main() {
 
     let trace = compressor.generate();
 
-    let mut config = StarkConfig::standard_fast_config();
-    config.fri_config.cap_height = 4;
+    let config = StarkConfig::standard_fast_config();
 
     let stark = S::new();
     let mut timing = TimingTree::new("prove", Level::Debug);
