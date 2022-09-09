@@ -12,15 +12,10 @@ pub fn get_level_end_shift(i: usize, level: usize) -> usize {
 pub const WORDS_PER_HASH: usize = 8;
 
 // 17 hashes - 16 for the leaves, one for the root
-pub const NUM_PUBLIC_INPUTS: usize = (TREE_WIDTH + 1) * WORDS_PER_HASH;
+pub const NUM_PUBLIC_INPUTS: usize = WORDS_PER_HASH;
 pub const NUM_COLS: usize = LAST_COL + 1;
 
-pub const LEAVES_PI_WORDS_START: usize = 0;
-pub fn pi_leaf_i_word(i: usize, word: usize) -> usize {
-    LEAVES_PI_WORDS_START + i * WORDS_PER_HASH + word
-}
-
-pub const ROOT_PI_WORDS_START: usize = TREE_WIDTH * WORDS_PER_HASH;
+pub const ROOT_PI_WORDS_START: usize = 0;
 pub fn pi_root_word(word: usize) -> usize {
     ROOT_PI_WORDS_START + word
 }

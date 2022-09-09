@@ -59,15 +59,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Tree5Stark<F,
         let next_row = vars.next_values;
         let pis = vars.public_inputs;
 
-        // load leaves in at first row
-        for i in 0..TREE_WIDTH {
-            for word in 0..WORDS_PER_HASH {
-                // degree 1
-                yield_constr.constraint_first_row(
-                    curr_row[val_i_word(i, word)] - pis[pi_leaf_i_word(i, word)],
-                );
-            }
-        }
+        // TODO: 'load in' leaves with a CTL (might actually need to add an "input phase" where we load the leaves in one at a time)
 
         // set PC to 0 first row, hash idx to 1, curr half level width to TREE_WIDTH / 2
         // degree 1

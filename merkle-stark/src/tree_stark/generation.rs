@@ -249,11 +249,6 @@ impl<F: Field + PrimeField64> TreeTraceGenerator<F> {
 
     fn get_pis(&self, root: [u32; WORDS_PER_HASH]) -> [F; NUM_PUBLIC_INPUTS] {
         let mut pis = [F::ZERO; NUM_PUBLIC_INPUTS];
-        for i in 0..TREE_WIDTH {
-            for word in 0..WORDS_PER_HASH {
-                pis[pi_leaf_i_word(i, word)] = F::from_canonical_u32((&self.leaves)[i][word]);
-            }
-        }
 
         for word in 0..WORDS_PER_HASH {
             pis[pi_root_word(word)] = F::from_canonical_u32(root[word]);
