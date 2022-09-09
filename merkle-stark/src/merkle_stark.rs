@@ -2,13 +2,12 @@ use anyhow::{anyhow, Result};
 use plonky2::field::extension::Extendable;
 use plonky2::field::polynomial::PolynomialValues;
 use plonky2::hash::hash_types::RichField;
-use plonky2::iop::challenger::Challenger;
 use plonky2::plonk::config::{GenericConfig, Hasher};
 
 use crate::all_stark::{AllProof, AllStark, CtlStark};
 use crate::config::StarkConfig;
-use crate::cross_table_lookup::{get_ctl_data, CtlCheckVars, CtlColumn, CtlDescriptor, TableID};
-use crate::get_challenges::{get_ctl_challenges_by_table, start_all_proof_challenger};
+use crate::cross_table_lookup::{get_ctl_data, CtlCheckVars, CtlColumn, CtlDescriptor, TableID, verify_cross_table_lookups};
+use crate::get_challenges::{start_all_proof_challenger, get_ctl_challenges_by_table};
 use crate::prover::{prove_single_table, start_all_proof};
 use crate::sha256_stark::layout as sha2_layout;
 use crate::sha256_stark::Sha2CompressionStark;
@@ -21,20 +20,9 @@ pub const TREE_TID: TableID = TableID(0);
 pub const HASH_TID: TableID = TableID(1);
 
 /// A stark that computes a depth-5 Merkle Tree.
-pub struct Merkle5Stark<F: RichField + Extendable<D>, const D: usize> {
-    tree_stark: Tree5Stark<F, D>,
-    sha2_stark: Sha2CompressionStark<F, D>,
-}
+pub struct Merkle5Stark;
 
-impl<F: RichField + Extendable<D>, const D: usize> CtlStark for Merkle5Stark<F, D> {
-    fn new() -> Self {
-        let tree_stark = Tree5Stark::new();
-        let sha2_stark = Sha2CompressionStark::new();
-        Merkle5Stark {
-            tree_stark,
-            sha2_stark,
-        }
-    }
+impl CtlStark for Merkle5Stark {
 
     fn num_tables(&self) -> usize {
         2
@@ -85,7 +73,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CtlStark for Merkle5Stark<F, 
     }
 }
 
-impl<F, C, const D: usize> AllStark<F, C, D> for Merkle5Stark<F, D>
+impl<F, C, const D: usize> AllStark<F, C, D> for Merkle5Stark
 where
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
@@ -190,13 +178,9 @@ where
         let num_challenges = config.num_challenges;
 
         let ctl_descriptor = self.get_ctl_descriptor();
-        let ctl_challenges = get_ctl_challenges_by_table::<F, C, D>(
-            &mut challenger,
-            &ctl_descriptor,
-            num_tables,
-            num_challenges,
-        );
-        debug_assert!(ctl_challenges[TREE_TID.0].len() == num_tables);
+        let ctl_challenges = get_ctl_challenges_by_table::<F, C, D>(&mut challenger, &ctl_descriptor, num_tables, num_challenges);
+        debug_assert!(ctl_challenges.len() == num_tables);
+        debug_assert!(ctl_challenges[TREE_TID.0].len() == num_challenges);
 
         let ctl_vars =
             CtlCheckVars::from_proofs(&all_proof.proofs, &ctl_descriptor, &ctl_challenges);
@@ -211,8 +195,11 @@ where
         let proof = &all_proof.proofs[HASH_TID.0];
         verify_stark_proof_with_ctl(stark, proof, &ctl_vars[HASH_TID.0], &mut challenger, config)?;
 
-        // TODO: check ctl wraparound constraints
+        verify_cross_table_lookups(
+            &ctl_vars,
+            all_proof.proofs.iter().map(|p| &p.proof)
+        )?;
 
-        todo!()
+        Ok(())
     }
 }

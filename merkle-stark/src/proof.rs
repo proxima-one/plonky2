@@ -141,6 +141,8 @@ pub struct StarkOpeningSet<F: RichField + Extendable<D>, const D: usize> {
     pub ctl_zs_next: Option<Vec<F::Extension>>,
     /// Openings of cross-table lookup `Z` polynomials at `g^-1`.
     pub ctl_zs_last: Option<Vec<F>>,
+    /// Opening of cross-table lookup `Z` polynomials at `g^0`
+    pub ctl_zs_first: Option<Vec<F>>,
     /// Openings of quotient polynomials at `zeta`.
     pub quotient_polys: Vec<F::Extension>,
 }
@@ -154,7 +156,6 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
         ctl_zs_commitment: Option<&PolynomialBatch<F, C, D>>,
         quotient_commitment: &PolynomialBatch<F, C, D>,
         degree_bits: usize,
-        num_permutation_zs: usize,
     ) -> Self {
         let eval_commitment = |z: F::Extension, c: &PolynomialBatch<F, C, D>| {
             c.polynomials
@@ -178,8 +179,10 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
             ctl_zs_next: ctl_zs_commitment.map(|c| eval_commitment(zeta_next, c)),
             ctl_zs_last: ctl_zs_commitment.map(|c| {
                 eval_commitment_base(F::primitive_root_of_unity(degree_bits).inverse(), c)
-                    [num_permutation_zs..]
                     .to_vec()
+            }),
+            ctl_zs_first: ctl_zs_commitment.map(|c| {
+                eval_commitment_base(F::ONE, c).to_vec()
             }),
             quotient_polys: eval_commitment(zeta, quotient_commitment),
         }

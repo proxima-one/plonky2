@@ -80,7 +80,7 @@ where
     [(); S::PUBLIC_INPUTS]:,
     [(); C::Hasher::HASH_SIZE]:,
 {
-    assert!(ctl_vars.is_none(), "CTL not yet supported");
+    // assert!(ctl_vars.is_none(), "CTL not yet supported");
 
     let StarkProofWithPublicInputs {
         proof,
@@ -94,7 +94,8 @@ where
         permutation_zs_next,
         ctl_zs: _,
         ctl_zs_next: _,
-        ctl_zs_last,
+        ctl_zs_first: _,
+        ctl_zs_last, 
         quotient_polys,
     } = &proof.openings;
     let vars = StarkEvaluationVars {

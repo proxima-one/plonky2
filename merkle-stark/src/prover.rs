@@ -20,7 +20,7 @@ use plonky2_util::{log2_ceil, log2_strict};
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
-use crate::cross_table_lookup::{CtlCheckVars, CtlColumn, CtlData, CtlTableData};
+use crate::cross_table_lookup::{CtlCheckVars, CtlColumn, CtlData, CtlTableData, TableID};
 use crate::permutation::compute_permutation_z_polys;
 use crate::permutation::get_n_permutation_challenge_sets;
 use crate::permutation::{PermutationChallengeSet, PermutationCheckVars};
@@ -204,23 +204,11 @@ where
     }
 
     let ctl_zs_commitment_challenges_cols = ctl_data.map(|ctl_data| {
-        // shift the zs to up one root of unity so z(omega^1) = evals[0] rather tan z(omega^0) = evals[1]
-        let shift = F::primitive_root_of_unity(degree_bits);
-        let zs = timed!(
-            timing,
-            "coset IFFT for CTL Zs",
-            ctl_data
-                .table_zs
-                .iter()
-                .cloned()
-                .map(|z| z.coset_ifft(shift))
-                .collect_vec()
-        );
         let commitment = timed!(
             timing,
             "compute CTL Z commitments",
-            PolynomialBatch::<F, C, D>::from_coeffs(
-                zs,
+            PolynomialBatch::<F, C, D>::from_values(
+                ctl_data.table_zs.clone(),
                 rate_bits,
                 false,
                 config.fri_config.cap_height,
@@ -229,7 +217,7 @@ where
             )
         );
         let challenges = ctl_data.challenges.clone();
-        (commitment, challenges, ctl_data.cols.clone())
+        (commitment, challenges, (ctl_data.cols.clone(), ctl_data.foreign_col_tids.clone(), ctl_data.foreign_col_indices.clone()))
     });
 
     let ctl_zs_commitment = ctl_zs_commitment_challenges_cols
@@ -297,7 +285,6 @@ where
         ctl_zs_commitment,
         &quotient_commitment,
         degree_bits,
-        stark.num_permutation_batches(config),
     );
     challenger.observe_openings(&openings.to_fri_openings());
 
@@ -354,7 +341,11 @@ fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
     ctl_zs_commitment_challenges_cols: &'a Option<(
         PolynomialBatch<F, C, D>,
         Vec<F>,
-        Vec<CtlColumn>,
+        (
+            Vec<CtlColumn>,
+            Vec<TableID>,
+            Vec<usize>
+        )
     )>,
     public_inputs: [F; S::PUBLIC_INPUTS],
     alphas: Vec<F>,
@@ -406,6 +397,22 @@ where
         size,
     );
 
+    let ctl_zs_first_last = ctl_zs_commitment_challenges_cols
+        .as_ref()
+        .map(|(c, _, _)| {
+            let mut ctl_zs_first = Vec::with_capacity(c.polynomials.len());
+            let mut ctl_zs_last = Vec::with_capacity(c.polynomials.len());
+            c.polynomials
+                .par_iter()
+                .map(|p| (
+                    p.eval(F::ONE),
+                    p.eval(F::primitive_root_of_unity(degree_bits).inverse())
+                ))
+                .unzip_into_vecs(&mut ctl_zs_first, &mut ctl_zs_last);
+
+            (ctl_zs_first, ctl_zs_last)
+        });
+
     // We will step by `P::WIDTH`, and in each iteration, evaluate the quotient polynomial at
     // a batch of `P::WIDTH` points.
     let quotient_values = (0..size)
@@ -446,13 +453,18 @@ where
                         let local_zs = commitment.get_lde_values_packed(i_start, step);
                         let next_zs = commitment.get_lde_values_packed(i_next_start, step);
                         let challenges = challenges.clone();
-                        let cols = cols.clone();
+                        let (cols, foreign_col_tids, foreign_col_indices) = cols.clone();
+                        let (first_zs, last_zs) = ctl_zs_first_last.clone().unwrap();
 
                         CtlCheckVars {
                             local_zs,
                             next_zs,
+                            first_zs,
+                            last_zs,
                             challenges,
                             cols,
+                            foreign_col_tids,
+                            foreign_col_indices,
                         }
                     });
 

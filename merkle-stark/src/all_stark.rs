@@ -18,8 +18,6 @@ use crate::stark::Stark;
 /// This trait is used to configure which columns are to look up which other columns.
 /// It is highly reccomended to implement this trait via the `derive(AllStark)` macro in the `all_stark_derive` crate
 pub trait CtlStark {
-    fn new() -> Self;
-
     /// returns the number of tables in this multi-trace STARK
     fn num_tables(&self) -> usize;
 

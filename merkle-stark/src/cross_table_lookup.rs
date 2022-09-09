@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
+use anyhow::{Result, ensure};
 use itertools::{izip, Itertools};
 use maybe_rayon::*;
 use plonky2::field::extension::{Extendable, FieldExtension};
@@ -12,9 +13,8 @@ use plonky2::plonk::config::GenericConfig;
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
-use crate::proof::StarkProofWithPublicInputs;
+use crate::proof::{StarkProofWithPublicInputs, StarkProof};
 use crate::stark::Stark;
-use crate::util::is_power_of_two;
 use crate::vars::StarkEvaluationVars;
 
 // represents the imports and exports for a stark table relying on a cross-table lookup
@@ -76,6 +76,8 @@ pub struct CtlData<F: Field> {
 #[derive(Debug, Clone)]
 pub struct CtlTableData<F: Field> {
     pub(crate) cols: Vec<CtlColumn>,
+    pub(crate) foreign_col_tids: Vec<TableID>,
+    pub(crate) foreign_col_indices: Vec<usize>,
     pub(crate) table_zs: Vec<PolynomialValues<F>>,
     // challenges used for the CTLs in this table
     pub(crate) challenges: Vec<F>,
@@ -104,31 +106,29 @@ pub fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, co
         match filter_col {
             None => {
                 let col_values = &trace_poly_valueses[table_idx][col].values;
-                let values = std::iter::once(F::ONE)
-                    .chain(col_values.iter().scan(F::ONE, |prev, &eval| {
+                let values = col_values.iter().scan(F::ONE, |prev, &eval| {
                         let next = *prev * (eval + gamma);
                         *prev = next;
                         Some(next)
-                    }))
+                    })
                     .collect();
 
                 PolynomialValues::new(values)
             }
             Some(filter_col) => {
-                let mut values = vec![F::ONE];
                 let col_values = &trace_poly_valueses[table_idx][col].values;
                 let filter_col_values = &trace_poly_valueses[table_idx][filter_col].values;
-
-                for (&eval, &filter) in col_values.iter().zip(filter_col_values.iter()) {
-                    let prev = values.last().unwrap();
-                    if filter == F::ONE {
-                        values.push(*prev * (eval + gamma));
-                    } else if filter == F::ZERO {
-                        values.push(*prev);
+                let values = col_values.iter().zip(filter_col_values.iter()).scan(F::ONE, |prev, (&eval, &filter_eval)| {
+                    if filter_eval == F::ONE {
+                        let next = *prev * (eval + gamma);
+                        *prev = next;
+                        Some(next)
+                    } else if filter_eval == F::ZERO {
+                        Some(*prev)
                     } else {
-                        panic!("non-binary filter col!")
+                        panic!("non-binary filter!")
                     }
-                }
+                }).collect();
 
                 PolynomialValues::new(values)
             }
@@ -166,20 +166,29 @@ pub fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, co
         CtlTableData {
             cols: Vec::new(),
             table_zs: Vec::new(),
-            challenges: Vec::new()
+            challenges: Vec::new(),
+            foreign_col_tids: Vec::new(),
+            foreign_col_indices: Vec::new(),
         };
         num_tables
     ];
     for (((looking_tid, looking_col, looking_z), (looked_tid, looked_col, looked_z)), gamma) in
         instances
     {
+        let looking_idx = by_table[looking_tid.0].cols.len();
+        let looked_idx = by_table[looked_tid.0].cols.len();
+
         let table = &mut by_table[looking_tid.0];
         table.cols.push(looking_col);
+        table.foreign_col_tids.push(looked_tid);
+        table.foreign_col_indices.push(looked_idx);
         table.table_zs.push(looking_z);
         table.challenges.push(gamma);
 
         let table = &mut by_table[looked_tid.0];
         table.cols.push(looked_col);
+        table.foreign_col_tids.push(looking_tid);
+        table.foreign_col_indices.push(looking_idx);
         table.table_zs.push(looked_z);
         table.challenges.push(gamma);
     }
@@ -196,8 +205,12 @@ where
 {
     pub(crate) local_zs: Vec<P>,
     pub(crate) next_zs: Vec<P>,
+    pub(crate) first_zs: Vec<F>,
+    pub(crate) last_zs: Vec<F>,
     pub(crate) challenges: Vec<F>,
     pub(crate) cols: Vec<CtlColumn>,
+    pub(crate) foreign_col_tids: Vec<TableID>,
+    pub(crate) foreign_col_indices: Vec<usize>,
 }
 
 impl<F, const D: usize> CtlCheckVars<F, F::Extension, F::Extension, D>
@@ -210,6 +223,10 @@ where
         ctl_challenges: &[Vec<F>],
     ) -> Vec<Self> {
         let num_tables = proofs.len();
+        let first_last_zs = proofs.iter().map(|p| {
+            (p.proof.openings.ctl_zs_first.as_ref().expect("no ctl first opening!").clone(),
+             p.proof.openings.ctl_zs_last.as_ref().expect("no ctl last opening!").clone())
+        });
         let mut ctl_zs = proofs
             .iter()
             .map(|p| {
@@ -224,25 +241,33 @@ where
             })
             .collect_vec();
 
-        let mut res = vec![
-            CtlCheckVars {
-                local_zs: Vec::new(),
-                next_zs: Vec::new(),
-                challenges: Vec::new(),
-                cols: Vec::new()
-            };
-            num_tables
-        ];
+        let mut res = first_last_zs.map(|(first_zs, last_zs)| CtlCheckVars {
+            local_zs: Vec::new(),
+            next_zs: Vec::new(),
+            first_zs,
+            last_zs,
+            challenges: Vec::new(),
+            cols: Vec::new(),
+            foreign_col_tids: Vec::new(),
+            foreign_col_indices: Vec::new(),
+        }).collect_vec();
+        debug_assert!(res.len() == num_tables);
+
         for (&(looking, looked), challenges) in
             ctl_descriptor.instances.iter().zip(ctl_challenges.iter())
         {
             for &gamma in challenges {
                 let (&looking_z, &looking_z_next) = ctl_zs[looking.tid.0].next().unwrap();
+                let looking_last_idx = res[looking.tid.0].cols.len();
+                let looked_last_idx = res[looked.tid.0].cols.len();
+
                 let mut vars = &mut res[looking.tid.0];
                 vars.local_zs.push(looking_z);
                 vars.next_zs.push(looking_z_next);
                 vars.challenges.push(gamma);
                 vars.cols.push(looking);
+                vars.foreign_col_tids.push(looked.tid);
+                vars.foreign_col_indices.push(looked_last_idx);
 
                 let (&looked_z, &looked_z_next) = ctl_zs[looked.tid.0].next().unwrap();
                 vars = &mut res[looked.tid.0];
@@ -250,6 +275,8 @@ where
                 vars.next_zs.push(looked_z_next);
                 vars.challenges.push(gamma);
                 vars.cols.push(looked);
+                vars.foreign_col_tids.push(looking.tid);
+                vars.foreign_col_indices.push(looking_last_idx);
             }
         }
 
@@ -271,23 +298,83 @@ pub(crate) fn eval_cross_table_lookup_checks<F, FE, P, C, S, const D: usize, con
     [(); S::COLUMNS]:,
     [(); S::PUBLIC_INPUTS]:,
 {
-    let zs_chunks = ctl_vars.local_zs.chunks_exact(num_challenges);
-    let zs_chunks_next = ctl_vars.next_zs.chunks_exact(num_challenges);
-    let challenge_cols = ctl_vars.challenges.iter().zip(ctl_vars.cols.iter());
-    for ((zs, zs_next), (&gamma, col)) in zs_chunks.zip(zs_chunks_next).zip(challenge_cols) {
+    debug_assert!(ctl_vars.challenges.len() % num_challenges == 0);
+
+    let challenges = ctl_vars.challenges.iter();
+    let zs = ctl_vars.local_zs.iter().zip(ctl_vars.next_zs.iter());
+    let first_last_zs = ctl_vars.first_zs.iter().zip(ctl_vars.last_zs.iter());
+    let cols = ctl_vars.cols.iter();
+
+    let cols_first_zs = ctl_vars.cols.iter().zip(ctl_vars.first_zs.iter());
+    for (&gamma, ((&col, (&first_z, &last_z)), (&local_z, &next_z))) in challenges.zip((cols.zip(first_last_zs)).zip(zs)) {
         let sel = col
             .filter_col
-            .map_or(P::ONES, |sel_col| vars.local_values[sel_col]);
+            .map_or(P::ONES, |filter_col| vars.local_values[filter_col]);
+    
         let eval = vars.local_values[col.col] + FE::from_basefield(gamma) - FE::ONES;
 
-        for (&local_z, &next_z) in zs.iter().zip(zs_next) {
-            // degree 1
-            consumer.constraint_first_row(local_z - P::ONES);
+        // check first and last z evals
+        // degree 1
+        consumer.constraint_first_row(local_z - FE::from_basefield(first_z));
+        consumer.constraint_last_row(local_z - FE::from_basefield(last_z));
 
-            // degree 3
-            consumer.constraint_transition(next_z - (local_z * (sel * eval + P::ONES)));
+        // check grand product
+        // degree 3
+        consumer.constraint_transition(next_z - (local_z * (sel * eval + P::ONES)));
+        consumer.constraint_last_row(next_z - FE::from_basefield(first_z));
 
-            // ? pretty sure the other checks only happen in the verifier, as we need to get the last z and check against the other table
+        // check against other table happens separately in `verify_cross_table_lookups` below
+    }
+}
+
+pub fn verify_cross_table_lookups<
+    'a,
+    I: Iterator<Item = &'a StarkProof<F, C, D>>,
+    F: RichField + Extendable<D>,
+    C: GenericConfig<D, F = F> + 'a,
+    const D: usize,
+>(
+    vars: &[CtlCheckVars<F, F::Extension, F::Extension, D>],
+    proofs: I,
+) -> Result<()> {
+    let ctl_zs_openings = proofs
+        .flat_map(|p| p.openings.ctl_zs_last.iter())
+        .collect_vec();
+
+
+    let z_pairs = vars.iter().enumerate().flat_map(|(tid, vars)| {
+        (0..vars.cols.len())
+            .zip(
+                vars.foreign_col_tids
+                    .iter()
+                    .zip(vars.foreign_col_indices.iter())
+            )
+            .map(move |stuff| (tid, stuff))
+            .map(|(tid, (idx, (&foreign_tid, &foreign_idx)))| {
+                let local_z = ctl_zs_openings[tid][idx];
+                let foreign_z = ctl_zs_openings[foreign_tid.0][foreign_idx];
+
+
+                (local_z, foreign_z)
+            })
+    });
+
+    #[cfg(debug_assertions)]
+    let mut num_pairs = 0;
+
+    for (local_z, foreign_z) in z_pairs {
+        ensure!(
+            local_z == foreign_z,
+            "cross table lookup verification failed."
+        );
+
+        #[cfg(debug_assertions)]
+        {
+            num_pairs += 1;
         }
     }
+
+    debug_assert!(ctl_zs_openings.len() == num_pairs);
+
+    Ok(())
 }
