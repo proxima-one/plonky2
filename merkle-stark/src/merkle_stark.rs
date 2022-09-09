@@ -6,8 +6,10 @@ use plonky2::plonk::config::{GenericConfig, Hasher};
 
 use crate::all_stark::{AllProof, AllStark, CtlStark};
 use crate::config::StarkConfig;
-use crate::cross_table_lookup::{get_ctl_data, CtlCheckVars, CtlColumn, CtlDescriptor, TableID, verify_cross_table_lookups};
-use crate::get_challenges::{start_all_proof_challenger, get_ctl_challenges_by_table};
+use crate::cross_table_lookup::{
+    get_ctl_data, verify_cross_table_lookups, CtlCheckVars, CtlColumn, CtlDescriptor, TableID,
+};
+use crate::get_challenges::{get_ctl_challenges_by_table, start_all_proof_challenger};
 use crate::prover::{prove_single_table, start_all_proof};
 use crate::sha256_stark::layout as sha2_layout;
 use crate::sha256_stark::Sha2CompressionStark;
@@ -23,7 +25,6 @@ pub const HASH_TID: TableID = TableID(1);
 pub struct Merkle5Stark;
 
 impl CtlStark for Merkle5Stark {
-
     fn num_tables(&self) -> usize {
         2
     }
@@ -178,7 +179,12 @@ where
         let num_challenges = config.num_challenges;
 
         let ctl_descriptor = self.get_ctl_descriptor();
-        let ctl_challenges = get_ctl_challenges_by_table::<F, C, D>(&mut challenger, &ctl_descriptor, num_tables, num_challenges);
+        let ctl_challenges = get_ctl_challenges_by_table::<F, C, D>(
+            &mut challenger,
+            &ctl_descriptor,
+            num_tables,
+            num_challenges,
+        );
         debug_assert!(ctl_challenges.len() == num_tables);
         debug_assert!(ctl_challenges[TREE_TID.0].len() == num_challenges);
 
@@ -195,10 +201,7 @@ where
         let proof = &all_proof.proofs[HASH_TID.0];
         verify_stark_proof_with_ctl(stark, proof, &ctl_vars[HASH_TID.0], &mut challenger, config)?;
 
-        verify_cross_table_lookups(
-            &ctl_vars,
-            all_proof.proofs.iter().map(|p| &p.proof)
-        )?;
+        verify_cross_table_lookups(&ctl_vars, all_proof.proofs.iter().map(|p| &p.proof))?;
 
         Ok(())
     }

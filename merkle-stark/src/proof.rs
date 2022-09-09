@@ -178,12 +178,9 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
             ctl_zs: ctl_zs_commitment.map(|c| eval_commitment(zeta, c)),
             ctl_zs_next: ctl_zs_commitment.map(|c| eval_commitment(zeta_next, c)),
             ctl_zs_last: ctl_zs_commitment.map(|c| {
-                eval_commitment_base(F::primitive_root_of_unity(degree_bits).inverse(), c)
-                    .to_vec()
+                eval_commitment_base(F::primitive_root_of_unity(degree_bits).inverse(), c).to_vec()
             }),
-            ctl_zs_first: ctl_zs_commitment.map(|c| {
-                eval_commitment_base(F::ONE, c).to_vec()
-            }),
+            ctl_zs_first: ctl_zs_commitment.map(|c| eval_commitment_base(F::ONE, c).to_vec()),
             quotient_polys: eval_commitment(zeta, quotient_commitment),
         }
     }

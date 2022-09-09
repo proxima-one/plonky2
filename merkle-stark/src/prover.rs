@@ -217,7 +217,15 @@ where
             )
         );
         let challenges = ctl_data.challenges.clone();
-        (commitment, challenges, (ctl_data.cols.clone(), ctl_data.foreign_col_tids.clone(), ctl_data.foreign_col_indices.clone()))
+        (
+            commitment,
+            challenges,
+            (
+                ctl_data.cols.clone(),
+                ctl_data.foreign_col_tids.clone(),
+                ctl_data.foreign_col_indices.clone(),
+            ),
+        )
     });
 
     let ctl_zs_commitment = ctl_zs_commitment_challenges_cols
@@ -341,11 +349,7 @@ fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
     ctl_zs_commitment_challenges_cols: &'a Option<(
         PolynomialBatch<F, C, D>,
         Vec<F>,
-        (
-            Vec<CtlColumn>,
-            Vec<TableID>,
-            Vec<usize>
-        )
+        (Vec<CtlColumn>, Vec<TableID>, Vec<usize>),
     )>,
     public_inputs: [F; S::PUBLIC_INPUTS],
     alphas: Vec<F>,
@@ -397,21 +401,21 @@ where
         size,
     );
 
-    let ctl_zs_first_last = ctl_zs_commitment_challenges_cols
-        .as_ref()
-        .map(|(c, _, _)| {
-            let mut ctl_zs_first = Vec::with_capacity(c.polynomials.len());
-            let mut ctl_zs_last = Vec::with_capacity(c.polynomials.len());
-            c.polynomials
-                .par_iter()
-                .map(|p| (
+    let ctl_zs_first_last = ctl_zs_commitment_challenges_cols.as_ref().map(|(c, _, _)| {
+        let mut ctl_zs_first = Vec::with_capacity(c.polynomials.len());
+        let mut ctl_zs_last = Vec::with_capacity(c.polynomials.len());
+        c.polynomials
+            .par_iter()
+            .map(|p| {
+                (
                     p.eval(F::ONE),
-                    p.eval(F::primitive_root_of_unity(degree_bits).inverse())
-                ))
-                .unzip_into_vecs(&mut ctl_zs_first, &mut ctl_zs_last);
+                    p.eval(F::primitive_root_of_unity(degree_bits).inverse()),
+                )
+            })
+            .unzip_into_vecs(&mut ctl_zs_first, &mut ctl_zs_last);
 
-            (ctl_zs_first, ctl_zs_last)
-        });
+        (ctl_zs_first, ctl_zs_last)
+    });
 
     // We will step by `P::WIDTH`, and in each iteration, evaluate the quotient polynomial at
     // a batch of `P::WIDTH` points.

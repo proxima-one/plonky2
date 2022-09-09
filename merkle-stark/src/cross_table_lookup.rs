@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use anyhow::{Result, ensure};
+use anyhow::{ensure, Result};
 use itertools::{izip, Itertools};
 use maybe_rayon::*;
 use plonky2::field::extension::{Extendable, FieldExtension};
@@ -13,7 +13,7 @@ use plonky2::plonk::config::GenericConfig;
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
-use crate::proof::{StarkProofWithPublicInputs, StarkProof};
+use crate::proof::{StarkProof, StarkProofWithPublicInputs};
 use crate::stark::Stark;
 use crate::vars::StarkEvaluationVars;
 
@@ -106,7 +106,9 @@ pub fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, co
         match filter_col {
             None => {
                 let col_values = &trace_poly_valueses[table_idx][col].values;
-                let values = col_values.iter().scan(F::ONE, |prev, &eval| {
+                let values = col_values
+                    .iter()
+                    .scan(F::ONE, |prev, &eval| {
                         let next = *prev * (eval + gamma);
                         *prev = next;
                         Some(next)
@@ -118,17 +120,21 @@ pub fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, co
             Some(filter_col) => {
                 let col_values = &trace_poly_valueses[table_idx][col].values;
                 let filter_col_values = &trace_poly_valueses[table_idx][filter_col].values;
-                let values = col_values.iter().zip(filter_col_values.iter()).scan(F::ONE, |prev, (&eval, &filter_eval)| {
-                    if filter_eval == F::ONE {
-                        let next = *prev * (eval + gamma);
-                        *prev = next;
-                        Some(next)
-                    } else if filter_eval == F::ZERO {
-                        Some(*prev)
-                    } else {
-                        panic!("non-binary filter!")
-                    }
-                }).collect();
+                let values = col_values
+                    .iter()
+                    .zip(filter_col_values.iter())
+                    .scan(F::ONE, |prev, (&eval, &filter_eval)| {
+                        if filter_eval == F::ONE {
+                            let next = *prev * (eval + gamma);
+                            *prev = next;
+                            Some(next)
+                        } else if filter_eval == F::ZERO {
+                            Some(*prev)
+                        } else {
+                            panic!("non-binary filter!")
+                        }
+                    })
+                    .collect();
 
                 PolynomialValues::new(values)
             }
@@ -224,8 +230,20 @@ where
     ) -> Vec<Self> {
         let num_tables = proofs.len();
         let first_last_zs = proofs.iter().map(|p| {
-            (p.proof.openings.ctl_zs_first.as_ref().expect("no ctl first opening!").clone(),
-             p.proof.openings.ctl_zs_last.as_ref().expect("no ctl last opening!").clone())
+            (
+                p.proof
+                    .openings
+                    .ctl_zs_first
+                    .as_ref()
+                    .expect("no ctl first opening!")
+                    .clone(),
+                p.proof
+                    .openings
+                    .ctl_zs_last
+                    .as_ref()
+                    .expect("no ctl last opening!")
+                    .clone(),
+            )
         });
         let mut ctl_zs = proofs
             .iter()
@@ -241,16 +259,18 @@ where
             })
             .collect_vec();
 
-        let mut res = first_last_zs.map(|(first_zs, last_zs)| CtlCheckVars {
-            local_zs: Vec::new(),
-            next_zs: Vec::new(),
-            first_zs,
-            last_zs,
-            challenges: Vec::new(),
-            cols: Vec::new(),
-            foreign_col_tids: Vec::new(),
-            foreign_col_indices: Vec::new(),
-        }).collect_vec();
+        let mut res = first_last_zs
+            .map(|(first_zs, last_zs)| CtlCheckVars {
+                local_zs: Vec::new(),
+                next_zs: Vec::new(),
+                first_zs,
+                last_zs,
+                challenges: Vec::new(),
+                cols: Vec::new(),
+                foreign_col_tids: Vec::new(),
+                foreign_col_indices: Vec::new(),
+            })
+            .collect_vec();
         debug_assert!(res.len() == num_tables);
 
         for (&(looking, looked), challenges) in
@@ -306,11 +326,13 @@ pub(crate) fn eval_cross_table_lookup_checks<F, FE, P, C, S, const D: usize, con
     let cols = ctl_vars.cols.iter();
 
     let cols_first_zs = ctl_vars.cols.iter().zip(ctl_vars.first_zs.iter());
-    for (&gamma, ((&col, (&first_z, &last_z)), (&local_z, &next_z))) in challenges.zip((cols.zip(first_last_zs)).zip(zs)) {
+    for (&gamma, ((&col, (&first_z, &last_z)), (&local_z, &next_z))) in
+        challenges.zip((cols.zip(first_last_zs)).zip(zs))
+    {
         let sel = col
             .filter_col
             .map_or(P::ONES, |filter_col| vars.local_values[filter_col]);
-    
+
         let eval = vars.local_values[col.col] + FE::from_basefield(gamma) - FE::ONES;
 
         // check first and last z evals
@@ -341,19 +363,17 @@ pub fn verify_cross_table_lookups<
         .flat_map(|p| p.openings.ctl_zs_last.iter())
         .collect_vec();
 
-
     let z_pairs = vars.iter().enumerate().flat_map(|(tid, vars)| {
         (0..vars.cols.len())
             .zip(
                 vars.foreign_col_tids
                     .iter()
-                    .zip(vars.foreign_col_indices.iter())
+                    .zip(vars.foreign_col_indices.iter()),
             )
             .map(move |stuff| (tid, stuff))
             .map(|(tid, (idx, (&foreign_tid, &foreign_idx)))| {
                 let local_z = ctl_zs_openings[tid][idx];
                 let foreign_z = ctl_zs_openings[foreign_tid.0][foreign_idx];
-
 
                 (local_z, foreign_z)
             })

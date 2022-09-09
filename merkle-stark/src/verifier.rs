@@ -95,7 +95,7 @@ where
         ctl_zs: _,
         ctl_zs_next: _,
         ctl_zs_first: _,
-        ctl_zs_last, 
+        ctl_zs_last,
         quotient_polys,
     } = &proof.openings;
     let vars = StarkEvaluationVars {
