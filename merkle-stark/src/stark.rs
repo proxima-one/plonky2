@@ -1,4 +1,5 @@
 use plonky2::field::extension::{Extendable, FieldExtension};
+use plonky2::field::types::Field;
 use plonky2::field::packed::PackedField;
 use plonky2::fri::structure::{
     FriBatchInfo, FriBatchInfoTarget, FriInstanceInfo, FriInstanceInfoTarget, FriOracleInfo,
@@ -118,17 +119,29 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             polynomials: [
                 trace_info.clone(),
                 permutation_zs_info.clone(),
+                ctl_zs_info.clone(),
                 quotient_info,
             ]
             .concat(),
         };
         let zeta_next_batch = FriBatchInfo {
             point: zeta.scalar_mul(g),
-            polynomials: [trace_info, permutation_zs_info].concat(),
+            polynomials: [trace_info, permutation_zs_info, ctl_zs_info.clone()].concat(),
         };
+
+        let ctl_first_batch = FriBatchInfo {
+            point: F::Extension::ONE,
+            polynomials: ctl_zs_info.clone(),
+        };
+
+        let ctl_last_batch = FriBatchInfo {
+            point: F::Extension::primitive_root_of_unity(degree_bits).inverse(),
+            polynomials: ctl_zs_info,
+        };
+        
         FriInstanceInfo {
             oracles: vec![no_blinding_oracle; oracle_indices.next().unwrap()],
-            batches: vec![zeta_batch, zeta_next_batch],
+            batches: vec![zeta_batch, zeta_next_batch, ctl_first_batch, ctl_last_batch],
         }
     }
 

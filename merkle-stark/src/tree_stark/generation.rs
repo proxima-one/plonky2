@@ -1,8 +1,8 @@
 use arrayref::array_mut_ref;
-use plonky2::field::{
+use plonky2::{field::{
     polynomial::PolynomialValues,
     types::{Field, PrimeField64},
-};
+}, hash::hash_types::RichField};
 
 use super::layout::*;
 use crate::util::{compress, is_power_of_two, trace_rows_to_poly_values};
@@ -20,7 +20,7 @@ impl<F: Field> TreeTrace<F> {
     }
 }
 
-pub struct TreeTraceGenerator<F: Field> {
+pub struct TreeTraceGenerator<F: RichField> {
     trace: TreeTrace<F>,
     leaves: [[u32; 8]; TREE_WIDTH],
     idx: usize,
@@ -28,7 +28,7 @@ pub struct TreeTraceGenerator<F: Field> {
     level_idx: usize,
 }
 
-impl<F: Field + PrimeField64> TreeTraceGenerator<F> {
+impl<F: RichField> TreeTraceGenerator<F> {
     pub fn new(max_rows: usize, leaves: [[u32; 8]; TREE_WIDTH]) -> TreeTraceGenerator<F> {
         TreeTraceGenerator {
             trace: TreeTrace::new(max_rows),
@@ -128,7 +128,17 @@ impl<F: Field + PrimeField64> TreeTraceGenerator<F> {
         }
     }
 
-    pub fn gen(&mut self) -> ([u32; 8], [F; NUM_PUBLIC_INPUTS]) {
+    pub fn gen_with_hash_trace(&mut self) -> ([u32; 8], [F; NUM_PUBLIC_INPUTS], Vec<([[u32; 8]; 2], [u32; 8])>) {
+        let (root, pis, hash_trace) = self.gen_inner(true);
+        (root, pis, hash_trace.unwrap())
+    }
+
+    pub fn gen(&mut self) ->  ([u32; 8], [F; NUM_PUBLIC_INPUTS]) {
+        let (root, pis, _) = self.gen_inner(false);
+        (root, pis)
+    }
+
+    fn gen_inner(&mut self, emit_hash_trace: bool) -> ([u32; 8], [F; NUM_PUBLIC_INPUTS], Option<Vec<([[u32; 8]; 2], [u32; 8])>>) {
         let max_rows = self.max_rows();
 
         // load leaves into first row of val cols
@@ -138,6 +148,11 @@ impl<F: Field + PrimeField64> TreeTraceGenerator<F> {
                 first_row[val_i_word(i, word)] = F::from_canonical_u32((&self.leaves)[i][word]);
             }
         }
+
+        let mut hash_trace = match emit_hash_trace {
+            true => Some(Vec::new()),
+            false => None,
+        };
 
         for level in 0..(TREE_DEPTH - 1) {
             for _ in 0..level_width(level + 1) {
@@ -181,6 +196,10 @@ impl<F: Field + PrimeField64> TreeTraceGenerator<F> {
                 for word in 0..WORDS_PER_HASH {
                     curr_row[hash_output_word(word)] = F::from_canonical_u32(output_hash[word])
                         + curr_row[HASH_IDX] * F::from_canonical_u64(1 << 32);
+                }
+
+                if let Some(ref mut hash_trace) = hash_trace {
+                    hash_trace.push(([left, right], output_hash))
                 }
 
                 // shift vals
@@ -244,7 +263,7 @@ impl<F: Field + PrimeField64> TreeTraceGenerator<F> {
                 .expect("expected hash word to fit in u32");
         }
 
-        (root, self.get_pis(root))
+        (root, self.get_pis(root), hash_trace)
     }
 
     fn get_pis(&self, root: [u32; WORDS_PER_HASH]) -> [F; NUM_PUBLIC_INPUTS] {

@@ -35,7 +35,7 @@ where
 {
     ensure!(proof_with_pis.public_inputs.len() == S::PUBLIC_INPUTS);
     let degree_bits = proof_with_pis.proof.recover_degree_bits(config);
-    let challenges = proof_with_pis.get_stark_challenges(stark, config, degree_bits);
+    let challenges = proof_with_pis.get_stark_challenges_no_ctl(stark, config, degree_bits);
     verify_stark_proof_with_challenges(stark, proof_with_pis, &challenges, None, config)
 }
 
@@ -59,7 +59,7 @@ where
     ensure!(proof_with_pis.public_inputs.len() == S::PUBLIC_INPUTS);
     let degree_bits = proof_with_pis.proof.recover_degree_bits(config);
     let challenges =
-        proof_with_pis.get_all_stark_challenges(stark, config, challenger, degree_bits);
+        proof_with_pis.get_stark_challenges_with_ctl(stark, config, challenger, degree_bits);
     verify_stark_proof_with_challenges(stark, proof_with_pis, &challenges, Some(ctl_vars), config)
 }
 
@@ -111,6 +111,8 @@ where
     };
 
     let degree_bits = proof.recover_degree_bits(config);
+    println!("[verifier] degree bits: {}", degree_bits);
+    
     let (l_1, l_last) = eval_l_1_and_l_last(degree_bits, challenges.stark_zeta);
     let last = F::primitive_root_of_unity(degree_bits).inverse();
     let z_last = challenges.stark_zeta - last.into();
@@ -164,6 +166,7 @@ where
         .chain(std::iter::once(proof.quotient_polys_cap.clone()))
         .collect_vec();
 
+    println!("[verifier] stark zeta: {}", challenges.stark_zeta);
     verify_fri_proof::<F, C, D>(
         &stark.fri_instance(
             challenges.stark_zeta,

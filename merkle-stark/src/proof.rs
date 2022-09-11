@@ -170,6 +170,14 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
                 .collect::<Vec<_>>()
         };
         let zeta_next = zeta.scalar_mul(g);
+        let ctl_zs_first = ctl_zs_commitment.map(|c| eval_commitment_base(F::ONE, c).to_vec());
+        let ctl_zs_last = ctl_zs_commitment.map(|c| {
+            eval_commitment_base(F::primitive_root_of_unity(degree_bits).inverse(), c).to_vec()
+        });
+
+        println!("[prover/openings] ctl_zs_first: {:?}", ctl_zs_first);
+        println!("[prover/openings] ctl_zs_last: {:?}", ctl_zs_last);
+
         Self {
             local_values: eval_commitment(zeta, trace_commitment),
             next_values: eval_commitment(zeta_next, trace_commitment),
@@ -177,10 +185,8 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
             permutation_zs_next: permutation_zs_commitment.map(|c| eval_commitment(zeta_next, c)),
             ctl_zs: ctl_zs_commitment.map(|c| eval_commitment(zeta, c)),
             ctl_zs_next: ctl_zs_commitment.map(|c| eval_commitment(zeta_next, c)),
-            ctl_zs_last: ctl_zs_commitment.map(|c| {
-                eval_commitment_base(F::primitive_root_of_unity(degree_bits).inverse(), c).to_vec()
-            }),
-            ctl_zs_first: ctl_zs_commitment.map(|c| eval_commitment_base(F::ONE, c).to_vec()),
+            ctl_zs_first,
+            ctl_zs_last,
             quotient_polys: eval_commitment(zeta, quotient_commitment),
         }
     }
@@ -205,17 +211,34 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
                 .copied()
                 .collect_vec(),
         };
-        let ctl_last_batch = self.ctl_zs_last.as_ref().map(|zs| FriOpeningBatch {
-            values: zs
-                .iter()
-                .copied()
-                .map(F::Extension::from_basefield)
-                .collect(),
-        });
+
+        let ctl_first_last_batches = match (self.ctl_zs_first.as_ref(), self.ctl_zs_last.as_ref()) {
+            (Some(first), Some(last)) => {
+                let first_batch = FriOpeningBatch {
+                    values: first
+                        .iter()
+                        .copied()
+                        .map(F::Extension::from_basefield)
+                        .collect(),
+                };
+
+                let last_batch = FriOpeningBatch {
+                    values: last 
+                        .iter()
+                        .copied()
+                        .map(F::Extension::from_basefield)
+                        .collect(),
+                };
+                Some((first_batch, last_batch))
+            }
+            (None, None) => None,
+            _ => panic!("ctl_zs_first.is_some() != ctl_zs_last.is_some()")
+        };
 
         let mut batches = vec![zeta_batch, zeta_next_batch];
-        if let Some(ctl_last_batch) = ctl_last_batch {
-            batches.push(ctl_last_batch);
+        if let Some((first_batch, last_batch)) = ctl_first_last_batches {
+            batches.push(first_batch);
+            batches.push(last_batch);
         }
 
         FriOpenings { batches }
@@ -227,7 +250,6 @@ pub struct StarkOpeningSetTarget<const D: usize> {
     pub next_values: Vec<ExtensionTarget<D>>,
     pub permutation_ctl_zs: Vec<ExtensionTarget<D>>,
     pub permutation_ctl_zs_next: Vec<ExtensionTarget<D>>,
-    pub ctl_zs_last: Vec<Target>,
     pub quotient_polys: Vec<ExtensionTarget<D>>,
 }
 
@@ -250,18 +272,18 @@ impl<const D: usize> StarkOpeningSetTarget<D> {
                 .copied()
                 .collect_vec(),
         };
-        debug_assert!(!self.ctl_zs_last.is_empty());
-        let ctl_last_batch = FriOpeningBatchTarget {
-            values: self
-                .ctl_zs_last
-                .iter()
-                .copied()
-                .map(|t| t.to_ext_target(zero))
-                .collect(),
-        };
+        // debug_assert!(!self.ctl_zs_last.is_empty());
+        // let ctl_last_batch = FriOpeningBatchTarget {
+        //     values: self
+        //         .ctl_zs_last
+        //         .iter()
+        //         .copied()
+        //         .map(|t| t.to_ext_target(zero))
+        //         .collect(),
+        // };
 
         FriOpeningsTarget {
-            batches: vec![zeta_batch, zeta_next_batch, ctl_last_batch],
+            batches: vec![zeta_batch, zeta_next_batch],
         }
     }
 }

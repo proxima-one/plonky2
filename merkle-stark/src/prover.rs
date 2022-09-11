@@ -155,6 +155,7 @@ where
 {
     let degree = trace_poly_values[0].len();
     let degree_bits = log2_strict(degree);
+    println!("[prover] degree bits: {}", degree_bits);
     let fri_params = config.fri_params(degree_bits);
     let rate_bits = config.fri_config.rate_bits;
     let cap_height = config.fri_config.cap_height;
@@ -192,7 +193,7 @@ where
         );
         (permutation_zs_commitment, permutation_challenge_sets)
     });
-
+    
     let permutation_zs_commitment = permutation_zs_commitment_challenges
         .as_ref()
         .map(|(comm, _)| comm);
@@ -204,6 +205,7 @@ where
     }
 
     let ctl_zs_commitment_challenges_cols = ctl_data.map(|ctl_data| {
+        println!("[prover] ctl z len: {}", ctl_data.table_zs[0].len());
         let commitment = timed!(
             timing,
             "compute CTL Z commitments",
@@ -294,6 +296,10 @@ where
         &quotient_commitment,
         degree_bits,
     );
+
+    println!("[prover] local zs openings: {:?}", openings.ctl_zs);
+    println!("[prover] next zs openings: {:?}", openings.ctl_zs_next);
+
     challenger.observe_openings(&openings.to_fri_openings());
 
     let initial_merkle_trees = std::iter::once(trace_commitment)
@@ -302,6 +308,7 @@ where
         .chain(std::iter::once(&quotient_commitment))
         .collect_vec();
 
+    println!("[prover] stark zeta: {}", zeta);
     let opening_proof = timed!(
         timing,
         "compute openings proof",
@@ -413,6 +420,9 @@ where
                 )
             })
             .unzip_into_vecs(&mut ctl_zs_first, &mut ctl_zs_last);
+            
+        println!("[prover/quotient_polys] ctl zs first: {:?}", ctl_zs_first);
+        println!("[prover/quotient_polys] ctl zs last: {:?}", ctl_zs_last);
 
         (ctl_zs_first, ctl_zs_last)
     });
@@ -471,7 +481,7 @@ where
                             foreign_col_indices,
                         }
                     });
-
+            
             eval_vanishing_poly::<F, F, P, C, S, D, 1>(
                 stark,
                 config,

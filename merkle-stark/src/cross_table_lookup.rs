@@ -199,6 +199,14 @@ pub fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, co
         table.challenges.push(gamma);
     }
 
+    for (i, data) in by_table.iter().enumerate() {
+        println!("\n[prover] ctl table {:?}:", i);
+        println!("[prover] num cols: {}", data.cols.len());
+        println!("[prover] cols: {:?}", data.cols);
+        println!("[prover/get ctl data]: first zs: {:?}", data.table_zs.iter().map(|z| z.values.first().unwrap()).collect_vec());
+        println!("[prover/get ctl data]: last zs: {:?}", data.table_zs.iter().map(|z| z.values.last().unwrap()).collect_vec());
+    }
+
     CtlData { by_table }
 }
 
@@ -278,6 +286,7 @@ where
         {
             for &gamma in challenges {
                 let (&looking_z, &looking_z_next) = ctl_zs[looking.tid.0].next().unwrap();
+                let (&looked_z, &looked_z_next) = ctl_zs[looked.tid.0].next().unwrap();
                 let looking_last_idx = res[looking.tid.0].cols.len();
                 let looked_last_idx = res[looked.tid.0].cols.len();
 
@@ -289,7 +298,6 @@ where
                 vars.foreign_col_tids.push(looked.tid);
                 vars.foreign_col_indices.push(looked_last_idx);
 
-                let (&looked_z, &looked_z_next) = ctl_zs[looked.tid.0].next().unwrap();
                 vars = &mut res[looked.tid.0];
                 vars.local_zs.push(looked_z);
                 vars.next_zs.push(looked_z_next);
@@ -298,6 +306,16 @@ where
                 vars.foreign_col_tids.push(looking.tid);
                 vars.foreign_col_indices.push(looking_last_idx);
             }
+        }
+        
+        for (i, vars) in res.iter().enumerate() {
+            println!("\n[verifier] ctl table {:?}:", i);
+            println!("[verifier] local zs openings: {:?}", vars.local_zs);
+            println!("[verifier] next zs openings: {:?}", vars.next_zs);
+            println!("[verifier] num ctl cols: {:?}", vars.cols.len());
+            println!("[verifier] cols: {:?}", vars.cols);
+            println!("[verifier] foreign col tids: {:?}", vars.foreign_col_tids);
+            println!("[verifier] foreign col indices: {:?}", vars.foreign_col_indices);
         }
 
         res
@@ -325,15 +343,14 @@ pub(crate) fn eval_cross_table_lookup_checks<F, FE, P, C, S, const D: usize, con
     let first_last_zs = ctl_vars.first_zs.iter().zip(ctl_vars.last_zs.iter());
     let cols = ctl_vars.cols.iter();
 
-    let cols_first_zs = ctl_vars.cols.iter().zip(ctl_vars.first_zs.iter());
     for (&gamma, ((&col, (&first_z, &last_z)), (&local_z, &next_z))) in
         challenges.zip((cols.zip(first_last_zs)).zip(zs))
     {
         let sel = col
             .filter_col
-            .map_or(P::ONES, |filter_col| vars.local_values[filter_col]);
+            .map_or(P::ONES, |filter_col| vars.next_values[filter_col]);
 
-        let eval = vars.local_values[col.col] + FE::from_basefield(gamma) - FE::ONES;
+        let eval = vars.next_values[col.col] + FE::from_basefield(gamma) - P::ONES;
 
         // check first and last z evals
         // degree 1
