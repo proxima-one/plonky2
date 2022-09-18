@@ -8,6 +8,7 @@ use plonky2::field::packable::Packable;
 use plonky2::field::packed::PackedField;
 use plonky2::field::polynomial::{PolynomialCoeffs, PolynomialValues};
 use plonky2::field::types::Field;
+use plonky2::field::fft::fft_root_table;
 use plonky2::field::zero_poly_coset::ZeroPolyOnCoset;
 use plonky2::fri::oracle::PolynomialBatch;
 use plonky2::hash::hash_types::RichField;
@@ -54,6 +55,7 @@ where
         "FRI total reduction arity is too large.",
     );
 
+    let root_table = fft_root_table::<F>(1 << (degree_bits + 1));
     let trace_commitment = timed!(
         timing,
         "compute trace commitment",
@@ -65,7 +67,7 @@ where
             false,
             cap_height,
             timing,
-            None,
+            Some(&root_table),
         )
     );
 
@@ -87,6 +89,7 @@ where
             &permutation_challenge_sets,
         );
 
+        let root_table = fft_root_table::<F>(permutation_z_polys[0].len());
         let permutation_zs_commitment = timed!(
             timing,
             "compute permutation Z commitments",
@@ -96,7 +99,7 @@ where
                 false,
                 config.fri_config.cap_height,
                 timing,
-                None,
+                Some(&root_table),
             )
         );
         (permutation_zs_commitment, permutation_challenge_sets)
@@ -131,6 +134,7 @@ where
             quotient_poly.chunks(degree)
         })
         .collect();
+
     let quotient_commitment = timed!(
         timing,
         "compute quotient commitment",
@@ -140,7 +144,7 @@ where
             false,
             config.fri_config.cap_height,
             timing,
-            None,
+            Some(&root_table),
         )
     );
     let quotient_polys_cap = quotient_commitment.merkle_tree.cap.clone();
