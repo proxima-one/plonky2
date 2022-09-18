@@ -10,7 +10,7 @@ use plonky2_util::log2_strict;
 use serde::{Deserialize, Serialize};
 
 use crate::extension::{Extendable, FieldExtension};
-use crate::fft::{fft, fft_with_options, ifft, FftRootTable};
+use crate::fft::{fft, fft_with_options, ifft, FftRootTable, ifft_with_options};
 use crate::types::Field;
 
 /// A polynomial in point-value form.
@@ -55,6 +55,14 @@ impl<F: Field> PolynomialValues<F> {
 
     pub fn ifft(self) -> PolynomialCoeffs<F> {
         ifft(self)
+    }
+
+    pub fn ifft_with_options(
+        self,
+        zero_factor: Option<usize>,
+        root_table: Option<&FftRootTable<F>>,
+    ) -> PolynomialCoeffs<F> {
+        ifft_with_options(self, zero_factor, root_table)
     }
 
     /// Returns the polynomial whose evaluation on the coset `shift*H` is `self`.

@@ -4,6 +4,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use plonky2::field::goldilocks_field::GoldilocksField;
 use plonky2::field::polynomial::PolynomialCoeffs;
 use plonky2::field::types::Field;
+use plonky2_field::fft::fft_root_table;
 use tynm::type_name;
 
 pub(crate) fn bench_ffts<F: Field>(c: &mut Criterion) {
@@ -14,6 +15,19 @@ pub(crate) fn bench_ffts<F: Field>(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, _| {
             let coeffs = PolynomialCoeffs::new(F::rand_vec(size));
             b.iter(|| coeffs.clone().fft_with_options(None, None));
+        });
+    }
+}
+
+pub(crate) fn bench_ffts_root_table<F: Field>(c: &mut Criterion) {
+    let mut group = c.benchmark_group(&format!("fft<{}>", type_name::<F>()));
+
+    for size_log in [13, 14, 15, 16] {
+        let size = 1 << size_log;
+        group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, _| {
+            let coeffs = PolynomialCoeffs::new(F::rand_vec(size));
+            let root_table = fft_root_table(size);
+            b.iter(|| coeffs.clone().fft_with_options(None, Some(&root_table)));
         });
     }
 }

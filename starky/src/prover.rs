@@ -4,6 +4,7 @@ use anyhow::{ensure, Result};
 use itertools::Itertools;
 use maybe_rayon::*;
 use plonky2::field::extension::Extendable;
+use plonky2::field::fft::fft_root_table;
 use plonky2::field::packable::Packable;
 use plonky2::field::packed::PackedField;
 use plonky2::field::polynomial::{PolynomialCoeffs, PolynomialValues};
@@ -54,6 +55,7 @@ where
         "FRI total reduction arity is too large.",
     );
 
+    let fft_root_table = fft_root_table(trace_poly_values[0].len());
     let trace_commitment = timed!(
         timing,
         "compute trace commitment",
@@ -65,7 +67,8 @@ where
             false,
             cap_height,
             timing,
-            None,
+            Some(&fft_root_table),
+            // None,
         )
     );
 
@@ -96,7 +99,7 @@ where
                 false,
                 config.fri_config.cap_height,
                 timing,
-                None,
+                Some(&fft_root_table),
             )
         );
         (permutation_zs_commitment, permutation_challenge_sets)
@@ -140,7 +143,7 @@ where
             false,
             config.fri_config.cap_height,
             timing,
-            None,
+            Some(&fft_root_table),
         )
     );
     let quotient_polys_cap = quotient_commitment.merkle_tree.cap.clone();
