@@ -1,9 +1,9 @@
-use log::{Level, LevelFilter};
+use log::{Level, LevelFilter, debug};
 use merkle_stark::{
     config::StarkConfig,
     prover::prove,
     sha256_stark::{Sha2CompressionStark, Sha2StarkCompressor},
-    verifier::verify_stark_proof, util::to_u32_array_be,
+    verifier::verify_stark_proof, util::to_u32_array_be, stark::Stark,
 };
 use plonky2::hash::hash_types::BytesHash;
 use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
@@ -14,7 +14,7 @@ type C = PoseidonGoldilocksConfig;
 type F = <C as GenericConfig<D>>::F;
 type S = Sha2CompressionStark<F, D>;
 
-const NUM_HASHES: usize = 1023;
+const NUM_HASHES: usize = 63;
 
 fn main() {
     let mut builder = env_logger::Builder::from_default_env();
@@ -34,6 +34,7 @@ fn main() {
 
     let config = StarkConfig::standard_fast_config();
 
+    debug!("Num Columns: {}", S::COLUMNS);
     let stark = S::new();
     let mut timing = TimingTree::new("prove", Level::Debug);
     let proof = prove::<F, C, S, D>(stark, &config, trace, [], &mut timing).unwrap();

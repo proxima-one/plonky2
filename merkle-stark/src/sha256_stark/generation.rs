@@ -192,21 +192,20 @@ impl<F: Field> Sha2TraceGenerator<F> {
             next_row[a_bit(bit)] = F::from_canonical_u32(abcd[0] & 1);
             next_row[b_bit(bit)] = F::from_canonical_u32(abcd[1] & 1);
             next_row[c_bit(bit)] = F::from_canonical_u32(abcd[2] & 1);
-            next_row[d_bit(bit)] = F::from_canonical_u32(abcd[3] & 1);
             next_row[e_bit(bit)] = F::from_canonical_u32(efgh[0] & 1);
             next_row[f_bit(bit)] = F::from_canonical_u32(efgh[1] & 1);
             next_row[g_bit(bit)] = F::from_canonical_u32(efgh[2] & 1);
-            next_row[h_bit(bit)] = F::from_canonical_u32(efgh[3] & 1);
 
             abcd[0] >>= 1;
             abcd[1] >>= 1;
             abcd[2] >>= 1;
-            abcd[3] >>= 1;
             efgh[0] >>= 1;
             efgh[1] >>= 1;
             efgh[2] >>= 1;
-            efgh[3] >>= 1;
         }
+
+        next_row[D_COL] = F::from_canonical_u32(abcd[3]);
+        next_row[H_COL] = F::from_canonical_u32(efgh[3]);
 
         res
     }
@@ -254,21 +253,20 @@ impl<F: Field> Sha2TraceGenerator<F> {
                     curr_row[a_bit(bit)] = F::from_canonical_u32(abcd[0] & 1);
                     curr_row[b_bit(bit)] = F::from_canonical_u32(abcd[1] & 1);
                     curr_row[c_bit(bit)] = F::from_canonical_u32(abcd[2] & 1);
-                    curr_row[d_bit(bit)] = F::from_canonical_u32(abcd[3] & 1);
                     curr_row[e_bit(bit)] = F::from_canonical_u32(efgh[0] & 1);
                     curr_row[f_bit(bit)] = F::from_canonical_u32(efgh[1] & 1);
                     curr_row[g_bit(bit)] = F::from_canonical_u32(efgh[2] & 1);
-                    curr_row[h_bit(bit)] = F::from_canonical_u32(efgh[3] & 1);
 
                     abcd[0] >>= 1;
                     abcd[1] >>= 1;
                     abcd[2] >>= 1;
-                    abcd[3] >>= 1;
                     efgh[0] >>= 1;
                     efgh[1] >>= 1;
                     efgh[2] >>= 1;
-                    efgh[3] >>= 1;
                 }
+                
+                curr_row[D_COL] = F::from_canonical_u32(abcd[3]);
+                curr_row[H_COL] = F::from_canonical_u32(efgh[3]);
 
                 // set his to IV
                 for j in 0..8 {

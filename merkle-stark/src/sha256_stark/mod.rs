@@ -321,13 +321,13 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
 
         // temp1 := h + S1 + ch + k[i] + w[i]
         // e := d + temp1
-        let h_field = bit_decomp_32!(curr_row, h_bit, FE, P);
+        let h_field = curr_row[H_COL];
         let big_s1_field = bit_decomp_32!(curr_row, big_s1_bit, FE, P);
         let ch_field = bit_decomp_32!(curr_row, ch_bit, FE, P);
         let wi_u32 = bit_decomp_32!(curr_row, wi_bit, FE, P);
         let temp1_minus_ki = h_field + big_s1_field + ch_field + wi_u32;
 
-        let d_field = bit_decomp_32!(curr_row, d_bit, FE, P);
+        let d_field = curr_row[D_COL];
         let e_u32_next = bit_decomp_32!(next_row, e_bit, FE, P);
 
         // degree 2
@@ -366,19 +366,18 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
         // d := c
         // c := b
         // b := a
+        let decomp = bit_decomp_32!(curr_row, g_bit, FE, P);
+        yield_constr.constraint_transition(is_phase_0_or_1 * (next_row[H_COL] - decomp));
+
+        let decomp = bit_decomp_32!(curr_row, c_bit, FE, P);
+        yield_constr.constraint_transition(is_phase_0_or_1 * (next_row[D_COL] - decomp));
         for bit in 0..32 {
             // degree 2
-            yield_constr.constraint_transition(
-                is_phase_0_or_1 * (next_row[h_bit(bit)] - curr_row[g_bit(bit)]),
-            );
             yield_constr.constraint_transition(
                 is_phase_0_or_1 * (next_row[g_bit(bit)] - curr_row[f_bit(bit)]),
             );
             yield_constr.constraint_transition(
                 is_phase_0_or_1 * (next_row[f_bit(bit)] - curr_row[e_bit(bit)]),
-            );
-            yield_constr.constraint_transition(
-                is_phase_0_or_1 * (next_row[d_bit(bit)] - curr_row[c_bit(bit)]),
             );
             yield_constr.constraint_transition(
                 is_phase_0_or_1 * (next_row[c_bit(bit)] - curr_row[b_bit(bit)]),
@@ -395,11 +394,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
             bit_decomp_32!(next_row, a_bit, FE, P),
             bit_decomp_32!(next_row, b_bit, FE, P),
             bit_decomp_32!(next_row, c_bit, FE, P),
-            bit_decomp_32!(next_row, d_bit, FE, P),
+            next_row[D_COL],
             bit_decomp_32!(next_row, e_bit, FE, P),
             bit_decomp_32!(next_row, f_bit, FE, P),
             bit_decomp_32!(next_row, g_bit, FE, P),
-            bit_decomp_32!(next_row, h_bit, FE, P),
+            next_row[H_COL]
         ];
 
         for i in 0..8 {
@@ -1144,11 +1143,6 @@ where
         yield_constr.constraint((P::ONES - curr_row[c_bit(bit)]) * curr_row[c_bit(bit)]);
     }
 
-    // d
-    for bit in 0..32 {
-        yield_constr.constraint((P::ONES - curr_row[d_bit(bit)]) * curr_row[d_bit(bit)]);
-    }
-
     // e
     for bit in 0..32 {
         yield_constr.constraint((P::ONES - curr_row[e_bit(bit)]) * curr_row[e_bit(bit)]);
@@ -1162,11 +1156,6 @@ where
     // g
     for bit in 0..32 {
         yield_constr.constraint((P::ONES - curr_row[g_bit(bit)]) * curr_row[g_bit(bit)]);
-    }
-
-    // h
-    for bit in 0..32 {
-        yield_constr.constraint((P::ONES - curr_row[h_bit(bit)]) * curr_row[h_bit(bit)]);
     }
 
     // S0

@@ -94,12 +94,9 @@ pub fn c_bit(bit: usize) -> usize {
     C_START + bit
 }
 
-pub const D_START: usize = C_START + 32;
-pub fn d_bit(bit: usize) -> usize {
-    D_START + bit
-}
+pub const D_COL: usize = C_START + 32;
 
-pub const E_START: usize = D_START + 32;
+pub const E_START: usize = D_COL + 1;
 pub fn e_bit(bit: usize) -> usize {
     E_START + bit
 }
@@ -114,12 +111,9 @@ pub fn g_bit(bit: usize) -> usize {
     G_START + bit
 }
 
-pub const H_START: usize = G_START + 32;
-pub fn h_bit(bit: usize) -> usize {
-    H_START + bit
-}
+pub const H_COL: usize = G_START + 32;
 
-pub const BIG_S0_START: usize = H_START + 32;
+pub const BIG_S0_START: usize = H_COL + 1;
 pub fn big_s0_bit(bit: usize) -> usize {
     BIG_S0_START + bit
 }
