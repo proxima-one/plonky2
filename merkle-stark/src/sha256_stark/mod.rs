@@ -1,5 +1,8 @@
 use std::marker::PhantomData;
 
+use itertools::Itertools;
+use plonky2::iop::ext_target::ExtensionTarget;
+use std::iter::once;
 use plonky2::field::{polynomial::PolynomialValues, types::Field};
 use plonky2::{
     field::{
@@ -21,7 +24,7 @@ pub mod constants;
 pub mod generation;
 pub mod layout;
 
-use generation::Sha2TraceGenerator;
+use generation::{to_u32_array_be, Sha2TraceGenerator};
 use layout::*;
 
 use self::constants::{HASH_IV, ROUND_CONSTANTS};
@@ -44,9 +47,38 @@ macro_rules! bit_decomp_32 {
     };
 }
 
+// compute field_representation of a sequence of 32 bits interpreted big-endian u32 of a specific element of an trace array, in a circuit
+macro_rules! bit_decomp_32_at_idx_circuit {
+    ($builder:expr, $row:expr, $idx:expr, $col_fn:ident, $f:ty) => {{
+        let addends = ((0..32).map(|i| {
+            $builder.mul_const_extension(<$f>::from_canonical_u64(1 << i), $row[$col_fn($idx, i)])
+        })).collect::<Vec<_>>();
+
+        $builder.add_many_extension(addends)
+    }};
+}
+
+/// compute field_representation of a sequence of 32 bits interpreted big-endian u32, in a circuit
+macro_rules! bit_decomp_32_circuit {
+    ($builder:expr, $row:expr, $col_fn:ident, $f:ty) => {{
+        let addends = ((0..32).map(|i| {
+            $builder.mul_const_extension(<$f>::from_canonical_u64(1 << i), $row[$col_fn(i)])
+        })).collect::<Vec<_>>();
+
+        $builder.add_many_extension(addends)
+    }};
+}
+
 /// Computes the arithmetic generalization of `xor(x, y)`, i.e. `x + y - 2 x y`.
 pub(crate) fn xor_gen<P: PackedField>(x: P, y: P) -> P {
     x + y - x * y.doubles()
+}
+
+/// Computes the arithmetic generalization of `xor(x, y)`, i.e. `x + y - 2 x y`, in a circuit 
+pub(crate) fn xor_gen_circuit<F: RichField + Extendable<D>, const D: usize>(builder: &mut CircuitBuilder<F, D>, x: ExtensionTarget<D>, y: ExtensionTarget<D>) -> ExtensionTarget<D> {
+    let lhs = builder.add_extension(x, y);
+    let rhs = builder.mul_extension_with_const(F::TWO, x, y);
+    builder.sub_extension(lhs, rhs)
 }
 
 #[derive(Copy, Clone)]
@@ -125,11 +157,27 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
         );
 
         // load input into wis rotated left by one at start
-        for i in 0..16 {
-            let decomp = bit_decomp_32_at_idx!(curr_row, i, wi_bit, FE, P)
+        // wi
+        let decomp = bit_decomp_32!(curr_row, wi_bit, FE, P)
+            + curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32);
+        yield_constr.constraint(is_hash_start * (decomp - curr_row[input_i(0)]));
+
+        // wi minus 2
+        let decomp = bit_decomp_32!(curr_row, wi_minus_2_bit, FE, P)
+            + curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32);
+        yield_constr.constraint(is_hash_start * (decomp - curr_row[input_i(14)]));
+
+        // wi minus 15
+        let decomp = bit_decomp_32!(curr_row, wi_minus_15_bit, FE, P)
+            + curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32);
+        yield_constr.constraint(is_hash_start * (decomp - curr_row[input_i(1)]));
+
+        // the rest
+        for i in (1..=12).chain(once(14)) {
+            let decomp = curr_row[wi_field(i)]
                 + curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32);
 
-            yield_constr.constraint(is_hash_start * (decomp - curr_row[input_i((i + 1) % 16)]));
+            yield_constr.constraint(is_hash_start * (decomp - curr_row[input_i(i + 1)]));
         }
 
         // set input filter to 1 iff we're at the start, zero otherwise
@@ -138,24 +186,43 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
 
         // rotate wis when next step is phase 0 and we're not starting a new hash
         let rotate_wis = next_is_phase_0 * (P::ONES - next_row[step_bit(0)]);
-        for i in 0..16 {
-            for bit in 0..32 {
-                // degree 3
-                yield_constr.constraint_transition(
-                    rotate_wis * (next_row[wi_bit(i, bit)] - curr_row[wi_bit((i + 1) % 16, bit)]),
-                );
-            }
-        }
-
         // shift wis left when next step is phase 1
         let shift_wis = next_is_phase_1;
-        for i in 0..15 {
-            for bit in 0..32 {
-                // degree 2
-                yield_constr.constraint_transition(
-                    shift_wis * (next_row[wi_bit(i, bit)] - curr_row[wi_bit(i + 1, bit)]),
-                );
-            }
+
+        // wi next when rotating
+        let c = bit_decomp_32!(next_row, wi_bit, FE, P) - bit_decomp_32!(curr_row, wi_minus_15_bit, FE, P);
+        yield_constr.constraint_transition(
+            rotate_wis * c
+        );
+
+        // wi_minus_2 next
+        let decomp = bit_decomp_32!(next_row, wi_minus_2_bit, FE, P);
+        yield_constr.constraint_transition(
+            (rotate_wis + shift_wis) * (decomp - curr_row[wi_field(14)])
+        );
+
+        // wi_minus_15 next
+        let decomp = bit_decomp_32!(next_row, wi_minus_15_bit, FE, P);
+        yield_constr.constraint_transition(
+            (rotate_wis + shift_wis) * (decomp - curr_row[wi_field(1)])
+        );
+
+        // wi_minus_1 next
+        let decomp = bit_decomp_32!(curr_row, wi_bit, FE, P);
+        yield_constr.constraint_transition(
+            (rotate_wis + shift_wis) * (next_row[wi_field(14)] - decomp)
+        );
+
+        // wi_i_minus_3 next
+        let decomp = bit_decomp_32!(curr_row, wi_minus_2_bit, FE, P);
+        yield_constr.constraint_transition(
+            (rotate_wis + shift_wis) * (next_row[wi_field(12)] - decomp)
+        );
+
+        for i in 1..12 {
+            yield_constr.constraint_transition(
+                (rotate_wis + shift_wis) * (next_row[wi_field(i)] - curr_row[wi_field(i + 1)]),
+            );
         }
 
         // round fn in phase 0 or 1
@@ -257,7 +324,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
         let h_field = bit_decomp_32!(curr_row, h_bit, FE, P);
         let big_s1_field = bit_decomp_32!(curr_row, big_s1_bit, FE, P);
         let ch_field = bit_decomp_32!(curr_row, ch_bit, FE, P);
-        let wi_u32 = bit_decomp_32_at_idx!(curr_row, 15, wi_bit, FE, P);
+        let wi_u32 = bit_decomp_32!(curr_row, wi_bit, FE, P);
         let temp1_minus_ki = h_field + big_s1_field + ch_field + wi_u32;
 
         let d_field = bit_decomp_32!(curr_row, d_bit, FE, P);
@@ -286,7 +353,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
             is_phase_0_or_1 * (curr_row[A_NEXT_FIELD] - (temp2 + temp1_minus_ki + curr_row[KI])),
         );
         // degree 3
-        yield_constr.constraint(
+        yield_constr.constraint_transition(
             is_phase_0_or_1
                 * (curr_row[A_NEXT_FIELD]
                     - (a_u32_next + curr_row[A_NEXT_QUOTIENT] * FE::from_canonical_u64(1 << 32))),
@@ -320,6 +387,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
                 is_phase_0_or_1 * (next_row[b_bit(bit)] - curr_row[a_bit(bit)]),
             );
         }
+
 
         // update his in last step of phase 1
         let update_his = curr_row[step_bit(63)];
@@ -361,6 +429,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
             yield_constr.constraint((P::ONES - is_last_step) * curr_row[output_i(i)])
         }
 
+
         // set output filter to 1 iff it's the last step, zero otherwise
         yield_constr.constraint(is_last_step * (P::ONES - curr_row[OUTPUT_FILTER]));
         yield_constr.constraint((P::ONES - is_last_step) * curr_row[OUTPUT_FILTER]);
@@ -372,15 +441,15 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
         // s0 := (w[i-15] >>> 7) xor (w[i-15] >>> 18) xor (w[i-15] >> 3)
         for bit in 0..29 {
             let computed_bit = xor_gen(
-                next_row[wi_bit(0, (bit + 7) % 32)],
-                next_row[wi_bit(0, (bit + 18) % 32)],
+                next_row[wi_minus_15_bit((bit + 7) % 32)],
+                next_row[wi_minus_15_bit((bit + 18) % 32)],
             );
             // degree 3
             yield_constr.constraint_transition(
                 do_msg_schedule * (next_row[xor_tmp_0_bit(bit)] - computed_bit),
             );
 
-            let computed_bit = xor_gen(next_row[xor_tmp_0_bit(bit)], next_row[wi_bit(0, bit + 3)]);
+            let computed_bit = xor_gen(next_row[xor_tmp_0_bit(bit)], next_row[wi_minus_15_bit(bit + 3)]);
             // degree 3
             yield_constr.constraint_transition(
                 do_msg_schedule * (next_row[little_s0_bit(bit)] - computed_bit),
@@ -389,8 +458,8 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
         for bit in 29..32 {
             // we can ignore the second XOR in this case since it's with 0
             let computed_bit = xor_gen(
-                next_row[wi_bit(0, (bit + 7) % 32)],
-                next_row[wi_bit(0, (bit + 18) % 32)],
+                next_row[wi_minus_15_bit((bit + 7) % 32)],
+                next_row[wi_minus_15_bit((bit + 18) % 32)],
             );
             // degree 3
             yield_constr.constraint_transition(
@@ -399,11 +468,10 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
         }
 
         // s1 := (w[i-2] >>> 17) xor (w[i-2] >>> 19) xor (w[i-2] >> 10)
-
         for bit in 0..22 {
             let computed_bit = xor_gen(
-                next_row[wi_bit(13, (bit + 17) % 32)],
-                next_row[wi_bit(13, (bit + 19) % 32)],
+                next_row[wi_minus_2_bit((bit + 17) % 32)],
+                next_row[wi_minus_2_bit((bit + 19) % 32)],
             );
             // degree 3
             yield_constr.constraint_transition(
@@ -411,7 +479,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
             );
 
             let computed_bit =
-                xor_gen(next_row[xor_tmp_1_bit(bit)], next_row[wi_bit(13, bit + 10)]);
+                xor_gen(next_row[xor_tmp_1_bit(bit)], next_row[wi_minus_2_bit(bit + 10)]);
             // degree 3
             yield_constr.constraint_transition(
                 do_msg_schedule * (next_row[little_s1_bit(bit)] - computed_bit),
@@ -420,8 +488,8 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
         for bit in 22..32 {
             // we can ignore the second XOR in this case since it's with 0
             let computed_bit = xor_gen(
-                next_row[wi_bit(13, (bit + 17) % 32)],
-                next_row[wi_bit(13, (bit + 19) % 32)],
+                next_row[wi_minus_2_bit((bit + 17) % 32)],
+                next_row[wi_minus_2_bit((bit + 19) % 32)],
             );
             // degree 3
             yield_constr.constraint_transition(
@@ -434,17 +502,17 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
         // degree 1
         let s0_field_computed = bit_decomp_32!(next_row, little_s0_bit, FE, P);
         let s1_field_computed = bit_decomp_32!(next_row, little_s1_bit, FE, P);
-        let wi_minus_16_field_computed = bit_decomp_32_at_idx!(curr_row, 0, wi_bit, FE, P);
-        let wi_minus_7_field_computed = bit_decomp_32_at_idx!(next_row, 8, wi_bit, FE, P);
-        let wi = bit_decomp_32_at_idx!(next_row, 15, wi_bit, FE, P);
+        let wi_minus_16_field = bit_decomp_32!(curr_row, wi_minus_15_bit, FE, P);
+        let wi_minus_7_field = next_row[wi_field(8)];
+        let wi = bit_decomp_32!(next_row, wi_bit, FE, P);
 
         // degree 2
         yield_constr.constraint_transition(
             do_msg_schedule
                 * (next_row[WI_FIELD]
-                    - (wi_minus_16_field_computed
+                    - (wi_minus_16_field
                         + s0_field_computed
-                        + wi_minus_7_field_computed
+                        + wi_minus_7_field
                         + s1_field_computed)),
         );
         // degree 3
@@ -475,11 +543,549 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
 
     fn eval_ext_circuit(
         &self,
-        _builder: &mut CircuitBuilder<F, D>,
-        _vars: StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
-        _yield_constr: &mut RecursiveConstraintConsumer<F, D>,
+        builder: &mut CircuitBuilder<F, D>,
+        vars: StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        yield_constr: &mut RecursiveConstraintConsumer<F, D>,
     ) {
-        todo!()
+
+        // let curr_row = vars.local_values;
+        // let next_row = vars.next_values;
+
+        // let one_ext = builder.one_extension();
+        // let zero_ext = builder.zero_extension();
+
+        // let c = builder.sub_extension(one_ext, curr_row[HASH_IDX]);
+        // yield_constr.constraint_first_row(builder, c);
+
+        // let is_hash_start = curr_row[step_bit(0)];
+        // let hash_ivs = (0..8).map(|i| builder.constant_extension(F::Extension::from_canonical_u32(HASH_IV[i]))).collect_vec();
+        // for (i, &iv) in hash_ivs.iter().enumerate() {
+        //     let mut c = builder.sub_extension(curr_row[h_i(i)], iv);
+        //     c = builder.mul_extension(c, is_hash_start);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // let his_should_change = builder.add_extension(next_row[step_bit(64)], curr_row[step_bit(64)]);
+        // for i in 0..8 {
+        //     let lhs = builder.sub_extension(next_row[h_i(i)], curr_row[h_i(i)]);
+        //     let rhs = builder.sub_extension(one_ext, his_should_change);
+        //     let c = builder.mul_extension(lhs, rhs);
+        //     yield_constr.constraint_transition(builder, c);
+        // }
+
+        // let next_is_phase_0 = builder.add_many_extension((0..16).map(|i| next_row[step_bit(i)]));
+        // let next_is_phase_1 = builder.add_many_extension((16..64).map(|i| next_row[step_bit(i)]));
+        // let next_is_not_padding = builder.add_many_extension(
+        //     once(next_is_phase_0).chain(once(next_is_phase_1)).chain(once(next_row[step_bit(64)]))
+        // );
+
+        // let is_last_step = curr_row[step_bit(64)];
+        // let transition_to_next_hash = builder.mul_extension(is_last_step, next_is_not_padding);
+
+        // let hash_idx_diff = builder.sub_extension(next_row[HASH_IDX], curr_row[HASH_IDX]);
+        // let mut c = builder.sub_extension(one_ext, hash_idx_diff);
+        // c = builder.mul_extension(transition_to_next_hash, c);
+        // yield_constr.constraint_transition(builder, c);
+
+        // let mut c = builder.sub_extension(one_ext, is_last_step);
+        // c = builder.mul_extension(next_is_not_padding, c);
+        // c = builder.mul_extension(hash_idx_diff, c);
+        // yield_constr.constraint_transition(builder, c);
+
+        // for i in 0..16 {
+        //     let decomp = bit_decomp_32_at_idx_circuit!(builder, curr_row, i, wi_bit, F);
+        //     let mut c = builder.mul_const_add_extension(F::from_canonical_u64(1 << 32), curr_row[HASH_IDX], decomp);
+
+        //     c = builder.sub_extension(decomp, curr_row[input_i(i + 1) % 16]);
+        //     c = builder.mul_extension(is_hash_start, c);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // let mut c = builder.sub_extension(one_ext, curr_row[INPUT_FILTER]);
+        // c = builder.mul_extension(is_hash_start, c);
+        // yield_constr.constraint(builder, c);
+
+        // let mut c = builder.sub_extension(one_ext, is_hash_start);
+        // c = builder.mul_extension(c, curr_row[INPUT_FILTER]);
+        // yield_constr.constraint(builder, c);
+
+        // let next_is_not_step_0 = builder.sub_extension(one_ext, next_row[step_bit(0)]);
+        // let rotate_wis = builder.mul_extension(next_is_phase_0, next_is_not_step_0);
+        // for i in 0..16 {
+        //     for bit in 0..32 {
+        //         let mut c = builder.sub_extension(next_row[wi_bit(i, bit)], curr_row[wi_bit((i + 1) % 16, bit)]);
+        //         c = builder.mul_extension(rotate_wis, c);
+        //         yield_constr.constraint(builder, c);
+        //     }
+        // }
+
+        // let shift_wis = next_is_phase_1;
+        // for i in 0..15 {
+        //     for bit in 0..32 {
+        //         let mut c = builder.sub_extension(next_row[wi_bit(i, bit)], curr_row[wi_bit(i + 1, bit)]);
+        //         c = builder.mul_extension(shift_wis, c);
+        //         yield_constr.constraint(builder, c);
+        //     }
+        // }
+
+        // let is_phase_0_or_1 = builder.add_many_extension((0..64).map(|i| curr_row[step_bit(i)]));
+
+        // for bit in 0..32 {
+        //     let computed_bit = xor_gen_circuit(
+        //         builder,
+        //         curr_row[e_bit(bit + 6) % 32],
+        //         curr_row[e_bit(bit + 11) % 32]
+        //     );
+        //     let mut c = builder.sub_extension(curr_row[xor_tmp_2_bit(bit)], computed_bit);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint(builder, c);
+
+        //     let computed_bit = xor_gen_circuit(
+        //         builder,
+        //         curr_row[xor_tmp_2_bit(bit)],
+        //         curr_row[e_bit(bit + 25) % 32]
+        //     );
+
+        //     let mut c = builder.sub_extension(curr_row[big_s1_bit(bit)], computed_bit);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+
+        // for bit in 0..32 {
+        //     let computed_bit = builder.mul_extension(curr_row[e_bit(bit)], curr_row[f_bit(bit)]);
+        //     let mut c = builder.sub_extension(curr_row[e_and_f_bit(bit)], computed_bit);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint(builder, c);
+
+        //     let mut computed_bit = builder.sub_extension(one_ext, curr_row[e_bit(bit)]);
+        //     computed_bit = builder.mul_extension(computed_bit, curr_row[g_bit(bit)]);
+        //     let mut c = builder.sub_extension(curr_row[not_e_and_g_bit(bit)], computed_bit);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint(builder, c);
+
+        //     let computed_bit = xor_gen_circuit(builder, curr_row[e_and_f_bit(bit)], curr_row[not_e_and_g_bit(bit)]);
+        //     let mut c = builder.sub_extension(curr_row[ch_bit(bit)], computed_bit);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let computed_bit = xor_gen_circuit(
+        //         builder,
+        //         curr_row[a_bit(bit + 2) % 32],
+        //         curr_row[a_bit(bit + 13) % 32]
+        //     );
+        //     let mut c = builder.sub_extension(curr_row[xor_tmp_3_bit(bit)], computed_bit);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint(builder, c);
+            
+        //     let computed_bit = xor_gen_circuit(
+        //         builder,
+        //         curr_row[xor_tmp_3_bit(bit)],
+        //         curr_row[a_bit((bit + 22) % 32)]
+        //     );
+        //     let mut c = builder.sub_extension(curr_row[big_s0_bit(bit)], computed_bit);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.mul_extension(curr_row[a_bit(bit)], curr_row[b_bit(bit)]);
+        //     c = builder.sub_extension(curr_row[a_and_b_bit(bit)], c);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint(builder, c);
+
+        //     let mut c = builder.mul_extension(curr_row[a_bit(bit)], curr_row[c_bit(bit)]);
+        //     c = builder.sub_extension(curr_row[a_and_c_bit(bit)], c);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint(builder, c);
+
+        //     let mut c = builder.mul_extension(curr_row[b_bit(bit)], curr_row[c_bit(bit)]);
+        //     c = builder.sub_extension(curr_row[b_and_c_bit(bit)], c);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint(builder, c);
+
+        //     let computed_bit = xor_gen_circuit(builder, curr_row[a_and_b_bit(bit)], curr_row[a_and_c_bit(bit)]);
+        //     let mut c = builder.sub_extension(curr_row[xor_tmp_4_bit(bit)], computed_bit);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint(builder, c);
+
+        //     let computed_bit = xor_gen_circuit(builder, curr_row[xor_tmp_4_bit(bit)], curr_row[b_and_c_bit(bit)]);
+        //     let mut c = builder.sub_extension(curr_row[maj_bit(bit)], computed_bit);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for step in 0..64 {
+        //     let mut c = builder.add_const_extension(curr_row[KI], -F::from_canonical_u32(ROUND_CONSTANTS[step]));
+        //     c = builder.mul_extension(curr_row[step_bit(step)], c);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // let h_field = bit_decomp_32_circuit!(builder, curr_row, h_bit, F);
+        // let big_s1_field = bit_decomp_32_circuit!(builder, curr_row, big_s1_bit, F);
+        // let ch_field = bit_decomp_32_circuit!(builder, curr_row, ch_bit, F);
+        // let wi_u32 = bit_decomp_32_at_idx_circuit!(builder, curr_row, 15, wi_bit, F);
+        // let temp1_minus_ki = builder.add_many_extension(
+        //     once(h_field).chain(once(big_s1_field)).chain(once(ch_field)).chain(once(wi_u32))
+        // );
+
+        // let d_field = bit_decomp_32_circuit!(builder, curr_row, d_bit, F);
+        // let e_u32_next = bit_decomp_32_circuit!(builder, next_row, e_bit, F);
+
+        // let mut c = builder.add_extension(d_field, temp1_minus_ki);
+        // c = builder.add_extension(c, curr_row[KI]);
+        // c = builder.sub_extension(curr_row[E_NEXT_FIELD], c);
+        // c = builder.mul_extension(is_phase_0_or_1, c);
+        // yield_constr.constraint(builder, c);
+
+        // let mut c = builder.mul_const_add_extension(F::from_canonical_u64(1 << 32), curr_row[E_NEXT_QUOTIENT], e_u32_next);
+        // c = builder.sub_extension(curr_row[E_NEXT_FIELD], c);
+        // c = builder.mul_extension(is_phase_0_or_1, c);
+        // yield_constr.constraint_transition(builder, c);
+
+        // let s0_field = bit_decomp_32_circuit!(builder, curr_row, big_s0_bit, F);
+        // let maj_field = bit_decomp_32_circuit!(builder, curr_row, maj_bit, F);
+        // let temp2 = builder.add_extension(s0_field, maj_field);
+        // let a_u32_next = bit_decomp_32_circuit!(builder, next_row, a_bit, F);
+
+        // let mut c = builder.add_extension(temp1_minus_ki, curr_row[KI]);
+        // c = builder.add_extension(temp2, c);
+        // c = builder.sub_extension(curr_row[A_NEXT_FIELD], c);
+        // c = builder.mul_extension(is_phase_0_or_1, c);
+        // yield_constr.constraint(builder, c);
+
+        // let mut c = builder.mul_const_add_extension(F::from_canonical_u64(1 << 32), curr_row[A_NEXT_QUOTIENT], a_u32_next);
+        // c = builder.sub_extension(curr_row[A_NEXT_FIELD], c);
+        // c = builder.mul_extension(is_phase_0_or_1, c);
+        // yield_constr.constraint_transition(builder, c);
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(next_row[h_bit(bit)], curr_row[g_bit(bit)]);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint_transition(builder, c);
+
+        //     let mut c = builder.sub_extension(next_row[g_bit(bit)], curr_row[f_bit(bit)]);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint_transition(builder, c);
+
+        //     let mut c = builder.sub_extension(next_row[f_bit(bit)], curr_row[e_bit(bit)]);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint_transition(builder, c);
+
+        //     let mut c = builder.sub_extension(next_row[d_bit(bit)], curr_row[c_bit(bit)]);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint_transition(builder, c);
+
+        //     let mut c = builder.sub_extension(next_row[c_bit(bit)], curr_row[b_bit(bit)]);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint_transition(builder, c);
+
+        //     let mut c = builder.sub_extension(next_row[b_bit(bit)], curr_row[a_bit(bit)]);
+        //     c = builder.mul_extension(is_phase_0_or_1, c);
+        //     yield_constr.constraint_transition(builder, c);
+        // }
+
+        // let update_his = curr_row[step_bit(63)];
+        // let vars = [
+        //     bit_decomp_32_circuit!(builder, next_row, a_bit, F),
+        //     bit_decomp_32_circuit!(builder, next_row, b_bit, F),
+        //     bit_decomp_32_circuit!(builder, next_row, c_bit, F),
+        //     bit_decomp_32_circuit!(builder, next_row, d_bit, F),
+        //     bit_decomp_32_circuit!(builder, next_row, e_bit, F),
+        //     bit_decomp_32_circuit!(builder, next_row, f_bit, F),
+        //     bit_decomp_32_circuit!(builder, next_row, g_bit, F),
+        //     bit_decomp_32_circuit!(builder, next_row, h_bit, F),
+        // ];
+
+        // for i in 0..8 {
+        //     let mut c = builder.add_extension(curr_row[h_i(i)], vars[i]);
+        //     c = builder.sub_extension(curr_row[h_i_next_field(i)], c);
+        //     c = builder.mul_extension(update_his, c);
+        //     yield_constr.constraint_transition(builder, c);
+
+        //     let mut c = builder.mul_const_add_extension(F::from_canonical_u64(1 << 32), curr_row[h_i_next_quotient(i)], next_row[h_i(i)]);
+        //     c = builder.sub_extension(curr_row[h_i_next_field(i)], c);
+        //     c = builder.mul_extension(update_his, c);
+        //     yield_constr.constraint_transition(builder, c);
+        // }
+
+        // let is_not_last_step = builder.sub_extension(one_ext, is_last_step);
+
+        // for i in 0..8 {
+        //     let mut c = builder.mul_const_add_extension(F::from_canonical_u64(1 << 32), curr_row[HASH_IDX], curr_row[h_i(i)]);
+        //     c = builder.sub_extension(curr_row[output_i(i)], c);
+        //     c = builder.mul_extension(is_last_step, c);
+        //     yield_constr.constraint(builder, c);
+
+        //     let c = builder.mul_extension(is_not_last_step, curr_row[output_i(i)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // let mut c = builder.sub_extension(one_ext, curr_row[OUTPUT_FILTER]);
+        // c = builder.mul_extension(is_last_step, c);
+        // yield_constr.constraint(builder, c);
+
+        // let c = builder.mul_extension(is_not_last_step, curr_row[OUTPUT_FILTER]);
+        // yield_constr.constraint(builder, c);
+
+        // let do_msg_schedule = next_is_phase_1;
+
+        // for bit in 0..29 {
+        //     let computed_bit = xor_gen_circuit(
+        //         builder,
+        //         next_row[wi_bit(0, (bit + 7) % 32)],
+        //         next_row[wi_bit(0, (bit + 18) % 32)]
+        //     );
+
+        //     let mut c = builder.sub_extension(next_row[xor_tmp_0_bit(bit)], computed_bit);
+        //     c = builder.mul_extension(do_msg_schedule, c);
+        //     yield_constr.constraint_transition(builder, c);
+
+        //     let computed_bit = xor_gen_circuit(
+        //         builder,
+        //         next_row[xor_tmp_0_bit(bit)],
+        //         next_row[wi_bit(0, bit + 3)]
+        //     );
+            
+        //     let mut c = builder.sub_extension(next_row[little_s0_bit(bit)], computed_bit);
+        //     c = builder.mul_extension(do_msg_schedule, c);
+        //     yield_constr.constraint_transition(builder, c);
+        // }
+        // for bit in 29..32 {
+        //     let computed_bit = xor_gen_circuit(
+        //         builder,
+        //         next_row[wi_bit(0, (bit + 7) % 32)],
+        //         next_row[wi_bit(0, (bit + 18) % 32)]
+        //     );
+
+        //     let mut c = builder.sub_extension(next_row[little_s0_bit(bit)], computed_bit);
+        //     c = builder.mul_extension(do_msg_schedule, c);
+        //     yield_constr.constraint_transition(builder, c);
+        // }
+
+        // for bit in 0..22 {
+        //     let computed_bit = xor_gen_circuit(
+        //         builder,
+        //         next_row[wi_bit(13, (bit + 17) % 32)],
+        //         next_row[wi_bit(13, (bit + 19) % 32)],
+        //     );
+
+        //     let mut c = builder.sub_extension(next_row[xor_tmp_1_bit(bit)], computed_bit);
+        //     c = builder.mul_extension(do_msg_schedule, c);
+        //     yield_constr.constraint_transition(builder, c);
+
+        //     let computed_bit = xor_gen_circuit(
+        //         builder,
+        //         next_row[xor_tmp_1_bit(bit)],
+        //         next_row[wi_bit(13, bit + 10)]
+        //     );
+            
+        //     let mut c = builder.sub_extension(next_row[little_s1_bit(bit)], computed_bit);
+        //     c = builder.mul_extension(do_msg_schedule, c);
+        //     yield_constr.constraint_transition(builder, c);
+        // }
+        // for bit in 22..32 {
+        //     let computed_bit = xor_gen_circuit(
+        //         builder,
+        //         next_row[wi_bit(13, (bit + 17) % 32)],
+        //         next_row[wi_bit(13, (bit + 19) % 32)]
+        //     );
+
+        //     let mut c = builder.sub_extension(next_row[little_s1_bit(bit)], computed_bit);
+        //     c = builder.mul_extension(do_msg_schedule, c);
+        //     yield_constr.constraint_transition(builder, c);
+        // }
+
+        // let s0_field_computed = bit_decomp_32_circuit!(builder, next_row, little_s0_bit, F);
+        // let s1_field_computed = bit_decomp_32_circuit!(builder, next_row, little_s1_bit, F);
+        // let wi_minus_16_field_computed = bit_decomp_32_at_idx_circuit!(builder, curr_row, 0, wi_bit, F);
+        // let wi_minus_7_field_computed = bit_decomp_32_at_idx_circuit!(builder, next_row, 8, wi_bit, F);
+        // let wi = bit_decomp_32_at_idx_circuit!(builder, next_row, 15, wi_bit, F);
+
+        // let mut c = builder.add_many_extension(
+        //     once(wi_minus_16_field_computed).chain(once(s0_field_computed)).chain(once(wi_minus_7_field_computed)).chain(once(s1_field_computed))
+        // );
+        // c = builder.sub_extension(next_row[WI_FIELD], c);
+        // c = builder.mul_extension(do_msg_schedule, c);
+        // yield_constr.constraint_transition(builder, c);
+
+        // let mut c = builder.mul_const_add_extension(F::from_canonical_u64(1 << 32), next_row[WI_QUOTIENT], wi);
+        // c = builder.sub_extension(next_row[WI_FIELD], c);
+        // c = builder.mul_extension(do_msg_schedule, c);
+        // yield_constr.constraint(builder, c);
+
+        // let c = builder.sub_extension(one_ext, curr_row[step_bit(0)]);
+        // yield_constr.constraint(builder, c);
+
+        // for step in 1..NUM_STEPS_PER_HASH {
+        //     yield_constr.constraint_first_row(builder, curr_row[step_bit(step)]);
+        // }
+
+        // for bit in 0..NUM_STEPS_PER_HASH {
+        //     let mut c = builder.sub_extension(next_row[step_bit((bit + 1) % NUM_STEPS_PER_HASH)], curr_row[step_bit(bit)]);
+        //     c = builder.mul_extension(next_is_not_padding, c);
+        //     yield_constr.constraint_transition(builder, c);
+        // }
+
+        // for bit in 0..NUM_STEPS_PER_HASH {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[step_bit(bit)]);
+        //     c = builder.mul_extension(curr_row[step_bit(bit)], c);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for i in 0..NUM_WIS {
+        //     for bit in 0..32 {
+        //         let mut c = builder.sub_extension(one_ext, curr_row[wi_bit(i, bit)]);
+        //         c = builder.mul_extension(c, curr_row[wi_bit(i, bit)]);
+        //         yield_constr.constraint(builder, c);
+        //     }
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[little_s0_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[little_s0_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[little_s1_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[little_s1_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[a_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[a_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+        
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[b_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[b_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[c_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[c_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[d_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[d_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[e_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[e_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[f_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[f_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[g_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[g_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[h_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[h_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[big_s0_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[big_s0_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[big_s1_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[big_s1_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[not_e_and_g_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[not_e_and_g_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[e_and_f_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[e_and_f_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[ch_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[ch_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[a_and_b_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[a_and_b_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[a_and_c_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[a_and_c_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[b_and_c_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[b_and_c_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[maj_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[maj_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[xor_tmp_0_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[xor_tmp_0_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[xor_tmp_1_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[xor_tmp_1_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[xor_tmp_2_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[xor_tmp_2_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[xor_tmp_3_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[xor_tmp_3_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
+
+        // for bit in 0..32 {
+        //     let mut c = builder.sub_extension(one_ext, curr_row[xor_tmp_4_bit(bit)]);
+        //     c = builder.mul_extension(c, curr_row[xor_tmp_4_bit(bit)]);
+        //     yield_constr.constraint(builder, c);
+        // }
     }
 
     fn constraint_degree(&self) -> usize {
@@ -497,12 +1103,18 @@ where
         yield_constr.constraint((P::ONES - curr_row[step_bit(bit)]) * curr_row[step_bit(bit)]);
     }
 
-    // wis
-    for i in 0..NUM_WIS {
-        for bit in 0..32 {
-            yield_constr
-                .constraint((P::ONES - curr_row[wi_bit(i, bit)]) * curr_row[wi_bit(i, bit)]);
-        }
+    for bit in 0..32 {
+        // wi
+        yield_constr
+            .constraint((P::ONES - curr_row[wi_bit(bit)]) * curr_row[wi_bit(bit)]);
+        
+        // wi minus 2
+        yield_constr
+            .constraint((P::ONES - curr_row[wi_minus_2_bit(bit)]) * curr_row[wi_minus_2_bit(bit)]);
+
+        // wi minus 15
+        yield_constr
+            .constraint((P::ONES - curr_row[wi_minus_15_bit(bit)]) * curr_row[wi_minus_15_bit(bit)]);
     }
 
     // s0
@@ -660,13 +1272,18 @@ mod tests {
     use anyhow::Result;
     use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
     use plonky2::util::timing::TimingTree;
+    use plonky2::hash::hash_types::BytesHash;
+    use crate::prover::prove;
+    use crate::verifier::verify_stark_proof;
+
+    // use plonky2::util::timing::TimingTree;
 
     use super::*;
-    use crate::config::StarkConfig;
-    use crate::prover::prove;
-    use crate::sha256_stark::generation::Sha2TraceGenerator;
-    use crate::stark_testing::test_stark_low_degree;
-    use crate::verifier::verify_stark_proof;
+    // use crate::config::StarkConfig;
+    // use crate::prover::prove;
+    // use crate::sha256_stark::generation::Sha2TraceGenerator;
+    use crate::{stark_testing::test_stark_low_degree, config::StarkConfig};
+    // use crate::verifier::verify_stark_proof;
 
     #[test]
     fn test_stark_degree() -> Result<()> {
@@ -726,22 +1343,16 @@ mod tests {
         type F = <C as GenericConfig<D>>::F;
         type S = Sha2CompressionStark<F, D>;
 
-        let mut left_input = [0; 8];
-        let mut right_input = [0; 8];
-        for i in 0..8 {
-            left_input[i] = i as u32;
-            right_input[i] = i as u32 + 8;
-        }
-
         let mut compressor = Sha2StarkCompressor::new();
-        compressor.add_instance(left_input, right_input);
 
-        for i in 0..8 {
-            left_input[i] = i as u32 + 16;
-            right_input[i] = i as u32 + 24;
-        }
+        let left = to_u32_array_be::<8>(BytesHash::<32>::rand().0);
+        let right = to_u32_array_be::<8>(BytesHash::<32>::rand().0);
+        compressor.add_instance(left, right);
 
-        compressor.add_instance(left_input, right_input);
+        let left = to_u32_array_be::<8>(BytesHash::<32>::rand().0);
+        let right = to_u32_array_be::<8>(BytesHash::<32>::rand().0);
+        compressor.add_instance(left, right);
+
         let trace = compressor.generate();
 
         let config = StarkConfig::standard_fast_config();

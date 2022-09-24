@@ -1,12 +1,17 @@
 #![allow(clippy::needless_range_loop)]
 
+use core::convert::TryInto;
+use std::iter::once;
 use arrayref::{array_mut_ref, array_ref};
 use plonky2::field::{polynomial::PolynomialValues, types::Field};
 
 use super::constants::{HASH_IV, ROUND_CONSTANTS};
 use super::layout::*;
-use crate::util::{is_power_of_two, trace_rows_to_poly_values};
+use crate::util::trace_rows_to_poly_values;
 
+fn is_power_of_two(n: u64) -> bool {
+    n & (n - 1) == 0
+}
 
 #[repr(transparent)]
 pub struct Sha2Trace<F: Field>(Vec<[F; NUM_COLS]>);
@@ -78,8 +83,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
         let mut xor_tmp_1 = rotr(w2, 17) ^ rotr(w2, 19);
         let mut s1 = xor_tmp_1 ^ (w2 >> 10);
 
-        let mut wi = w16.wrapping_add(s0).wrapping_add(w7).wrapping_add(s1);
-        let res = wi;
+        let wi = w16.wrapping_add(s0).wrapping_add(w7).wrapping_add(s1);
         let wi_u64 = w16 as u64 + s0 as u64 + w7 as u64 + s1 as u64;
         let quotient = wi_u64 / (1 << 32);
 
@@ -96,17 +100,14 @@ impl<F: Field> Sha2TraceGenerator<F> {
             next_row[little_s0_bit(bit)] = F::from_canonical_u32(s0 & 1);
             next_row[little_s1_bit(bit)] = F::from_canonical_u32(s1 & 1);
 
-            next_row[wi_bit(15, bit)] = F::from_canonical_u32(wi & 1);
-
             s0 >>= 1;
             s1 >>= 1;
-            wi >>= 1;
         }
 
         next_row[WI_FIELD] = F::from_canonical_u64(wi_u64);
         next_row[WI_QUOTIENT] = F::from_canonical_u64(quotient);
 
-        res
+        wi
     }
 
     // returns new (abcd, efgh)
@@ -284,13 +285,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
                 }
 
                 // load rotated wis
-                let mut wis = wis;
-                for j in 0..16 {
-                    for bit in 0..32 {
-                        curr_row[wi_bit(j, bit)] = F::from_canonical_u32(wis[j] & 1);
-                        wis[j] >>= 1;
-                    }
-                }
+                Self::assign_wis(wis, curr_row);
 
                 // set input filter to 1
                 curr_row[INPUT_FILTER] = F::ONE;
@@ -307,26 +302,46 @@ impl<F: Field> Sha2TraceGenerator<F> {
                 wis = shift_wis(wis);
                 let wi = Self::gen_msg_schedule(next_row, wis[0], wis[13], w16, wis[8]);
                 wis[15] = wi;
-
-                // shift wis left
-                for i in 0..15 {
-                    for bit in 0..32 {
-                        next_row[wi_bit(i, bit)] = curr_row[wi_bit(i + 1, bit)];
-                    }
-                }
             } else {
                 wis = rotl_wis(wis);
-
-                // rotate wis left
-                for i in 0..16 {
-                    for bit in 0..32 {
-                        next_row[wi_bit(i, bit)] = curr_row[wi_bit((i + 1) % 16, bit)];
-                    }
-                }
             }
+
+            Self::assign_wis(wis, next_row);
         }
 
         (wis, abcd, efgh)
+    }
+
+    fn assign_wis(wis: [u32; 16], row: &mut [F; NUM_COLS]) {
+        for i in 0..16 {
+            match i {
+                15 => {
+                    let mut wi = wis[15];
+                    for bit in 0..32 {
+                        row[wi_bit(bit)] = F::from_canonical_u32(wi & 1);
+                        wi >>= 1;
+                    }
+                }
+                13 => {
+                    let mut wi_minus_2 = wis[13];
+                    for bit in 0..32 {
+                        row[wi_minus_2_bit(bit)] = F::from_canonical_u32(wi_minus_2 & 1);
+                        wi_minus_2 >>= 1;
+                    }
+                },
+                0 => {
+                    let mut wi_minus_15 = wis[0];
+                    for bit in 0..32 {
+                        row[wi_minus_15_bit(bit)] = F::from_canonical_u32(wi_minus_15 & 1);
+                        wi_minus_15 >>= 1;
+                    }
+                },
+                14 | 1..=12 => {
+                    row[wi_field(i)] = F::from_canonical_u32(wis[i])
+                }
+                _ => unreachable!()
+            }
+        }
     }
 
     // returns wis, abcd, efgh, his
@@ -377,12 +392,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
                 }
             }
 
-            // shift wis left by one
-            for i in 0..15 {
-                for bit in 0..32 {
-                    next_row[wi_bit(i, bit)] = curr_row[wi_bit(i + 1, bit)];
-                }
-            }
+            Self::assign_wis(wis, next_row)
         }
 
         (wis, abcd, efgh, his)
@@ -417,6 +427,13 @@ impl<F: Field> Sha2TraceGenerator<F> {
     }
 }
 
+pub fn to_u32_array_be<const N: usize>(block: [u8; N * 4]) -> [u32; N] {
+    let mut block_u32 = [0; N];
+    for (o, chunk) in block_u32.iter_mut().zip(block.chunks_exact(4)) {
+        *o = u32::from_be_bytes(chunk.try_into().unwrap());
+    }
+    block_u32
+}
 
 #[inline(always)]
 fn shift_wis(mut wis: [u32; 16]) -> [u32; 16] {
@@ -451,27 +468,47 @@ fn rotr(x: u32, n: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
+    use generic_array::{typenum::U64, GenericArray};
     use plonky2_field::goldilocks_field::GoldilocksField;
-    use crate::util::compress;
+    use sha2::compress256;
 
     use super::*;
 
     type F = GoldilocksField;
 
     #[test]
-    fn test_hash() {
-        let mut block = [0u32; 16];
-        for i in 0..16 {
-            block[i] = i as u32;
-        }
-        let left_input = *array_ref![block, 0, 8];
-        let right_input = *array_ref![block, 8, 8];
+    fn test_hash_of_zero() {
+        let block = [0u8; 64];
+        let block_arr = GenericArray::<u8, U64>::from(block);
+        let mut state = HASH_IV;
+        compress256(&mut state, &[block_arr]);
 
-        let state = compress(left_input, right_input);
-
+        let left_input = [0u32; 8];
+        let right_input = [0u32; 8];
         let mut generator = Sha2TraceGenerator::<F>::new(128);
+
         let his = generator.gen_hash(left_input, right_input);
 
+        assert_eq!(his, state);
+    }
+
+    #[test]
+    fn test_hash_of_something() {
+        let mut block = [0u8; 64];
+        for i in 0..64 {
+            block[i] = i as u8;
+        }
+
+        let block_arr = GenericArray::<u8, U64>::from(block);
+        let mut state = HASH_IV;
+        compress256(&mut state, &[block_arr]);
+
+        let block: [u32; 16] = to_u32_array_be(block);
+        let left_input = *array_ref![block, 0, 8];
+        let right_input = *array_ref![block, 8, 8];
+        let mut generator = Sha2TraceGenerator::<F>::new(128);
+
+        let his = generator.gen_hash(left_input, right_input);
         assert_eq!(his, state);
     }
 }
