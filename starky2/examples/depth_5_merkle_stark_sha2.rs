@@ -6,12 +6,14 @@
 /// Example of a STARK that builds a depth-5 merkle tree using cross-table lookups
 
 use std::marker::PhantomData;
+use log::{Level, LevelFilter};
 
 use anyhow::{anyhow, Result};
 use plonky2::field::extension::Extendable;
 use plonky2::field::polynomial::PolynomialValues;
 use plonky2::hash::hash_types::{BytesHash, RichField};
 use plonky2::plonk::config::{GenericConfig, Hasher, PoseidonGoldilocksConfig};
+use plonky2::timed;
 use plonky2::util::timing::TimingTree;
 
 use starky2::all_stark::{AllProof, AllStark, CtlStark};
@@ -150,15 +152,20 @@ where
             start_all_proof::<F, C, D>(config, trace_poly_valueses, timing)?;
 
         let ctl_descriptor = self.get_ctl_descriptor();
-        let ctl_data = get_ctl_data::<F, C, D>(
-            config,
-            trace_poly_valueses,
-            &ctl_descriptor,
-            &mut challenger,
+        let ctl_data = timed!(
+            timing,
+            "get ctl data",
+            get_ctl_data::<F, C, D>(
+                config,
+                trace_poly_valueses,
+                &ctl_descriptor,
+                &mut challenger,
+            )
         );
 
         let mut proofs = Vec::with_capacity(trace_poly_valueses.len());
 
+        timing.push("prove tree STARK", Level::Debug);
         let stark = &starks.0;
         let pis = public_inputses[TREE_TID.0]
             .clone()
@@ -183,6 +190,7 @@ where
         )?;
         proofs.push(proof);
 
+        timing.push("prove hash STARK", Level::Debug);
         let stark = &starks.1;
         let pis = public_inputses[HASH_TID.0]
             .clone()
@@ -251,6 +259,11 @@ fn main() -> Result<()> {
     type C = PoseidonGoldilocksConfig;
     type F = <C as GenericConfig<D>>::F;
 
+    let mut builder = env_logger::Builder::from_default_env();
+    builder.format_timestamp(None);
+    builder.filter_level(LevelFilter::Debug);
+    builder.try_init().unwrap();
+
     let leaves = [(); 16].map(|_| {
         to_u32_array_be(BytesHash::<32>::rand().0)
     });
@@ -264,6 +277,7 @@ fn main() -> Result<()> {
 
     let mut timing = TimingTree::default();
     let proof = all_stark.prove(&starks, &config, &trace_poly_valueses, &public_inputses, &mut timing)?;
+    timing.print();
 
     all_stark.verify(&starks, &config, &proof)
 }

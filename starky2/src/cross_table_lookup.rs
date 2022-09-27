@@ -1,7 +1,5 @@
-use std::collections::{BTreeMap, HashMap};
-
 use anyhow::{ensure, Result};
-use itertools::{izip, Itertools};
+use itertools::Itertools;
 use maybe_rayon::*;
 use plonky2::field::extension::{Extendable, FieldExtension};
 use plonky2::field::packed::PackedField;

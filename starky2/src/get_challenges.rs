@@ -264,7 +264,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn get_challenges_target<
+fn get_challenges_target<
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
     S: Stark<F, D>,
@@ -324,7 +324,7 @@ where
 }
 
 impl<const D: usize> StarkProofWithPublicInputsTarget<D> {
-    pub(crate) fn get_challenges<
+    fn get_challenges<
         F: RichField + Extendable<D>,
         C: GenericConfig<D, F = F>,
         S: Stark<F, D>,
