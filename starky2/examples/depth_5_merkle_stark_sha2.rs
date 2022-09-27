@@ -275,7 +275,7 @@ fn main() -> Result<()> {
     config.fri_config.cap_height = 0;
     let starks = all_stark.get_starks(&config);
 
-    let mut timing = TimingTree::default();
+    let mut timing = TimingTree::new("prove", Level::Debug);
     let proof = all_stark.prove(&starks, &config, &trace_poly_valueses, &public_inputses, &mut timing)?;
     timing.print();
 
