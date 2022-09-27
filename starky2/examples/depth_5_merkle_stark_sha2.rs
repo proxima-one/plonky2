@@ -1,3 +1,6 @@
+#![allow(incomplete_features)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
 #![feature(generic_const_exprs)]
 
 /// Example of a STARK that builds a depth-5 merkle tree using cross-table lookups
@@ -216,7 +219,6 @@ where
             all_proof.proofs.iter().map(|proof| &proof.proof.trace_cap),
         );
 
-        let num_tables = self.num_tables();
         let num_challenges = config.num_challenges;
 
         let ctl_descriptor = self.get_ctl_descriptor();

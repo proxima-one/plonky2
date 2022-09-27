@@ -186,47 +186,96 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         builder: &mut CircuitBuilder<F, D>,
         zeta: ExtensionTarget<D>,
         g: F,
+        degree_bits: usize,
         config: &StarkConfig,
+        num_ctl_zs: usize
     ) -> FriInstanceInfoTarget<D> {
-        // let no_blinding_oracle = FriOracleInfo { blinding: false };
-        // let mut oracle_indices = 0..;
+        let mut oracle_indices = 0..;
 
-        // let trace_info =
-        //     FriPolynomialInfo::from_range(oracle_indices.next().unwrap(), 0..Self::COLUMNS);
+        let trace_info =
+            FriPolynomialInfo::from_range(oracle_indices.next().unwrap(), 0..Self::COLUMNS);
+        let trace_oracle = FriOracleInfo {
+            num_polys: Self::COLUMNS,
+            blinding: false
+        };
 
-        // let permutation_zs_info = if self.uses_permutation_args() {
-        //     FriPolynomialInfo::from_range(
-        //         oracle_indices.next().unwrap(),
-        //         0..self.num_permutation_batches(config),
-        //     )
-        // } else {
-        //     vec![]
-        // };
+        let permutation_oracle_info = if self.uses_permutation_args() {
+            let info = FriPolynomialInfo::from_range(
+                oracle_indices.next().unwrap(),
+                0..self.num_permutation_batches(config),
+            );
+            let oracle = FriOracleInfo {
+                num_polys: self.num_permutation_batches(config),
+                blinding: false,
+            };
+            Some((oracle, info))
+        } else {
+            None
+        };
 
-        // let quotient_info = FriPolynomialInfo::from_range(
-        //     oracle_indices.next().unwrap(),
-        //     0..self.quotient_degree_factor() * config.num_challenges,
-        // );
+        let ctl_zs_oracle_info = if num_ctl_zs > 0 {
+            let info = FriPolynomialInfo::from_range(oracle_indices.next().unwrap(), 0..num_ctl_zs);
+            let oracle = FriOracleInfo {
+                num_polys: num_ctl_zs,
+                blinding: false,
+            };
+            Some((oracle, info))
+        } else {
+            None
+        };
 
-        // let zeta_batch = FriBatchInfoTarget {
-        //     point: zeta,
-        //     polynomials: [
-        //         trace_info.clone(),
-        //         permutation_zs_info.clone(),
-        //         quotient_info,
-        //     ]
-        //     .concat(),
-        // };
-        // let zeta_next = builder.mul_const_extension(g, zeta);
-        // let zeta_next_batch = FriBatchInfoTarget {
-        //     point: zeta_next,
-        //     polynomials: [trace_info, permutation_zs_info].concat(),
-        // };
-        // FriInstanceInfoTarget {
-        //     oracles: vec![no_blinding_oracle; oracle_indices.next().unwrap()],
-        //     batches: vec![zeta_batch, zeta_next_batch],
-        // }
-        todo!()
+        let num_quotient_polys = self.num_quotient_polys(config);
+        let quotient_info = FriPolynomialInfo::from_range(
+            oracle_indices.next().unwrap(),
+            0..num_quotient_polys
+        );
+
+        let quotient_oracle = FriOracleInfo {
+            num_polys: num_quotient_polys,
+            blinding: false
+        };
+
+        let zeta_batch = FriBatchInfoTarget {
+            point: zeta,
+            polynomials: std::iter::once(&trace_info)
+                .chain(permutation_oracle_info.as_ref().map(|(_, info)| info))
+                .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| info))
+                .chain(std::iter::once(&quotient_info))
+                .flat_map(|info| info.iter().cloned())
+                .collect_vec()
+        };
+        let zeta_next = builder.mul_const_extension(g, zeta);
+        let zeta_next_batch = FriBatchInfoTarget {
+            point: zeta_next,
+            polynomials: std::iter::once(&trace_info)
+                .chain(permutation_oracle_info.as_ref().map(|(_, info)| info))
+                .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| info))
+                .flat_map(|info| info.iter().cloned())
+                .collect()
+        };
+       
+        let oracles  = std::iter::once(trace_oracle)
+            .chain(permutation_oracle_info.map(|(oracle, _)| oracle))
+            .chain(ctl_zs_oracle_info.as_ref().map(|(oracle, _)| oracle.clone()))
+            .chain(std::iter::once(quotient_oracle))
+            .collect_vec();
+        
+        let batches = std::iter::once(zeta_batch)
+            .chain(std::iter::once(zeta_next_batch))
+            .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| FriBatchInfoTarget {
+                point: builder.constant_extension(F::Extension::ONE),
+                polynomials: info.clone()
+            }))
+            .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| FriBatchInfoTarget {
+                point: builder.constant_extension(F::Extension::primitive_root_of_unity(degree_bits).inverse()),
+                polynomials: info.clone()
+            }))
+            .collect_vec();
+        
+        FriInstanceInfoTarget {
+            oracles,
+            batches,
+        }
     }
 
     /// Pairs of lists of columns that should be permutations of one another. A permutation argument
