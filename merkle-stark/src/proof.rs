@@ -170,13 +170,11 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
                 .collect::<Vec<_>>()
         };
         let zeta_next = zeta.scalar_mul(g);
+        
         let ctl_zs_first = ctl_zs_commitment.map(|c| eval_commitment_base(F::ONE, c).to_vec());
         let ctl_zs_last = ctl_zs_commitment.map(|c| {
             eval_commitment_base(F::primitive_root_of_unity(degree_bits).inverse(), c).to_vec()
         });
-
-        println!("[prover/openings] ctl_zs_first: {:?}", ctl_zs_first);
-        println!("[prover/openings] ctl_zs_last: {:?}", ctl_zs_last);
 
         Self {
             local_values: eval_commitment(zeta, trace_commitment),
@@ -206,8 +204,8 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
             values: self
                 .next_values
                 .iter()
-                .chain(self.permutation_zs.iter().flatten())
-                .chain(self.ctl_zs.iter().flatten())
+                .chain(self.permutation_zs_next.iter().flatten())
+                .chain(self.ctl_zs_next.iter().flatten())
                 .copied()
                 .collect_vec(),
         };
@@ -222,6 +220,8 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
                         .collect(),
                 };
 
+                // println!("first zs in openings: {:?}", first_batch.values);
+
                 let last_batch = FriOpeningBatch {
                     values: last 
                         .iter()
@@ -229,6 +229,8 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
                         .map(F::Extension::from_basefield)
                         .collect(),
                 };
+
+                // println!("last zs in openings: {:?}", last_batch.values);
                 Some((first_batch, last_batch))
             }
             (None, None) => None,

@@ -237,8 +237,8 @@ where
             CtlCheckVars::from_proofs(&all_proof.proofs, &ctl_descriptor, &ctl_challenges);
         
         for (i, vars) in ctl_vars.iter().enumerate() {
-            println!("table {} first zs: {:?}", i, vars.first_zs);
-            println!("table {} last zs: {:?}", i, vars.last_zs);
+            // println!("table {} first zs: {:?}", i, vars.first_zs);
+            // println!("table {} last zs: {:?}", i, vars.last_zs);
         }
 
         debug_assert!(ctl_vars.len() == num_tables);
@@ -293,7 +293,8 @@ mod tests {
         let all_stark = Merkle5Stark::<F, C, D>::new();
         let (public_inputses, trace_poly_valueses) = all_stark.generate(leaves)?;
 
-        let config = StarkConfig::standard_fast_config();
+        let mut config = StarkConfig::standard_fast_config();
+        config.fri_config.cap_height = 0;
         let starks = all_stark.get_starks(&config);
 
         let mut timing = TimingTree::default();

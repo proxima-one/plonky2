@@ -166,7 +166,10 @@ where
         .chain(std::iter::once(proof.quotient_polys_cap.clone()))
         .collect_vec();
 
+    println!("[verifier] initial caps: {:?}", merkle_caps);
     println!("[verifier] stark zeta: {}", challenges.stark_zeta);
+    println!("[verifier] stark alphas: {:?}", challenges.stark_alphas);
+    println!("[verifier] num_ctl_zs: {:?}",  ctl_zs_last.as_ref().map(|zs| zs.len()).unwrap_or(0));
     verify_fri_proof::<F, C, D>(
         &stark.fri_instance(
             challenges.stark_zeta,

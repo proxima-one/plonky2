@@ -200,11 +200,11 @@ pub fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, co
     }
 
     for (i, data) in by_table.iter().enumerate() {
-        println!("\n[prover] ctl table {:?}:", i);
-        println!("[prover] num cols: {}", data.cols.len());
-        println!("[prover] cols: {:?}", data.cols);
-        println!("[prover/get ctl data]: first zs: {:?}", data.table_zs.iter().map(|z| z.values.first().unwrap()).collect_vec());
-        println!("[prover/get ctl data]: last zs: {:?}", data.table_zs.iter().map(|z| z.values.last().unwrap()).collect_vec());
+        // println!("\n[prover] ctl table {:?}:", i);
+        // println!("[prover] num ctl cols: {}", data.cols.len());
+        // println!("[prover] cols: {:?}", data.cols);
+        // println!("[prover/get ctl data]: first zs: {:?}", data.table_zs.iter().map(|z| z.values.first().unwrap()).collect_vec());
+        // println!("[prover/get ctl data]: last zs: {:?}", data.table_zs.iter().map(|z| z.values.last().unwrap()).collect_vec());
     }
 
     CtlData { by_table }
@@ -309,13 +309,15 @@ where
         }
         
         for (i, vars) in res.iter().enumerate() {
-            println!("\n[verifier] ctl table {:?}:", i);
-            println!("[verifier] local zs openings: {:?}", vars.local_zs);
-            println!("[verifier] next zs openings: {:?}", vars.next_zs);
-            println!("[verifier] num ctl cols: {:?}", vars.cols.len());
-            println!("[verifier] cols: {:?}", vars.cols);
-            println!("[verifier] foreign col tids: {:?}", vars.foreign_col_tids);
-            println!("[verifier] foreign col indices: {:?}", vars.foreign_col_indices);
+            // println!("\n[verifier] ctl table {:?}:", i);
+            // println!("[verifier] local zs openings: {:?}", vars.local_zs);
+            // println!("[verifier] next zs openings: {:?}", vars.next_zs);
+            // println!("[verifier] num ctl cols: {:?}", vars.cols.len());
+            // println!("[verifier] first zs in vars: {:?}", vars.first_zs);
+            // println!("[verifier] last zs in vars: {:?}", vars.last_zs);
+            // println!("[verifier] cols: {:?}", vars.cols);
+            // println!("[verifier] foreign col tids: {:?}", vars.foreign_col_tids);
+            // println!("[verifier] foreign col indices: {:?}", vars.foreign_col_indices);
         }
 
         res
@@ -396,22 +398,12 @@ pub fn verify_cross_table_lookups<
             })
     });
 
-    #[cfg(debug_assertions)]
-    let mut num_pairs = 0;
-
     for (local_z, foreign_z) in z_pairs {
         ensure!(
             local_z == foreign_z,
             "cross table lookup verification failed."
         );
-
-        #[cfg(debug_assertions)]
-        {
-            num_pairs += 1;
-        }
     }
-
-    debug_assert!(ctl_zs_openings.len() == num_pairs);
 
     Ok(())
 }

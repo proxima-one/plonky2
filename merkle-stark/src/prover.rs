@@ -155,7 +155,9 @@ where
 {
     let degree = trace_poly_values[0].len();
     let degree_bits = log2_strict(degree);
+    let ctl_zs_degree_bits = ctl_data.map(|ctl_data| ctl_data.table_zs.iter().map(|z| log2_strict(z.len())).collect_vec());
     println!("[prover] degree bits: {}", degree_bits);
+    println!("[prover] ctl zs degree bits: {:?}", ctl_zs_degree_bits);
     let fri_params = config.fri_params(degree_bits);
     let rate_bits = config.fri_config.rate_bits;
     let cap_height = config.fri_config.cap_height;
@@ -206,6 +208,8 @@ where
 
     let ctl_zs_commitment_challenges_cols = ctl_data.map(|ctl_data| {
         println!("[prover] ctl z len: {}", ctl_data.table_zs[0].len());
+
+        // Rapidup by convention denotes the zeroth element of the evaluation form of a polynomial as f(g^1), not f(g^0), so we shift the evaluation domain by one
         let commitment = timed!(
             timing,
             "compute CTL Z commitments",
@@ -247,7 +251,7 @@ where
         &permutation_zs_commitment_challenges,
         &ctl_zs_commitment_challenges_cols,
         public_inputs,
-        alphas,
+        alphas.clone(),
         degree_bits,
         config,
     );
@@ -297,8 +301,8 @@ where
         degree_bits,
     );
 
-    println!("[prover] local zs openings: {:?}", openings.ctl_zs);
-    println!("[prover] next zs openings: {:?}", openings.ctl_zs_next);
+    // println!("[prover] local zs openings: {:?}", openings.ctl_zs);
+    // println!("[prover] next zs openings: {:?}", openings.ctl_zs_next);
 
     challenger.observe_openings(&openings.to_fri_openings());
 
@@ -308,7 +312,12 @@ where
         .chain(std::iter::once(&quotient_commitment))
         .collect_vec();
 
+
+    println!("[prover] initial caps: {:?}", initial_merkle_trees.iter().map(|c| c.merkle_tree.cap.clone()).collect_vec());
     println!("[prover] stark zeta: {}", zeta);
+    println!("[prover] stark alphas: {:?}", alphas);
+    println!("[prover] num_ctl_zs: {}", ctl_data.map(|data| data.table_zs.len()).unwrap_or(0));
+
     let opening_proof = timed!(
         timing,
         "compute openings proof",
@@ -414,6 +423,7 @@ where
         c.polynomials
             .par_iter()
             .map(|p| {
+                // rapidup interprets the evaluation domain as starting at g and ending a g^n where g is the `n+1`th root of unity
                 (
                     p.eval(F::ONE),
                     p.eval(F::primitive_root_of_unity(degree_bits).inverse()),
@@ -421,8 +431,8 @@ where
             })
             .unzip_into_vecs(&mut ctl_zs_first, &mut ctl_zs_last);
             
-        println!("[prover/quotient_polys] ctl zs first: {:?}", ctl_zs_first);
-        println!("[prover/quotient_polys] ctl zs last: {:?}", ctl_zs_last);
+        // println!("[prover/quotient_polys] ctl zs first: {:?}", ctl_zs_first);
+        // println!("[prover/quotient_polys] ctl zs last: {:?}", ctl_zs_last);
 
         (ctl_zs_first, ctl_zs_last)
     });
