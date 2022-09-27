@@ -19,6 +19,9 @@ pub struct ConstraintConsumer<P: PackedField> {
     /// The evaluation of `X - g^(n-1)`.
     z_last: P,
 
+    /// The evaluation of `X - g^0`.
+    z_first: P,
+
     /// The evaluation of the Lagrange basis polynomial which is nonzero at the point associated
     /// with the first trace row, and zero at other points in the subgroup.
     lagrange_basis_first: P,
@@ -32,12 +35,14 @@ impl<P: PackedField> ConstraintConsumer<P> {
     pub fn new(
         alphas: Vec<P::Scalar>,
         z_last: P,
+        z_first: P,
         lagrange_basis_first: P,
         lagrange_basis_last: P,
     ) -> Self {
         Self {
             constraint_accs: vec![P::ZEROS; alphas.len()],
             alphas,
+            z_first,
             z_last,
             lagrange_basis_first,
             lagrange_basis_last,
@@ -53,6 +58,11 @@ impl<P: PackedField> ConstraintConsumer<P> {
         self.constraint(constraint * self.z_last);
     }
 
+    /// Add one constraint valid on all rows except the first.
+    pub fn constraint_after_first_row(&mut self, constraint: P) {
+        self.constraint(constraint * self.z_first)
+    }
+
     /// Add one constraint on all rows.
     pub fn constraint(&mut self, constraint: P) {
         for (&alpha, acc) in self.alphas.iter().zip(&mut self.constraint_accs) {
@@ -66,6 +76,7 @@ impl<P: PackedField> ConstraintConsumer<P> {
     pub fn constraint_first_row(&mut self, constraint: P) {
         self.constraint(constraint * self.lagrange_basis_first);
     }
+
 
     /// Add one constraint, but first multiply it by a filter such that it will only apply to the
     /// last row of the trace.

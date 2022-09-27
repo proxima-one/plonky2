@@ -1269,11 +1269,7 @@ mod tests {
     // use plonky2::util::timing::TimingTree;
 
     use super::*;
-    // use crate::config::StarkConfig;
-    // use crate::prover::prove;
-    // use crate::sha256_stark::generation::Sha2TraceGenerator;
     use crate::{stark_testing::test_stark_low_degree, config::StarkConfig};
-    // use crate::verifier::verify_stark_proof;
 
     #[test]
     fn test_stark_degree() -> Result<()> {

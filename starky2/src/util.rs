@@ -1,3 +1,5 @@
+use std::mem::{ManuallyDrop, size_of, transmute_copy};
+
 use itertools::Itertools;
 use plonky2::field::polynomial::PolynomialValues;
 use plonky2::field::types::Field;
@@ -17,4 +19,20 @@ pub fn trace_rows_to_poly_values<F: Field, const COLUMNS: usize>(
         .into_iter()
         .map(|column| PolynomialValues::new(column))
         .collect()
+}
+
+pub fn to_u32_array_be<const N: usize>(block: [u8; N * 4]) -> [u32; N] {
+    let mut block_u32 = [0; N];
+    for (o, chunk) in block_u32.iter_mut().zip(block.chunks_exact(4)) {
+        *o = u32::from_be_bytes(chunk.try_into().unwrap());
+    }
+    block_u32
+}
+
+pub(crate) unsafe fn transmute_no_compile_time_size_checks<T, U>(value: T) -> U {
+    debug_assert_eq!(size_of::<T>(), size_of::<U>());
+    // Need ManuallyDrop so that `value` is not dropped by this function.
+    let value = ManuallyDrop::new(value);
+    // Copy the bit pattern. The original value is no longer safe to use.
+    transmute_copy(&value)
 }

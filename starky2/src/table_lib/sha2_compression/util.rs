@@ -1,11 +1,3 @@
-pub fn to_u32_array_be<const N: usize>(block: [u8; N * 4]) -> [u32; N] {
-    let mut block_u32 = [0; N];
-    for (o, chunk) in block_u32.iter_mut().zip(block.chunks_exact(4)) {
-        *o = u32::from_be_bytes(chunk.try_into().unwrap());
-    }
-    block_u32
-}
-
 pub fn compress(left: [u32; 8], right: [u32; 8]) -> [u32; 8] {
     use generic_array::{typenum::U64, GenericArray};
     use sha2::compress256;

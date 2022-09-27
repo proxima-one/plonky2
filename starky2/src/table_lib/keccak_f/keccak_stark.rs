@@ -608,6 +608,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(release)]
     #[test]
     fn test_keccak_stark() -> Result<()> {
         const NUM_PERMS: usize = 85;
@@ -618,11 +619,10 @@ mod tests {
         let stark = S::default();
         let config = StarkConfig::standard_fast_config();
 
-        init_logger();
-
         let input: Vec<[u64; NUM_INPUTS]> = (0..NUM_PERMS).map(|_| rand::random()).collect();
 
-        let mut timing = TimingTree::new("prove", log::Level::Debug);
+        let _ = try_init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
+        let mut timing = TimingTree::default();
         let trace_poly_values = timed!(
             timing,
             "generate trace",
@@ -640,9 +640,5 @@ mod tests {
         timing.print();
 
         verify_stark_proof_no_ctl(&stark, &proof, &config)
-    }
-
-    fn init_logger() {
-        let _ = try_init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
     }
 }

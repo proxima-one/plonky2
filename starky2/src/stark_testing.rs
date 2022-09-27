@@ -35,7 +35,8 @@ where
     let lagrange_first = PolynomialValues::selector(WITNESS_SIZE, 0).lde(rate_bits);
     let lagrange_last = PolynomialValues::selector(WITNESS_SIZE, WITNESS_SIZE - 1).lde(rate_bits);
 
-    let last = F::primitive_root_of_unity(log2_strict(WITNESS_SIZE)).inverse();
+    let first = F::primitive_root_of_unity(log2_strict(WITNESS_SIZE));
+    let last = first.inverse();
     let subgroup =
         F::cyclic_subgroup_known_order(F::primitive_root_of_unity(log2_strict(size)), size);
     let alpha = F::rand();
@@ -53,6 +54,8 @@ where
             let mut consumer = ConstraintConsumer::<F>::new(
                 vec![alpha],
                 subgroup[i] - last,
+                subgroup[i] - first,
+
                 lagrange_first.values[i],
                 lagrange_last.values[i],
             );
@@ -97,7 +100,8 @@ where
         public_inputs: &F::Extension::rand_arr::<{ S::PUBLIC_INPUTS }>(),
     };
     let alphas = F::rand_vec(1);
-    let z_last = F::Extension::rand();
+    let first = F::Extension::primitive_root_of_unity(log2_strict(WITNESS_SIZE));
+    let last = first.inverse();
     let lagrange_first = F::Extension::rand();
     let lagrange_last = F::Extension::rand();
     let mut consumer = ConstraintConsumer::<F::Extension>::new(
@@ -106,7 +110,8 @@ where
             .copied()
             .map(F::Extension::from_basefield)
             .collect(),
-        z_last,
+        last,
+        first,
         lagrange_first,
         lagrange_last,
     );
@@ -127,7 +132,7 @@ where
     let alphas_t = builder.add_virtual_targets(1);
     pw.set_target(alphas_t[0], alphas[0]);
     let z_last_t = builder.add_virtual_extension_target();
-    pw.set_extension_target(z_last_t, z_last);
+    pw.set_extension_target(z_last_t, last);
     let lagrange_first_t = builder.add_virtual_extension_target();
     pw.set_extension_target(lagrange_first_t, lagrange_first);
     let lagrange_last_t = builder.add_virtual_extension_target();

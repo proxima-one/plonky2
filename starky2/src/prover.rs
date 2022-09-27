@@ -393,8 +393,10 @@ where
             .unwrap()
     };
 
+    // First element of the subgroup.
+    let first = F::primitive_root_of_unity(degree_bits);
     // Last element of the subgroup.
-    let last = F::primitive_root_of_unity(degree_bits).inverse();
+    let last = first.inverse();
     let size = degree << quotient_degree_bits;
     let coset = F::cyclic_subgroup_coset_known_order(
         F::primitive_root_of_unity(degree_bits + quotient_degree_bits),
@@ -428,6 +430,7 @@ where
             let i_range = i_start..i_start + P::WIDTH;
 
             let x = *P::from_slice(&coset[i_range.clone()]);
+            let z_first = x - first;
             let z_last = x - last;
             let lagrange_basis_first = *P::from_slice(&lagrange_first.values[i_range.clone()]);
             let lagrange_basis_last = *P::from_slice(&lagrange_last.values[i_range]);
@@ -435,6 +438,7 @@ where
             let mut consumer = ConstraintConsumer::new(
                 alphas.clone(),
                 z_last,
+                z_first,
                 lagrange_basis_first,
                 lagrange_basis_last,
             );

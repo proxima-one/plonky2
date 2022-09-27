@@ -113,7 +113,9 @@ where
     let degree_bits = proof.recover_degree_bits(config);
     
     let (l_1, l_last) = eval_l_1_and_l_last(degree_bits, challenges.stark_zeta);
-    let last = F::primitive_root_of_unity(degree_bits).inverse();
+    let first = F::primitive_root_of_unity(degree_bits);
+    let last = first.inverse();
+    let z_first = challenges.stark_zeta- first.into();
     let z_last = challenges.stark_zeta - last.into();
     let mut consumer = ConstraintConsumer::<F::Extension>::new(
         challenges
@@ -122,6 +124,7 @@ where
             .map(|&alpha| F::Extension::from_basefield(alpha))
             .collect::<Vec<_>>(),
         z_last,
+        z_first,
         l_1,
         l_last,
     );
