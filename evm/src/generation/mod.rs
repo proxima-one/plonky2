@@ -1,15 +1,19 @@
-use ethereum_types::Address;
+use std::collections::HashMap;
+
+use eth_trie_utils::partial_trie::PartialTrie;
+use ethereum_types::{Address, H256};
 use plonky2::field::extension::Extendable;
 use plonky2::field::polynomial::PolynomialValues;
 use plonky2::field::types::Field;
 use plonky2::hash::hash_types::RichField;
+use plonky2::util::timing::TimingTree;
+use serde::{Deserialize, Serialize};
 
 use crate::all_stark::{AllStark, NUM_TABLES};
 use crate::config::StarkConfig;
 use crate::cpu::bootstrap_kernel::generate_bootstrap_kernel;
 use crate::cpu::columns::NUM_CPU_COLUMNS;
 use crate::cpu::kernel::global_metadata::GlobalMetadata;
-use crate::generation::partial_trie::PartialTrie;
 use crate::generation::state::GenerationState;
 use crate::memory::segments::Segment;
 use crate::memory::NUM_CHANNELS;
@@ -17,13 +21,26 @@ use crate::proof::{BlockMetadata, PublicValues, TrieRoots};
 use crate::util::trace_rows_to_poly_values;
 
 pub(crate) mod memory;
-pub mod partial_trie;
+pub(crate) mod mpt;
+pub(crate) mod prover_input;
 pub(crate) mod state;
 
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 /// Inputs needed for trace generation.
 pub struct GenerationInputs {
     pub signed_txns: Vec<Vec<u8>>,
 
+    pub tries: TrieInputs,
+
+    /// Mapping between smart contract code hashes and the contract byte code.
+    /// All account smart contracts that are invoked will have an entry present.
+    pub contract_code: HashMap<H256, Vec<u8>>,
+
+    pub block_metadata: BlockMetadata,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
+pub struct TrieInputs {
     /// A partial version of the state trie prior to these transactions. It should include all nodes
     /// that will be accessed by these transactions.
     pub state_trie: PartialTrie,
@@ -39,16 +56,15 @@ pub struct GenerationInputs {
     /// A partial version of each storage trie prior to these transactions. It should include all
     /// storage tries, and nodes therein, that will be accessed by these transactions.
     pub storage_tries: Vec<(Address, PartialTrie)>,
-
-    pub block_metadata: BlockMetadata,
 }
 
 pub(crate) fn generate_traces<F: RichField + Extendable<D>, const D: usize>(
     all_stark: &AllStark<F, D>,
     inputs: GenerationInputs,
     config: &StarkConfig,
+    timing: &mut TimingTree,
 ) -> ([Vec<PolynomialValues<F>>; NUM_TABLES], PublicValues) {
-    let mut state = GenerationState::<F>::default();
+    let mut state = GenerationState::<F>::new(inputs.clone());
 
     generate_bootstrap_kernel::<F>(&mut state);
 
@@ -92,12 +108,14 @@ pub(crate) fn generate_traces<F: RichField + Extendable<D>, const D: usize>(
     assert_eq!(current_cpu_row, [F::ZERO; NUM_CPU_COLUMNS].into());
 
     let cpu_trace = trace_rows_to_poly_values(cpu_rows);
-    let keccak_trace = all_stark.keccak_stark.generate_trace(keccak_inputs);
-    let keccak_memory_trace = all_stark
-        .keccak_memory_stark
-        .generate_trace(keccak_memory_inputs, 1 << config.fri_config.cap_height);
-    let logic_trace = all_stark.logic_stark.generate_trace(logic_ops);
-    let memory_trace = all_stark.memory_stark.generate_trace(memory.log);
+    let keccak_trace = all_stark.keccak_stark.generate_trace(keccak_inputs, timing);
+    let keccak_memory_trace = all_stark.keccak_memory_stark.generate_trace(
+        keccak_memory_inputs,
+        1 << config.fri_config.cap_height,
+        timing,
+    );
+    let logic_trace = all_stark.logic_stark.generate_trace(logic_ops, timing);
+    let memory_trace = all_stark.memory_stark.generate_trace(memory.log, timing);
     let traces = [
         cpu_trace,
         keccak_trace,

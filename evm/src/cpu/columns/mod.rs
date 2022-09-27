@@ -7,6 +7,7 @@ use std::mem::{size_of, transmute};
 use std::ops::{Index, IndexMut};
 
 use crate::cpu::columns::general::CpuGeneralColumnsView;
+use crate::cpu::membus::NUM_GP_CHANNELS;
 use crate::memory;
 use crate::util::{indices_arr, transmute_no_compile_time_size_checks};
 
@@ -35,8 +36,22 @@ pub struct CpuColumnsView<T: Copy> {
     /// Lets us re-use columns in non-cycle rows.
     pub is_cpu_cycle: T,
 
+    /// If CPU cycle: Current context.
+    // TODO: this is currently unconstrained
+    pub context: T,
+
+    /// If CPU cycle: Context for code memory channel.
+    pub code_context: T,
+
     /// If CPU cycle: The program counter for the current instruction.
     pub program_counter: T,
+
+    /// If CPU cycle: The stack length.
+    pub stack_len: T,
+
+    /// If CPU cycle: A prover-provided value needed to show that the instruction does not cause the
+    /// stack to underflow or overflow.
+    pub stack_len_bounds_aux: T,
 
     /// If CPU cycle: We're in kernel (privileged) mode.
     pub is_kernel_mode: T,
@@ -152,7 +167,7 @@ pub struct CpuColumnsView<T: Copy> {
     pub(crate) general: CpuGeneralColumnsView<T>,
 
     pub(crate) clock: T,
-    pub mem_channels: [MemoryChannelView<T>; memory::NUM_CHANNELS],
+    pub mem_channels: [MemoryChannelView<T>; NUM_GP_CHANNELS],
 }
 
 // `u8` is guaranteed to have a `size_of` of 1.
