@@ -14,13 +14,33 @@ pub fn input_i(i: usize) -> usize {
 }
 pub const INPUT_FILTER: usize = INPUT_START + 16;
 
-pub const NUM_WIS: usize = 16;
-pub const WIS_START: usize = INPUT_FILTER + 1;
-pub fn wi_bit(i: usize, bit: usize) -> usize {
-    WIS_START + i * 32 + bit
+pub const WI_BITS_START: usize = INPUT_FILTER + 1;
+pub fn wi_bit(bit: usize) -> usize {
+    WI_BITS_START + bit
 }
 
-pub const XOR_TMP_0_START: usize = WIS_START + 16 * 32;
+pub const WI_MINUS_2_START: usize = WI_BITS_START + 32;
+pub fn wi_minus_2_bit(bit: usize) -> usize {
+    WI_MINUS_2_START + bit
+}
+
+pub const WI_MINUS_15_START: usize = WI_MINUS_2_START + 32;
+pub fn wi_minus_15_bit(bit: usize) -> usize {
+    WI_MINUS_15_START + bit
+}
+
+pub const NUM_WIS_FIELD: usize = 13;
+pub const WIS_FIELD_START: usize = WI_MINUS_15_START + 32;
+pub fn wi_field(i: usize) -> usize {
+    match i {
+        15 | 13 | 0 => panic!("invalid index into field-encoded wis"),
+        1..=12 => WIS_FIELD_START + i - 1, 
+        14 => WIS_FIELD_START + i - 2,
+        _ => unreachable!()
+    }
+}
+
+pub const XOR_TMP_0_START: usize = WIS_FIELD_START + NUM_WIS_FIELD;
 pub fn xor_tmp_0_bit(bit: usize) -> usize {
     XOR_TMP_0_START + bit
 }
@@ -74,12 +94,9 @@ pub fn c_bit(bit: usize) -> usize {
     C_START + bit
 }
 
-pub const D_START: usize = C_START + 32;
-pub fn d_bit(bit: usize) -> usize {
-    D_START + bit
-}
+pub const D_COL: usize = C_START + 32;
 
-pub const E_START: usize = D_START + 32;
+pub const E_START: usize = D_COL + 1;
 pub fn e_bit(bit: usize) -> usize {
     E_START + bit
 }
@@ -94,12 +111,9 @@ pub fn g_bit(bit: usize) -> usize {
     G_START + bit
 }
 
-pub const H_START: usize = G_START + 32;
-pub fn h_bit(bit: usize) -> usize {
-    H_START + bit
-}
+pub const H_COL: usize = G_START + 32;
 
-pub const BIG_S0_START: usize = H_START + 32;
+pub const BIG_S0_START: usize = H_COL + 1;
 pub fn big_s0_bit(bit: usize) -> usize {
     BIG_S0_START + bit
 }
