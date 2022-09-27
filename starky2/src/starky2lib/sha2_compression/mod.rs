@@ -1263,7 +1263,7 @@ mod tests {
     use plonky2::util::timing::TimingTree;
     use plonky2::hash::hash_types::BytesHash;
     use crate::prover::prove_no_ctl;
-    use crate::table_lib::sha2_compression::generation::to_u32_array_be;
+    use crate::starky2lib::sha2_compression::generation::to_u32_array_be;
     use crate::verifier::verify_stark_proof_no_ctl;
 
     // use plonky2::util::timing::TimingTree;

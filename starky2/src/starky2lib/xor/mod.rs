@@ -180,7 +180,7 @@ impl_xor_stark_n!(63);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::table_lib::xor::generation::XorGenerator;
+    use crate::starky2lib::xor::generation::XorGenerator;
     use crate::verifier::verify_stark_proof_no_ctl;
     use crate::prover::prove_no_ctl;
     use crate::config::StarkConfig;

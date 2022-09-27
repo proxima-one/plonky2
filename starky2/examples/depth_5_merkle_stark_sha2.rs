@@ -23,9 +23,9 @@ use starky2::cross_table_lookup::{
 };
 use starky2::get_challenges::{start_all_proof_challenger, get_ctl_challenges};
 use starky2::prover::{prove_single_table, start_all_proof};
-use starky2::table_lib::sha2_compression::{layout as sha2_layout, Sha2StarkCompressor, Sha2CompressionStark, util::compress};
+use starky2::starky2lib::sha2_compression::{layout as sha2_layout, Sha2StarkCompressor, Sha2CompressionStark, util::compress};
 use starky2::stark::Stark;
-use starky2::table_lib::depth_5_merkle_tree::{
+use starky2::starky2lib::depth_5_merkle_tree::{
     generation::Tree5TraceGenerator,
     layout as tree_layout,
     Tree5Stark, 

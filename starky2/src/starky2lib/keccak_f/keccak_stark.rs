@@ -12,15 +12,15 @@ use plonky2::timed;
 use plonky2::util::timing::TimingTree;
 
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
-use crate::table_lib::keccak_f::layout::{
+use crate::starky2lib::keccak_f::layout::{
     reg_a, reg_a_prime, reg_a_prime_prime, reg_a_prime_prime_0_0_bit, reg_a_prime_prime_prime,
     reg_b, reg_c, reg_c_prime, reg_step, NUM_COLUMNS, NUM_PUBLIC_INPUTS
 };
-use crate::table_lib::keccak_f::constants::{rc_value, rc_value_bit};
-use crate::table_lib::keccak_f::logic::{
+use crate::starky2lib::keccak_f::constants::{rc_value, rc_value_bit};
+use crate::starky2lib::keccak_f::logic::{
     andn, andn_gen, andn_gen_circuit, xor, xor3_gen, xor3_gen_circuit, xor_gen, xor_gen_circuit,
 };
-use crate::table_lib::keccak_f::round_flags::{eval_round_flags, eval_round_flags_recursively};
+use crate::starky2lib::keccak_f::round_flags::{eval_round_flags, eval_round_flags_recursively};
 use crate::stark::Stark;
 use crate::util::trace_rows_to_poly_values;
 use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
@@ -542,8 +542,8 @@ mod tests {
     use tiny_keccak::keccakf;
 
     use crate::config::StarkConfig;
-    use crate::table_lib::keccak_f::layout::reg_output_limb;
-    use crate::table_lib::keccak_f::keccak_stark::{KeccakStark, NUM_INPUTS, NUM_ROUNDS};
+    use crate::starky2lib::keccak_f::layout::reg_output_limb;
+    use crate::starky2lib::keccak_f::keccak_stark::{KeccakStark, NUM_INPUTS, NUM_ROUNDS};
     use crate::prover::prove_no_ctl;
     use crate::verifier::verify_stark_proof_no_ctl;
     use crate::stark_testing::{test_stark_circuit_constraints, test_stark_low_degree};

@@ -5,10 +5,10 @@ use plonky2::hash::hash_types::RichField;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
-use crate::table_lib::keccak_f::layout::reg_step;
-use crate::table_lib::keccak_f::layout::NUM_COLUMNS;
-use crate::table_lib::keccak_f::layout::NUM_PUBLIC_INPUTS;
-use crate::table_lib::keccak_f::keccak_stark::NUM_ROUNDS;
+use crate::starky2lib::keccak_f::layout::reg_step;
+use crate::starky2lib::keccak_f::layout::NUM_COLUMNS;
+use crate::starky2lib::keccak_f::layout::NUM_PUBLIC_INPUTS;
+use crate::starky2lib::keccak_f::keccak_stark::NUM_ROUNDS;
 use crate::vars::StarkEvaluationTargets;
 use crate::vars::StarkEvaluationVars;
 

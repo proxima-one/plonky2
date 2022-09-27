@@ -282,7 +282,7 @@ impl<F: RichField> Tree5TraceGenerator<F> {
 #[cfg(test)]
 mod tests {
     use plonky2_field::{goldilocks_field::GoldilocksField, types::PrimeField64};
-    use crate::table_lib::sha2_compression::util::compress;
+    use crate::starky2lib::sha2_compression::util::compress;
 
     use super::*;
 

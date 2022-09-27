@@ -2,7 +2,7 @@ use log::{Level, LevelFilter};
 use starky2::{
     config::StarkConfig,
     prover::prove_no_ctl,
-    table_lib::sha2_compression::{Sha2CompressionStark, Sha2StarkCompressor},
+    starky2lib::sha2_compression::{Sha2CompressionStark, Sha2StarkCompressor},
     verifier::verify_stark_proof_no_ctl,
     util::to_u32_array_be
 };
