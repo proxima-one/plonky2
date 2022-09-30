@@ -22,3 +22,4 @@ pub mod vanishing_poly;
 pub mod vars;
 pub mod verifier;
 pub mod starky2lib;
+pub mod lookup;
