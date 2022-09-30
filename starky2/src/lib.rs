@@ -4,6 +4,7 @@
 #![feature(generic_const_exprs)]
 #![feature(array_windows)]
 #![feature(exclusive_range_pattern)]
+#![feature(array_zip)]
 
 pub mod config;
 pub mod constraint_consumer;
