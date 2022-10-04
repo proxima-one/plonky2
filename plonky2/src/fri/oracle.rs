@@ -85,7 +85,13 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         );
 
         let mut leaves = timed!(timing, "transpose LDEs", transpose(&lde_values));
-        reverse_index_bits_in_place(&mut leaves);
+        
+        timed!(
+            timing,
+            "reverse index bits",
+            reverse_index_bits_in_place(&mut leaves)
+        );
+
         let merkle_tree = timed!(
             timing,
             "build Merkle tree",
