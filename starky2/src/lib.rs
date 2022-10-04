@@ -11,7 +11,7 @@ pub mod get_challenges;
 pub mod permutation;
 pub mod proof;
 pub mod prover;
-// pub mod recursive_verifier;
+pub mod recursive_verifier;
 pub mod all_stark;
 pub mod cross_table_lookup;
 pub mod stark;

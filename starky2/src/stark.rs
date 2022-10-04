@@ -187,7 +187,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         zeta: ExtensionTarget<D>,
         g: F,
         degree_bits: usize,
-        config: &StarkConfig,
+        inner_config: &StarkConfig,
         num_ctl_zs: usize
     ) -> FriInstanceInfoTarget<D> {
         let mut oracle_indices = 0..;
@@ -202,10 +202,10 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         let permutation_oracle_info = if self.uses_permutation_args() {
             let info = FriPolynomialInfo::from_range(
                 oracle_indices.next().unwrap(),
-                0..self.num_permutation_batches(config),
+                0..self.num_permutation_batches(inner_config),
             );
             let oracle = FriOracleInfo {
-                num_polys: self.num_permutation_batches(config),
+                num_polys: self.num_permutation_batches(inner_config),
                 blinding: false,
             };
             Some((oracle, info))
@@ -224,7 +224,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             None
         };
 
-        let num_quotient_polys = self.num_quotient_polys(config);
+        let num_quotient_polys = self.num_quotient_polys(inner_config);
         let quotient_info = FriPolynomialInfo::from_range(
             oracle_indices.next().unwrap(),
             0..num_quotient_polys

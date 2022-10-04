@@ -324,7 +324,7 @@ where
 }
 
 impl<const D: usize> StarkProofWithPublicInputsTarget<D> {
-    fn get_challenges<
+    pub(crate) fn get_challenges<
         F: RichField + Extendable<D>,
         C: GenericConfig<D, F = F>,
         S: Stark<F, D>,

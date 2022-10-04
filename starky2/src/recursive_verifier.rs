@@ -7,6 +7,7 @@ use plonky2::field::types::Field;
 use plonky2::fri::witness_util::set_fri_proof_target;
 use plonky2::hash::hash_types::RichField;
 use plonky2::iop::ext_target::ExtensionTarget;
+use plonky2::iop::target::Target;
 use plonky2::iop::witness::Witness;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::config::{AlgebraicHasher, GenericConfig};
@@ -58,6 +59,7 @@ pub fn verify_stark_proof_circuit<
 }
 
 /// Recursively verifies an inner proof.
+/// TODO: support CTLs
 fn verify_stark_proof_with_challenges_circuit<
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
@@ -77,6 +79,7 @@ fn verify_stark_proof_with_challenges_circuit<
 {
     check_permutation_options(&stark, &proof_with_pis, &challenges).unwrap();
     let one = builder.one_extension();
+    let zero = builder.zero();
 
     let StarkProofWithPublicInputsTarget {
         proof,
@@ -87,8 +90,15 @@ fn verify_stark_proof_with_challenges_circuit<
         next_values,
         permutation_zs,
         permutation_zs_next,
+        ctl_zs: _,
+        ctl_zs_next: _,
+        ctl_zs_first: _,
+        ctl_zs_last,
         quotient_polys,
     } = &proof.openings;
+
+    assert!(ctl_zs_last.is_none(), "CTLs not supported yet for recursive verifier");
+
     let vars = StarkEvaluationTargets {
         local_values: &local_values.to_vec().try_into().unwrap(),
         next_values: &next_values.to_vec().try_into().unwrap(),
@@ -158,11 +168,13 @@ fn verify_stark_proof_with_challenges_circuit<
         builder,
         challenges.stark_zeta,
         F::primitive_root_of_unity(degree_bits),
+        degree_bits,
         inner_config,
+        ctl_zs_last.as_ref().map_or(0, |zs| zs.len())
     );
     builder.verify_fri_proof::<C>(
         &fri_instance,
-        &proof.openings.to_fri_openings(),
+        &proof.openings.to_fri_openings(zero),
         &challenges.fri_challenges,
         &merkle_caps,
         &proof.opening_proof,
@@ -253,6 +265,11 @@ fn add_stark_opening_set_target<F: RichField + Extendable<D>, S: Stark<F, D>, co
         permutation_zs_next: stark
             .uses_permutation_args()
             .then(|| builder.add_virtual_extension_targets(stark.num_permutation_batches(config))),
+        // TODO: support CTLs in recursive proofs
+        ctl_zs: None,
+        ctl_zs_next: None,
+        ctl_zs_first: None,
+        ctl_zs_last: None,
         quotient_polys: builder
             .add_virtual_extension_targets(stark.quotient_degree_factor() * num_challenges),
     }
@@ -262,6 +279,7 @@ pub fn set_stark_proof_with_pis_target<F, C: GenericConfig<D, F = F>, W, const D
     witness: &mut W,
     stark_proof_with_pis_target: &StarkProofWithPublicInputsTarget<D>,
     stark_proof_with_pis: &StarkProofWithPublicInputs<F, C, D>,
+    zero: Target
 ) where
     F: RichField + Extendable<D>,
     C::Hasher: AlgebraicHasher<F>,
@@ -281,13 +299,14 @@ pub fn set_stark_proof_with_pis_target<F, C: GenericConfig<D, F = F>, W, const D
         witness.set_target(pi_t, pi);
     }
 
-    set_stark_proof_target(witness, pt, proof);
+    set_stark_proof_target(witness, pt, proof, zero);
 }
 
 pub fn set_stark_proof_target<F, C: GenericConfig<D, F = F>, W, const D: usize>(
     witness: &mut W,
     proof_target: &StarkProofTarget<D>,
     proof: &StarkProof<F, C, D>,
+    zero: Target
 ) where
     F: RichField + Extendable<D>,
     C::Hasher: AlgebraicHasher<F>,
@@ -297,7 +316,7 @@ pub fn set_stark_proof_target<F, C: GenericConfig<D, F = F>, W, const D: usize>(
     witness.set_cap_target(&proof_target.quotient_polys_cap, &proof.quotient_polys_cap);
 
     witness.set_fri_openings(
-        &proof_target.openings.to_fri_openings(),
+        &proof_target.openings.to_fri_openings(zero),
         &proof.openings.to_fri_openings(),
     );
 
