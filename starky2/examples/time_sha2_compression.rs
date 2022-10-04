@@ -36,7 +36,7 @@ fn main() {
     config.fri_config.cap_height = 4;
 
     let stark = S::new();
-    let mut timing = TimingTree::new("prove", Level::Debug);
+    let mut timing = TimingTree::new(format!("prove ({} cols)", trace.len()).as_str(), Level::Debug);
     let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing).unwrap();
     timing.print();
 
