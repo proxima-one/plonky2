@@ -141,14 +141,6 @@ where
         (tree_stark, sha2_stark)
     }
 
-    // challenger order:
-    // observe trace caps
-    // get ctl challenges
-    // get permutation challenges
-    // observe permutation zs cap
-    // obsreve ctl zs cap
-    // sample alphas
-
     fn prove(
         &self,
         starks: &Self::Starks,
