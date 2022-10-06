@@ -18,9 +18,9 @@ impl<F: PrimeField64, const N: usize> XorGenerator<F, N>
 where
     [(); 3 + 2 * N]:,
 {
-    pub fn new(max_rows: usize) -> XorGenerator<F, N> {
+    pub fn new() -> XorGenerator<F, N> {
         Self {
-            trace: Vec::with_capacity(max_rows),
+            trace: Vec::new(),
         }
     }
 
@@ -58,7 +58,7 @@ where
 
     pub fn into_polynomial_values(mut self) -> Vec<PolynomialValues<F>> {
         if !is_power_of_two(self.trace.len() as u64) {
-            let next_power_of_two = log2_ceil(self.trace.len());
+            let next_power_of_two = self.trace.len().next_power_of_two();
             self.trace.resize(next_power_of_two, [F::ZERO; 3 + 2 * N]);
         }
         trace_rows_to_poly_values(self.trace)

@@ -1,6 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 use std::mem::transmute;
 
+use crate::cross_table_lookup::{CtlColumn, TableID};
 use crate::util::transmute_no_compile_time_size_checks;
 
 #[repr(C)]
@@ -25,7 +26,23 @@ impl<T: Copy, const N: usize> XorLayout<T, N> {
     pub(crate) const fn output_col() -> usize {
         2
     }
+    
+    pub fn ctl_cols_a(tid: TableID) -> impl Iterator<Item = CtlColumn> {
+        (0..N)
+            .map(move |i| CtlColumn::new(tid, Self::a_col() + i, None))
+    }
+
+    pub fn ctl_cols_b(tid: TableID) -> impl Iterator<Item = CtlColumn> {
+        (0..N)
+            .map(move |i| CtlColumn::new(tid, Self::b_col() + i, None))
+    }
+
+    pub fn ctl_cols_output(tid: TableID) -> impl Iterator<Item = CtlColumn> {
+        (0..N)
+            .map(move |i| CtlColumn::new(tid, Self::output_col() + i, None))
+    }
 }
+
 
 impl<T: Copy, const N: usize> From<[T; 3 + 2 * N]> for XorLayout<T, N> {
     fn from(row: [T; 3 + 2 * N]) -> Self {

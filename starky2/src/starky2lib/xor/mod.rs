@@ -209,7 +209,7 @@ mod tests {
                     type S = XorStark<F, D, $n>;
 
                     let mut rng = rand::thread_rng();
-                    let mut generator = XorGenerator::<F, $n>::new(32);
+                    let mut generator = XorGenerator::<F, $n>::new();
                     for _ in 0..32 {
                         let a = rng.gen_range(0..(1 << $n));
                         let b = rng.gen_range(0..(1 << $n));
