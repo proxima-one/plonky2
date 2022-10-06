@@ -13,7 +13,7 @@ pub const fn reg_step(i: usize) -> usize {
 /// Registers to hold permutation inputs.
 /// `reg_input_limb(2*i) -> input[i] as u32`
 /// `reg_input_limb(2*i+1) -> input[i] >> 32`
-pub fn reg_input_limb<F: Field>(i: usize) -> usize {
+pub fn reg_input_limb(i: usize) -> usize {
     debug_assert!(i < 2 * NUM_INPUTS);
     let i_u64 = i / 2; // The index of the 64-bit chunk.
 

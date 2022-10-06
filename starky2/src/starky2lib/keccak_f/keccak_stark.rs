@@ -37,9 +37,13 @@ pub struct KeccakStark<F, const D: usize> {
 }
 
 impl<F: RichField + Extendable<D>, const D: usize> KeccakStark<F, D> {
+    pub fn new() -> Self {
+        Self { f: PhantomData }
+    }
+
     /// Generate the rows of the trace. Note that this does not generate the permuted columns used
     /// in our lookup arguments, as those are computed after transposing to column-wise form.
-    pub(crate) fn generate_trace_rows(
+    pub fn generate_trace_rows(
         &self,
         inputs: Vec<[u64; NUM_INPUTS]>,
     ) -> Vec<[F; NUM_COLUMNS]> {
