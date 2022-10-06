@@ -23,7 +23,7 @@ pub struct Keccak256SpongeStark<F: RichField + Extendable<D>, const D: usize> {
 }
 
 impl<F: RichField + Extendable<D>, const D: usize> Keccak256SpongeStark<F, D> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             _phantom: PhantomData,
         }

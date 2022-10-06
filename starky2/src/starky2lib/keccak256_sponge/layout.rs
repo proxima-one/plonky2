@@ -6,12 +6,12 @@ use std::{
 use crate::cross_table_lookup::CtlColumn;
 use crate::{cross_table_lookup::TableID, util::transmute_no_compile_time_size_checks};
 
-pub(crate) const KECCAK_WIDTH_BYTES: usize = 200;
-pub(crate) const KECCAK_WIDTH_U32S: usize = KECCAK_WIDTH_BYTES / 4;
-pub(crate) const KECCAK_RATE_BYTES: usize = 136;
-pub(crate) const KECCAK_RATE_U32S: usize = KECCAK_RATE_BYTES / 4;
-pub(crate) const KECCAK_CAPACITY_BYTES: usize = 64;
-pub(crate) const KECCAK_CAPACITY_U32S: usize = KECCAK_CAPACITY_BYTES / 4;
+pub const KECCAK_WIDTH_BYTES: usize = 200;
+pub const KECCAK_WIDTH_U32S: usize = KECCAK_WIDTH_BYTES / 4;
+pub const KECCAK_RATE_BYTES: usize = 136;
+pub const KECCAK_RATE_U32S: usize = KECCAK_RATE_BYTES / 4;
+pub const KECCAK_CAPACITY_BYTES: usize = 64;
+pub const KECCAK_CAPACITY_U32S: usize = KECCAK_CAPACITY_BYTES / 4;
 
 #[repr(C)]
 #[derive(Eq, PartialEq, Debug)]
@@ -137,12 +137,16 @@ pub(crate) const fn input_block_start_col() -> usize {
     hash_idx_bytes_permuted_start_col() + 2
 }
 
-pub(crate) const fn curr_state_rate_start_col() -> usize {
+pub const fn curr_state_rate_start_col() -> usize {
     input_block_start_col() + KECCAK_RATE_U32S
 }
 
-pub(crate) const fn xored_state_rate_start_col() -> usize {
+pub const fn xored_state_rate_start_col() -> usize {
     curr_state_rate_start_col() + KECCAK_RATE_U32S
+}
+
+pub const fn input_block_encoded_start_col() -> usize {
+    KECCAK_256_NUM_COLS - 8
 }
 
 pub(crate) const fn curr_state_capacity_start_col() -> usize {
@@ -173,7 +177,7 @@ pub fn xor_ctl_cols_b(tid: TableID) -> impl Iterator<Item = CtlColumn> {
     })
 }
 
-pub fn xor_ctl_cols_c(tid: TableID) -> impl Iterator<Item = CtlColumn> {
+pub fn xor_ctl_cols_output(tid: TableID) -> impl Iterator<Item = CtlColumn> {
     (0..KECCAK_RATE_U32S).map(move |i| {
         CtlColumn::new(
             tid,
@@ -201,9 +205,14 @@ pub fn keccak_ctl_col_input(tid: TableID) -> impl Iterator<Item = CtlColumn> {
         }))
 }
 
-pub fn keccak_ctl_col_output(tid: TableID) -> impl Iterator<Item = CtlColumn> {
-    (0..KECCAK_WIDTH_U32S)
-        .map(move |i| CtlColumn::new(tid, new_state_start_col() + i, Some(mode_bits_start_col())))
+pub fn input_ctl_col(tid: TableID) -> impl Iterator<Item = CtlColumn> {
+    (0..KECCAK_RATE_U32S)
+        .map(move |i| CtlColumn::new(tid, input_block_encoded_start_col() + i, Some(mode_bits_start_col())))
+}
+
+pub fn output_ctl_col(tid: TableID) -> impl Iterator<Item = CtlColumn> {
+    (0..KECCAK_RATE_U32S)
+        .map(move |i| CtlColumn::new(tid, curr_state_rate_start_col() + i, Some(mode_bits_start_col())))
 }
 
 impl<T: Copy + Default> Default for Keccak256SpongeRow<T> {

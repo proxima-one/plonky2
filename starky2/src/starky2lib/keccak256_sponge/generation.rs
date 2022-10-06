@@ -60,7 +60,7 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
 
     pub fn into_polynomial_values(mut self) -> Vec<PolynomialValues<F>> {
         println!("pre-pad length: {}", self.trace.len());
-        let target_len_bits = log2_ceil(self.trace.len());
+        let target_len_bits = self.trace.len().next_power_of_two(); 
         self.pad_to_num_rows(target_len_bits);
         println!("post-pad length: {}", self.trace.len());
 
@@ -102,24 +102,37 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
         }
     }
 
-    /// adds a keccak256 hash to the trace, returning the `hash_idx` (for lookup usage) and the resulting hash
-    /// Assumes padding has already been applied to the input. For a higher level interface, see `gen_hash`
-    pub fn gen_hash_nopad(&mut self, blocks: &[[u32; KECCAK_RATE_U32S]]) -> (u16, [u32; 8]) {
+    fn gen_hash_nopad(&mut self, blocks: &[[u32; KECCAK_RATE_U32S]], trace: bool) -> (u16, [u32; 8], Option<Vec<[u32; KECCAK_WIDTH_U32S]>>, Option<Vec<[u32; KECCAK_RATE_U32S]>>) {
         self.init_sponge();
+		let mut state_trace = if trace { Some(Vec::new())} else { None };
+		let mut xor_trace = if trace { Some(Vec::new())} else { None };
         for block in blocks {
-            self.gen_absorb_block(block)
+			if let Some(ref mut trace) = state_trace {
+				trace.push(self.state);
+			}
+
+            let xored_state = self.gen_absorb_block(block);
+
+			if let Some(ref mut trace) = xor_trace {
+				trace.push(xored_state);
+			}
+
         }
+
+		if let Some(ref mut trace) = state_trace {
+			trace.push(self.state);
+		}
 
         let res = self.gen_squeeze();
 
-        (self.hash_idx, *array_ref![res, 0, 8])
+        (self.hash_idx, *array_ref![res, 0, 8], state_trace, xor_trace)
     }
 
     /// adds a keccak256 hash to the trace, returning the `hash_idx` (for lookup usage) and the resulting hash
     /// applies padding and breaks down into blockso of `u32`s
     pub fn gen_hash(&mut self, data: &[u8]) -> (u16, [u8; 32]) {
         let data = to_le_blocks(&pad101(data));
-        let (id, hash_u32s) = self.gen_hash_nopad(&data);
+        let (id, hash_u32s, _, _) = self.gen_hash_nopad(&data, false);
         let mut res = [0u8; 32];
 
         for (o, chunk) in res
@@ -132,13 +145,28 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
         (id, res)
     }
 
+	pub fn gen_hash_with_trace(&mut self, data: &[u8]) -> (u16, [u8; 32], Vec<[u32; KECCAK_WIDTH_U32S]>, Vec<[u32; KECCAK_RATE_U32S]>) {
+        let data = to_le_blocks(&pad101(data));
+        let (id, hash_u32s, state_trace, xor_trace) = self.gen_hash_nopad(&data, true);
+        let mut res = [0u8; 32];
+
+        for (o, chunk) in res
+            .chunks_exact_mut(4)
+            .zip(hash_u32s.into_iter().map(|x| x.to_le_bytes()))
+        {
+            o.copy_from_slice(&chunk)
+        }
+
+        (id, res, state_trace.unwrap(), xor_trace.unwrap())
+	}
+
     fn init_sponge(&mut self) {
         self.state = [0; KECCAK_WIDTH_U32S];
         self.hash_idx += 1;
         self.block_idx = 0;
     }
 
-    fn gen_absorb_block(&mut self, block: &[u32; KECCAK_RATE_U32S]) {
+    fn gen_absorb_block(&mut self, block: &[u32; KECCAK_RATE_U32S]) -> [u32; KECCAK_RATE_U32S] {
         let mut row = Keccak256SpongeRow::new();
 
         row.mode_bits = [F::ONE, F::ZERO];
@@ -173,7 +201,8 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
         self.block_idx += 1;
 
         row.new_state = self.state.map(F::from_canonical_u32);
-        self.trace.push(row.into())
+        self.trace.push(row.into());
+		xored
     }
 
     fn xor_in_input(&mut self, input: &[u32; KECCAK_RATE_U32S]) {
@@ -287,7 +316,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_gen_hash_simple() {
+    fn test_gen_hash_single_block() {
         type F = GoldilocksField;
 
         let mut generator = Keccak256SpongeGenerator::<F>::new();
@@ -305,13 +334,36 @@ mod tests {
     }
 
     #[test]
+    fn test_gen_hash_multi_block() {
+        type F = GoldilocksField;
+
+        let mut generator = Keccak256SpongeGenerator::<F>::new();
+        let data = b"Timbs for my hooligans in Brooklyn (that's right)
+            Dead right, if the head right, Biggie there e'ry night
+            Poppa been smooth since days of Underoos
+            Never lose, never choose to, bruise crews who
+            Do somethin' to us (come on), talk go through us (through us)";
+
+        let (_id, computed_hash) = generator.gen_hash(data);
+
+        let mut correct_hash = [0u8; 32];
+        let mut hasher = Keccak::v256();
+        hasher.update(data);
+        hasher.finalize(&mut correct_hash);
+
+        println!("computed hash: {:x?}", computed_hash);
+        println!("correct hash: {:x?}", correct_hash);
+        assert_eq!(&computed_hash, &correct_hash);
+    }
+
+    #[test]
     fn test_gen_lookups() {
         type F = GoldilocksField;
 
         let mut generator = Keccak256SpongeGenerator::<F>::new();
 
         let _ = generator.gen_hash(
-            b"hold up / we don't play / we gon rock it till the wheels fall off / hold up",
+            b"we don't play / we gon rock it till the wheels fall off / hold up hey",
         );
 
         let cols = generator.into_polynomial_values();
