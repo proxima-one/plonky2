@@ -16,6 +16,14 @@ pub struct Keccak256SpongeStark<F: RichField + Extendable<D>, const D: usize> {
 	_phantom: PhantomData<F>
 }
 
+impl<F: RichField + Extendable<D>, const D: usize> Keccak256SpongeStark<F, D> {
+	fn new() -> Self {
+		Self {
+			_phantom: PhantomData
+		}
+	}
+}
+
 impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Keccak256SpongeStark<F, D> {
     const COLUMNS: usize = KECCAK_256_NUM_COLS;
     const PUBLIC_INPUTS: usize = KECCAK_256_NUM_PIS;
@@ -148,6 +156,31 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Keccak256Spon
     }
 
     fn constraint_degree(&self) -> usize {
-        todo!()
+		3
     }
+}
+
+#[cfg(test)]
+mod tests {
+	use anyhow::Result;
+	use plonky2::plonk::config::{PoseidonGoldilocksConfig, GenericConfig};
+	use crate::stark_testing::test_stark_low_degree;
+	use super::*;
+	use super::generation::{Keccak256SpongeGenerator, pad101, to_le_blocks};
+
+	#[test]
+    fn test_stark_degree() -> Result<()> {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+        type S = Keccak256SpongeStark<F, D>;
+
+        let stark = Keccak256SpongeStark::<F, D>::new();
+        test_stark_low_degree(stark)
+    }
+
+	#[test]
+	fn test_basic() {
+		todo!()
+	}	
 }

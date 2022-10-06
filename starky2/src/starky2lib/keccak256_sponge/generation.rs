@@ -2,7 +2,7 @@ use plonky2::field::{types::PrimeField64, polynomial::PolynomialValues};
 use arrayref::array_ref;
 use std::borrow::BorrowMut;
 
-use crate::util::{trace_rows_to_poly_values, to_u32_array_be, to_u32_array_le};
+use crate::util::{trace_rows_to_poly_values, to_u32_array_le};
 
 use super::layout::{KECCAK_256_NUM_COLS, KECCAK_RATE_U32S, KECCAK_WIDTH_U32S, Keccak256SpongeRow, KECCAK_RATE_BYTES};
 use tiny_keccak::keccakf;
@@ -99,6 +99,9 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
 	fn gen_squeeze(&mut self) -> [u32; KECCAK_RATE_U32S] {
 		let mut row = Keccak256SpongeRow::new();
 
+		row.input_block = [F::ZERO; KECCAK_RATE_U32S];
+		row.input_block_encoded = row.input_block.map(|word| word + F::from_canonical_u32(1 << 32) * F::from_canonical_u16(self.hash_idx) + F::from_canonical_u16(1 << 48) * F::from_canonical_u16(self.block_idx));
+
 		row.mode_bits = [F::ONE, F::ZERO];
 		row.input_filter = F::ZERO;
 		row.output_filter = F::ONE;
@@ -117,8 +120,8 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
 			}
 		}
 
-		row.xored_state_rate = [F::ZERO; KECCAK_RATE_U32S];
-	
+		row.xored_state_rate = row.curr_state_rate;
+
 		self.block_idx += 1;
 		self.trace.push(row.into());
 
@@ -189,13 +192,11 @@ mod tests {
 	use plonky2::field::goldilocks_field::GoldilocksField;
 	use tiny_keccak::{Hasher, Keccak};
 
-
 	#[test]
 	fn test_gen_hash_simple() {
 		type F = GoldilocksField;
 
 		let mut generator = Keccak256SpongeGenerator::<F>::new();
-
 
 		let data = to_le_blocks(&pad101(b"hello"));
 		let (_id, computed_hash_u32) = generator.gen_hash_nopad(data.as_slice());
@@ -210,5 +211,4 @@ mod tests {
 		println!("correct hash: {:x?}", correct_hash);
 		assert_eq!(&computed_hash, &correct_hash);
 	}
-	
 }
