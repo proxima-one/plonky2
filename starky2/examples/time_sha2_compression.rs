@@ -1,14 +1,14 @@
 use log::{Level, LevelFilter};
+use plonky2::hash::hash_types::BytesHash;
+use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
+use plonky2::util::timing::TimingTree;
 use starky2::{
     config::StarkConfig,
     prover::prove_no_ctl,
     starky2lib::sha2_compression::{Sha2CompressionStark, Sha2StarkCompressor},
+    util::to_u32_array_be,
     verifier::verify_stark_proof_no_ctl,
-    util::to_u32_array_be
 };
-use plonky2::hash::hash_types::BytesHash;
-use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
-use plonky2::util::timing::TimingTree;
 
 const D: usize = 2;
 type C = PoseidonGoldilocksConfig;

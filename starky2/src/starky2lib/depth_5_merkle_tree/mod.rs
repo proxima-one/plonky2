@@ -271,11 +271,11 @@ mod tests {
     use plonky2::util::timing::TimingTree;
 
     use super::*;
-    use crate::starky2lib::sha2_compression::util::compress;
     use crate::config::StarkConfig;
     use crate::prover::prove_no_ctl;
     use crate::stark_testing::test_stark_low_degree;
     use crate::starky2lib::depth_5_merkle_tree::generation::Tree5TraceGenerator;
+    use crate::starky2lib::sha2_compression::util::compress;
     use crate::verifier::verify_stark_proof_no_ctl;
 
     #[test]

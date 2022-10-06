@@ -15,7 +15,7 @@ use crate::proof::StarkProofWithPublicInputs;
 /// It is highly reccomended to implement this trait via the `derive(AllStark)` macro in the `all_stark_derive` crate
 pub trait CtlStark<F: Field> {
     /// Data needed to generate all of the traces
-    type GenData; 
+    type GenData;
 
     /// returns the number of tables in this multi-trace STARK
     fn num_tables(&self) -> usize;
@@ -27,7 +27,10 @@ pub trait CtlStark<F: Field> {
 
     /// generate all of the traces
     /// returns (public_inputses, traces_poly_valueses)
-    fn generate(&self, gen_data: Self::GenData) -> Result<(Vec<Vec<F>>, Vec<Vec<PolynomialValues<F>>>)>;
+    fn generate(
+        &self,
+        gen_data: Self::GenData,
+    ) -> Result<(Vec<Vec<F>>, Vec<Vec<PolynomialValues<F>>>)>;
 }
 
 /// an aggregate multi-table STARK proof.

@@ -107,7 +107,7 @@ where
         permutation_challenge_sets,
         stark_alphas,
         stark_zeta,
-        fri_challenges
+        fri_challenges,
     }
 }
 
@@ -324,11 +324,7 @@ where
 }
 
 impl<const D: usize> StarkProofWithPublicInputsTarget<D> {
-    fn get_challenges<
-        F: RichField + Extendable<D>,
-        C: GenericConfig<D, F = F>,
-        S: Stark<F, D>,
-    >(
+    fn get_challenges<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, S: Stark<F, D>>(
         &self,
         builder: &mut CircuitBuilder<F, D>,
         stark: &S,

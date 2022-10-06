@@ -1,8 +1,8 @@
+use std::iter::once;
 use std::marker::PhantomData;
 
-use plonky2::iop::ext_target::ExtensionTarget;
-use std::iter::once;
 use plonky2::field::{polynomial::PolynomialValues, types::Field};
+use plonky2::iop::ext_target::ExtensionTarget;
 use plonky2::{
     field::{
         extension::{Extendable, FieldExtension},
@@ -52,7 +52,8 @@ macro_rules! bit_decomp_32_at_idx_circuit {
     ($builder:expr, $row:expr, $idx:expr, $col_fn:ident, $f:ty) => {{
         let addends = ((0..32).map(|i| {
             $builder.mul_const_extension(<$f>::from_canonical_u64(1 << i), $row[$col_fn($idx, i)])
-        })).collect::<Vec<_>>();
+        }))
+        .collect::<Vec<_>>();
 
         $builder.add_many_extension(addends)
     }};
@@ -63,7 +64,8 @@ macro_rules! bit_decomp_32_circuit {
     ($builder:expr, $row:expr, $col_fn:ident, $f:ty) => {{
         let addends = ((0..32).map(|i| {
             $builder.mul_const_extension(<$f>::from_canonical_u64(1 << i), $row[$col_fn(i)])
-        })).collect::<Vec<_>>();
+        }))
+        .collect::<Vec<_>>();
 
         $builder.add_many_extension(addends)
     }};
@@ -74,8 +76,12 @@ pub(crate) fn xor_gen<P: PackedField>(x: P, y: P) -> P {
     x + y - x * y.doubles()
 }
 
-/// Computes the arithmetic generalization of `xor(x, y)`, i.e. `x + y - 2 x y`, in a circuit 
-pub(crate) fn xor_gen_circuit<F: RichField + Extendable<D>, const D: usize>(builder: &mut CircuitBuilder<F, D>, x: ExtensionTarget<D>, y: ExtensionTarget<D>) -> ExtensionTarget<D> {
+/// Computes the arithmetic generalization of `xor(x, y)`, i.e. `x + y - 2 x y`, in a circuit
+pub(crate) fn xor_gen_circuit<F: RichField + Extendable<D>, const D: usize>(
+    builder: &mut CircuitBuilder<F, D>,
+    x: ExtensionTarget<D>,
+    y: ExtensionTarget<D>,
+) -> ExtensionTarget<D> {
     let lhs = builder.add_extension(x, y);
     let rhs = builder.mul_extension_with_const(F::TWO, x, y);
     builder.sub_extension(lhs, rhs)
@@ -174,8 +180,8 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
 
         // the rest
         for i in (1..=12).chain(once(14)) {
-            let decomp = curr_row[wi_field(i)]
-                + curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32);
+            let decomp =
+                curr_row[wi_field(i)] + curr_row[HASH_IDX] * FE::from_canonical_u64(1 << 32);
 
             yield_constr.constraint(is_hash_start * (decomp - curr_row[input_i(i + 1)]));
         }
@@ -190,34 +196,29 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
         let shift_wis = next_is_phase_1;
 
         // wi next when rotating
-        let c = bit_decomp_32!(next_row, wi_bit, FE, P) - bit_decomp_32!(curr_row, wi_minus_15_bit, FE, P);
-        yield_constr.constraint_transition(
-            rotate_wis * c
-        );
+        let c = bit_decomp_32!(next_row, wi_bit, FE, P)
+            - bit_decomp_32!(curr_row, wi_minus_15_bit, FE, P);
+        yield_constr.constraint_transition(rotate_wis * c);
 
         // wi_minus_2 next
         let decomp = bit_decomp_32!(next_row, wi_minus_2_bit, FE, P);
-        yield_constr.constraint_transition(
-            (rotate_wis + shift_wis) * (decomp - curr_row[wi_field(14)])
-        );
+        yield_constr
+            .constraint_transition((rotate_wis + shift_wis) * (decomp - curr_row[wi_field(14)]));
 
         // wi_minus_15 next
         let decomp = bit_decomp_32!(next_row, wi_minus_15_bit, FE, P);
-        yield_constr.constraint_transition(
-            (rotate_wis + shift_wis) * (decomp - curr_row[wi_field(1)])
-        );
+        yield_constr
+            .constraint_transition((rotate_wis + shift_wis) * (decomp - curr_row[wi_field(1)]));
 
         // wi_minus_1 next
         let decomp = bit_decomp_32!(curr_row, wi_bit, FE, P);
-        yield_constr.constraint_transition(
-            (rotate_wis + shift_wis) * (next_row[wi_field(14)] - decomp)
-        );
+        yield_constr
+            .constraint_transition((rotate_wis + shift_wis) * (next_row[wi_field(14)] - decomp));
 
         // wi_i_minus_3 next
         let decomp = bit_decomp_32!(curr_row, wi_minus_2_bit, FE, P);
-        yield_constr.constraint_transition(
-            (rotate_wis + shift_wis) * (next_row[wi_field(12)] - decomp)
-        );
+        yield_constr
+            .constraint_transition((rotate_wis + shift_wis) * (next_row[wi_field(12)] - decomp));
 
         for i in 1..12 {
             yield_constr.constraint_transition(
@@ -387,7 +388,6 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
             );
         }
 
-
         // update his in last step of phase 1
         let update_his = curr_row[step_bit(63)];
         let vars = [
@@ -398,7 +398,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
             bit_decomp_32!(next_row, e_bit, FE, P),
             bit_decomp_32!(next_row, f_bit, FE, P),
             bit_decomp_32!(next_row, g_bit, FE, P),
-            next_row[H_COL]
+            next_row[H_COL],
         ];
 
         for i in 0..8 {
@@ -428,7 +428,6 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
             yield_constr.constraint((P::ONES - is_last_step) * curr_row[output_i(i)])
         }
 
-
         // set output filter to 1 iff it's the last step, zero otherwise
         yield_constr.constraint(is_last_step * (P::ONES - curr_row[OUTPUT_FILTER]));
         yield_constr.constraint((P::ONES - is_last_step) * curr_row[OUTPUT_FILTER]);
@@ -448,7 +447,10 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
                 do_msg_schedule * (next_row[xor_tmp_0_bit(bit)] - computed_bit),
             );
 
-            let computed_bit = xor_gen(next_row[xor_tmp_0_bit(bit)], next_row[wi_minus_15_bit(bit + 3)]);
+            let computed_bit = xor_gen(
+                next_row[xor_tmp_0_bit(bit)],
+                next_row[wi_minus_15_bit(bit + 3)],
+            );
             // degree 3
             yield_constr.constraint_transition(
                 do_msg_schedule * (next_row[little_s0_bit(bit)] - computed_bit),
@@ -477,8 +479,10 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
                 do_msg_schedule * (next_row[xor_tmp_1_bit(bit)] - computed_bit),
             );
 
-            let computed_bit =
-                xor_gen(next_row[xor_tmp_1_bit(bit)], next_row[wi_minus_2_bit(bit + 10)]);
+            let computed_bit = xor_gen(
+                next_row[xor_tmp_1_bit(bit)],
+                next_row[wi_minus_2_bit(bit + 10)],
+            );
             // degree 3
             yield_constr.constraint_transition(
                 do_msg_schedule * (next_row[little_s1_bit(bit)] - computed_bit),
@@ -650,7 +654,6 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
         //     yield_constr.constraint(builder, c);
         // }
 
-
         // for bit in 0..32 {
         //     let computed_bit = builder.mul_extension(curr_row[e_bit(bit)], curr_row[f_bit(bit)]);
         //     let mut c = builder.sub_extension(curr_row[e_and_f_bit(bit)], computed_bit);
@@ -678,7 +681,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
         //     let mut c = builder.sub_extension(curr_row[xor_tmp_3_bit(bit)], computed_bit);
         //     c = builder.mul_extension(is_phase_0_or_1, c);
         //     yield_constr.constraint(builder, c);
-            
+
         //     let computed_bit = xor_gen_circuit(
         //         builder,
         //         curr_row[xor_tmp_3_bit(bit)],
@@ -847,7 +850,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
         //         next_row[xor_tmp_0_bit(bit)],
         //         next_row[wi_bit(0, bit + 3)]
         //     );
-            
+
         //     let mut c = builder.sub_extension(next_row[little_s0_bit(bit)], computed_bit);
         //     c = builder.mul_extension(do_msg_schedule, c);
         //     yield_constr.constraint_transition(builder, c);
@@ -880,7 +883,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
         //         next_row[xor_tmp_1_bit(bit)],
         //         next_row[wi_bit(13, bit + 10)]
         //     );
-            
+
         //     let mut c = builder.sub_extension(next_row[little_s1_bit(bit)], computed_bit);
         //     c = builder.mul_extension(do_msg_schedule, c);
         //     yield_constr.constraint_transition(builder, c);
@@ -959,7 +962,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
         //     c = builder.mul_extension(c, curr_row[a_bit(bit)]);
         //     yield_constr.constraint(builder, c);
         // }
-        
+
         // for bit in 0..32 {
         //     let mut c = builder.sub_extension(one_ext, curr_row[b_bit(bit)]);
         //     c = builder.mul_extension(c, curr_row[b_bit(bit)]);
@@ -1104,16 +1107,16 @@ where
 
     for bit in 0..32 {
         // wi
-        yield_constr
-            .constraint((P::ONES - curr_row[wi_bit(bit)]) * curr_row[wi_bit(bit)]);
-        
+        yield_constr.constraint((P::ONES - curr_row[wi_bit(bit)]) * curr_row[wi_bit(bit)]);
+
         // wi minus 2
         yield_constr
             .constraint((P::ONES - curr_row[wi_minus_2_bit(bit)]) * curr_row[wi_minus_2_bit(bit)]);
 
         // wi minus 15
-        yield_constr
-            .constraint((P::ONES - curr_row[wi_minus_15_bit(bit)]) * curr_row[wi_minus_15_bit(bit)]);
+        yield_constr.constraint(
+            (P::ONES - curr_row[wi_minus_15_bit(bit)]) * curr_row[wi_minus_15_bit(bit)],
+        );
     }
 
     // s0
@@ -1259,17 +1262,16 @@ impl Sha2StarkCompressor {
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
+    use plonky2::hash::hash_types::BytesHash;
     use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
     use plonky2::util::timing::TimingTree;
-    use plonky2::hash::hash_types::BytesHash;
+
+    // use plonky2::util::timing::TimingTree;
+    use super::*;
     use crate::prover::prove_no_ctl;
     use crate::starky2lib::sha2_compression::generation::to_u32_array_be;
     use crate::verifier::verify_stark_proof_no_ctl;
-
-    // use plonky2::util::timing::TimingTree;
-
-    use super::*;
-    use crate::{stark_testing::test_stark_low_degree, config::StarkConfig};
+    use crate::{config::StarkConfig, stark_testing::test_stark_low_degree};
 
     #[test]
     fn test_stark_degree() -> Result<()> {

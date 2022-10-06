@@ -10,7 +10,12 @@ use plonky2::plonk::circuit_builder::CircuitBuilder;
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
 use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
 
-pub(crate) fn eval_lookups<F: Field, P: PackedField<Scalar = F>, const NUM_COLS: usize, const NUM_PIS: usize>(
+pub(crate) fn eval_lookups<
+    F: Field,
+    P: PackedField<Scalar = F>,
+    const NUM_COLS: usize,
+    const NUM_PIS: usize,
+>(
     vars: &StarkEvaluationVars<F, P, NUM_COLS, NUM_PIS>,
     yield_constr: &mut ConstraintConsumer<P>,
     col_permuted_input: usize,
@@ -37,7 +42,7 @@ pub(crate) fn eval_lookups_circuit<
     F: RichField + Extendable<D>,
     const D: usize,
     const NUM_COLS: usize,
-	const NUM_PIS: usize,
+    const NUM_PIS: usize,
 >(
     builder: &mut CircuitBuilder<F, D>,
     vars: &StarkEvaluationTargets<D, NUM_COLS, NUM_PIS>,

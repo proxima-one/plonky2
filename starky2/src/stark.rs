@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use plonky2::field::extension::{Extendable, FieldExtension};
-use plonky2::field::types::Field;
 use plonky2::field::packed::PackedField;
+use plonky2::field::types::Field;
 use plonky2::fri::structure::{
     FriBatchInfo, FriBatchInfoTarget, FriInstanceInfo, FriInstanceInfoTarget, FriOracleInfo,
     FriPolynomialInfo,
@@ -99,7 +99,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             FriPolynomialInfo::from_range(oracle_indices.next().unwrap(), 0..Self::COLUMNS);
         let trace_oracle = FriOracleInfo {
             num_polys: Self::COLUMNS,
-            blinding: false
+            blinding: false,
         };
 
         let permutation_oracle_info = if self.uses_permutation_args() {
@@ -128,14 +128,12 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         };
 
         let num_quotient_polys = self.num_quotient_polys(config);
-        let quotient_info = FriPolynomialInfo::from_range(
-            oracle_indices.next().unwrap(),
-            0..num_quotient_polys
-        );
+        let quotient_info =
+            FriPolynomialInfo::from_range(oracle_indices.next().unwrap(), 0..num_quotient_polys);
 
         let quotient_oracle = FriOracleInfo {
             num_polys: num_quotient_polys,
-            blinding: false
+            blinding: false,
         };
 
         let zeta_batch = FriBatchInfo {
@@ -145,7 +143,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
                 .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| info))
                 .chain(std::iter::once(&quotient_info))
                 .flat_map(|info| info.iter().cloned())
-                .collect_vec()
+                .collect_vec(),
         };
         let zeta_next_batch = FriBatchInfo {
             point: zeta.scalar_mul(g),
@@ -153,31 +151,32 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
                 .chain(permutation_oracle_info.as_ref().map(|(_, info)| info))
                 .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| info))
                 .flat_map(|info| info.iter().cloned())
-                .collect()
+                .collect(),
         };
-       
-        let oracles  = std::iter::once(trace_oracle)
+
+        let oracles = std::iter::once(trace_oracle)
             .chain(permutation_oracle_info.map(|(oracle, _)| oracle))
-            .chain(ctl_zs_oracle_info.as_ref().map(|(oracle, _)| oracle.clone()))
+            .chain(
+                ctl_zs_oracle_info
+                    .as_ref()
+                    .map(|(oracle, _)| oracle.clone()),
+            )
             .chain(std::iter::once(quotient_oracle))
             .collect_vec();
-        
+
         let batches = std::iter::once(zeta_batch)
             .chain(std::iter::once(zeta_next_batch))
             .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| FriBatchInfo {
                 point: F::Extension::ONE,
-                polynomials: info.clone()
+                polynomials: info.clone(),
             }))
             .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| FriBatchInfo {
                 point: F::Extension::primitive_root_of_unity(degree_bits).inverse(),
-                polynomials: info.clone()
+                polynomials: info.clone(),
             }))
             .collect_vec();
-        
-        FriInstanceInfo {
-            oracles,
-            batches,
-        }
+
+        FriInstanceInfo { oracles, batches }
     }
 
     /// Computes the FRI instance used to prove this Stark.
@@ -188,7 +187,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         g: F,
         degree_bits: usize,
         config: &StarkConfig,
-        num_ctl_zs: usize
+        num_ctl_zs: usize,
     ) -> FriInstanceInfoTarget<D> {
         let mut oracle_indices = 0..;
 
@@ -196,7 +195,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             FriPolynomialInfo::from_range(oracle_indices.next().unwrap(), 0..Self::COLUMNS);
         let trace_oracle = FriOracleInfo {
             num_polys: Self::COLUMNS,
-            blinding: false
+            blinding: false,
         };
 
         let permutation_oracle_info = if self.uses_permutation_args() {
@@ -225,14 +224,12 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         };
 
         let num_quotient_polys = self.num_quotient_polys(config);
-        let quotient_info = FriPolynomialInfo::from_range(
-            oracle_indices.next().unwrap(),
-            0..num_quotient_polys
-        );
+        let quotient_info =
+            FriPolynomialInfo::from_range(oracle_indices.next().unwrap(), 0..num_quotient_polys);
 
         let quotient_oracle = FriOracleInfo {
             num_polys: num_quotient_polys,
-            blinding: false
+            blinding: false,
         };
 
         let zeta_batch = FriBatchInfoTarget {
@@ -242,7 +239,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
                 .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| info))
                 .chain(std::iter::once(&quotient_info))
                 .flat_map(|info| info.iter().cloned())
-                .collect_vec()
+                .collect_vec(),
         };
         let zeta_next = builder.mul_const_extension(g, zeta);
         let zeta_next_batch = FriBatchInfoTarget {
@@ -251,31 +248,42 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
                 .chain(permutation_oracle_info.as_ref().map(|(_, info)| info))
                 .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| info))
                 .flat_map(|info| info.iter().cloned())
-                .collect()
+                .collect(),
         };
-       
-        let oracles  = std::iter::once(trace_oracle)
+
+        let oracles = std::iter::once(trace_oracle)
             .chain(permutation_oracle_info.map(|(oracle, _)| oracle))
-            .chain(ctl_zs_oracle_info.as_ref().map(|(oracle, _)| oracle.clone()))
+            .chain(
+                ctl_zs_oracle_info
+                    .as_ref()
+                    .map(|(oracle, _)| oracle.clone()),
+            )
             .chain(std::iter::once(quotient_oracle))
             .collect_vec();
-        
+
         let batches = std::iter::once(zeta_batch)
             .chain(std::iter::once(zeta_next_batch))
-            .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| FriBatchInfoTarget {
-                point: builder.constant_extension(F::Extension::ONE),
-                polynomials: info.clone()
-            }))
-            .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| FriBatchInfoTarget {
-                point: builder.constant_extension(F::Extension::primitive_root_of_unity(degree_bits).inverse()),
-                polynomials: info.clone()
-            }))
+            .chain(
+                ctl_zs_oracle_info
+                    .as_ref()
+                    .map(|(_, info)| FriBatchInfoTarget {
+                        point: builder.constant_extension(F::Extension::ONE),
+                        polynomials: info.clone(),
+                    }),
+            )
+            .chain(
+                ctl_zs_oracle_info
+                    .as_ref()
+                    .map(|(_, info)| FriBatchInfoTarget {
+                        point: builder.constant_extension(
+                            F::Extension::primitive_root_of_unity(degree_bits).inverse(),
+                        ),
+                        polynomials: info.clone(),
+                    }),
+            )
             .collect_vec();
-        
-        FriInstanceInfoTarget {
-            oracles,
-            batches,
-        }
+
+        FriInstanceInfoTarget { oracles, batches }
     }
 
     /// Pairs of lists of columns that should be permutations of one another. A permutation argument

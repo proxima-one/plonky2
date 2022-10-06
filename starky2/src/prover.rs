@@ -192,7 +192,7 @@ where
         );
         (permutation_zs_commitment, permutation_challenge_sets)
     });
-    
+
     let permutation_zs_commitment = permutation_zs_commitment_challenges
         .as_ref()
         .map(|(comm, _)| comm);
@@ -416,7 +416,7 @@ where
                 )
             })
             .unzip_into_vecs(&mut ctl_zs_first, &mut ctl_zs_last);
-            
+
         (ctl_zs_first, ctl_zs_last)
     });
 
@@ -476,7 +476,7 @@ where
                             foreign_col_indices,
                         }
                     });
-            
+
             eval_vanishing_poly::<F, F, P, C, S, D, 1>(
                 stark,
                 config,

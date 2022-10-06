@@ -1,4 +1,4 @@
-use std::mem::{ManuallyDrop, size_of, transmute_copy};
+use std::mem::{size_of, transmute_copy, ManuallyDrop};
 
 use itertools::Itertools;
 use plonky2::field::polynomial::PolynomialValues;
@@ -38,7 +38,7 @@ pub fn to_u32_array_le<const N: usize>(block: [u8; N * 4]) -> [u32; N] {
 }
 
 pub fn to_u32_vec_le(data: &[u8]) -> Vec<u32> {
-    let mut u32s = vec![0; (data.len() + 3) / 4]; 
+    let mut u32s = vec![0; (data.len() + 3) / 4];
     for (o, chunk) in u32s.iter_mut().zip(data.chunks(4)) {
         if chunk.len() != 4 {
             let mut block = [0; 4];
@@ -52,7 +52,7 @@ pub fn to_u32_vec_le(data: &[u8]) -> Vec<u32> {
 }
 
 pub fn to_u32_vec_be(data: &[u8]) -> Vec<u32> {
-    let mut u32s = vec![0; (data.len() + 3) / 4]; 
+    let mut u32s = vec![0; (data.len() + 3) / 4];
     for (o, chunk) in u32s.iter_mut().zip(data.chunks(4)) {
         if chunk.len() != 4 {
             let mut block = [0; 4];

@@ -169,7 +169,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
                 .collect::<Vec<_>>()
         };
         let zeta_next = zeta.scalar_mul(g);
-        
+
         let ctl_zs_first = ctl_zs_commitment.map(|c| eval_commitment_base(F::ONE, c).to_vec());
         let ctl_zs_last = ctl_zs_commitment.map(|c| {
             eval_commitment_base(F::primitive_root_of_unity(degree_bits).inverse(), c).to_vec()
@@ -220,7 +220,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
                 };
 
                 let last_batch = FriOpeningBatch {
-                    values: last 
+                    values: last
                         .iter()
                         .copied()
                         .map(F::Extension::from_basefield)
@@ -230,7 +230,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
                 Some((first_batch, last_batch))
             }
             (None, None) => None,
-            _ => panic!("ctl_zs_first.is_some() != ctl_zs_last.is_some()")
+            _ => panic!("ctl_zs_first.is_some() != ctl_zs_last.is_some()"),
         };
 
         let mut batches = vec![zeta_batch, zeta_next_batch];

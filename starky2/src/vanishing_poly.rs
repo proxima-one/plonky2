@@ -6,10 +6,7 @@ use plonky2::plonk::config::GenericConfig;
 use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
 use crate::cross_table_lookup::{eval_cross_table_lookup_checks, CtlCheckVars};
-use crate::permutation::{
-    eval_permutation_checks,
-    PermutationCheckVars,
-};
+use crate::permutation::{eval_permutation_checks, PermutationCheckVars};
 use crate::stark::Stark;
 use crate::vars::StarkEvaluationVars;
 

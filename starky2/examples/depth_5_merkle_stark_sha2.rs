@@ -4,31 +4,29 @@
 #![feature(generic_const_exprs)]
 
 /// Example of a STARK that builds a depth-5 merkle tree using cross-table lookups
-
 use std::marker::PhantomData;
-use log::{Level, LevelFilter};
 
 use anyhow::{anyhow, Result};
+use log::{Level, LevelFilter};
 use plonky2::field::extension::Extendable;
 use plonky2::field::polynomial::PolynomialValues;
 use plonky2::hash::hash_types::{BytesHash, RichField};
 use plonky2::plonk::config::{GenericConfig, Hasher, PoseidonGoldilocksConfig};
 use plonky2::timed;
 use plonky2::util::timing::TimingTree;
-
 use starky2::all_stark::{AllProof, AllStark, CtlStark};
 use starky2::config::StarkConfig;
 use starky2::cross_table_lookup::{
     get_ctl_data, verify_cross_table_lookups, CtlCheckVars, CtlColumn, CtlDescriptor, TableID,
 };
-use starky2::get_challenges::{start_all_proof_challenger, get_ctl_challenges};
+use starky2::get_challenges::{get_ctl_challenges, start_all_proof_challenger};
 use starky2::prover::{prove_single_table, start_all_proof};
-use starky2::starky2lib::sha2_compression::{layout as sha2_layout, Sha2StarkCompressor, Sha2CompressionStark, util::compress};
 use starky2::stark::Stark;
 use starky2::starky2lib::depth_5_merkle_tree::{
-    generation::Tree5TraceGenerator,
-    layout as tree_layout,
-    Tree5Stark, 
+    generation::Tree5TraceGenerator, layout as tree_layout, Tree5Stark,
+};
+use starky2::starky2lib::sha2_compression::{
+    layout as sha2_layout, util::compress, Sha2CompressionStark, Sha2StarkCompressor,
 };
 use starky2::util::to_u32_array_be;
 use starky2::verifier::verify_stark_proof_with_ctl;
@@ -41,7 +39,9 @@ struct Merkle5Stark<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, co
     _phantom: PhantomData<(F, C)>,
 }
 
-impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> Merkle5Stark<F, C, D> {
+impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
+    Merkle5Stark<F, C, D>
+{
     fn new() -> Self {
         Merkle5Stark {
             _phantom: PhantomData,
@@ -49,7 +49,9 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> M
     }
 }
 
-impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> CtlStark<F> for Merkle5Stark<F, C, D> {
+impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> CtlStark<F>
+    for Merkle5Stark<F, C, D>
+{
     type GenData = [[u32; 8]; tree_layout::TREE_WIDTH];
 
     fn num_tables(&self) -> usize {
@@ -100,7 +102,10 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> C
         CtlDescriptor::from_instances(instances)
     }
 
-    fn generate(&self, leaves: Self::GenData) -> Result<(Vec<Vec<F>>, Vec<Vec<PolynomialValues<F>>>)> {
+    fn generate(
+        &self,
+        leaves: Self::GenData,
+    ) -> Result<(Vec<Vec<F>>, Vec<Vec<PolynomialValues<F>>>)> {
         let mut generator = Tree5TraceGenerator::<F>::new(16, leaves);
         let (_root, root_pis, hash_trace) = generator.gen_with_hash_trace(compress);
         let tree_trace = generator.into_polynomial_values();
@@ -110,8 +115,11 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> C
             compressor.add_instance(left, right)
         }
         let hash_trace = compressor.generate();
-        
-        Ok((vec![root_pis.to_vec(), vec![]], vec![tree_trace, hash_trace]))
+
+        Ok((
+            vec![root_pis.to_vec(), vec![]],
+            vec![tree_trace, hash_trace],
+        ))
     }
 }
 
@@ -134,7 +142,7 @@ where
     }
 
     // challenger order:
-    // observe trace caps 
+    // observe trace caps
     // get ctl challenges
     // get permutation challenges
     // observe permutation zs cap
@@ -178,7 +186,7 @@ where
                     v.len()
                 )
             })?;
-        
+
         let proof = prove_single_table(
             stark,
             config,
@@ -231,11 +239,8 @@ where
         let num_challenges = config.num_challenges;
 
         let ctl_descriptor = self.get_ctl_descriptor();
-        let ctl_challenges = get_ctl_challenges::<F, C, D>(
-            &mut challenger,
-            &ctl_descriptor,
-            num_challenges,
-        );
+        let ctl_challenges =
+            get_ctl_challenges::<F, C, D>(&mut challenger, &ctl_descriptor, num_challenges);
 
         let ctl_vars =
             CtlCheckVars::from_proofs(&all_proof.proofs, &ctl_descriptor, &ctl_challenges);
@@ -254,7 +259,6 @@ where
     }
 }
 
-
 fn main() -> Result<()> {
     const D: usize = 2;
     type C = PoseidonGoldilocksConfig;
@@ -265,9 +269,7 @@ fn main() -> Result<()> {
     builder.filter_level(LevelFilter::Debug);
     builder.try_init().unwrap();
 
-    let leaves = [(); 16].map(|_| {
-        to_u32_array_be(BytesHash::<32>::rand().0)
-    });
+    let leaves = [(); 16].map(|_| to_u32_array_be(BytesHash::<32>::rand().0));
 
     let all_stark = Merkle5Stark::<F, C, D>::new();
     let (public_inputses, trace_poly_valueses) = all_stark.generate(leaves)?;
@@ -277,7 +279,13 @@ fn main() -> Result<()> {
     let starks = all_stark.get_starks(&config);
 
     let mut timing = TimingTree::new("prove", Level::Debug);
-    let proof = all_stark.prove(&starks, &config, &trace_poly_valueses, &public_inputses, &mut timing)?;
+    let proof = all_stark.prove(
+        &starks,
+        &config,
+        &trace_poly_valueses,
+        &public_inputses,
+        &mut timing,
+    )?;
     timing.print();
 
     all_stark.verify(&starks, &config, &proof)

@@ -34,9 +34,9 @@ pub(crate) const WIS_FIELD_START: usize = WI_MINUS_15_START + 32;
 pub(crate) fn wi_field(i: usize) -> usize {
     match i {
         15 | 13 | 0 => panic!("invalid index into field-encoded wis"),
-        1..=12 => WIS_FIELD_START + i - 1, 
+        1..=12 => WIS_FIELD_START + i - 1,
         14 => WIS_FIELD_START + i - 2,
-        _ => unreachable!()
+        _ => unreachable!(),
     }
 }
 

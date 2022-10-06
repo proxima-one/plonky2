@@ -2,12 +2,11 @@
 /// This stark must be paired with a STARK that proves the compression function itself, with 16 input columns and 8 output columns (each 32-bit limbs) exposed via CTL.
 /// See the `sha2_merkle_stark` example to get a better idea of what this means.
 /// TODO: Documents this further
-
 use arrayref::array_mut_ref;
-use plonky2::{field::{
-    polynomial::PolynomialValues,
-    types::Field,
-}, hash::hash_types::RichField};
+use plonky2::{
+    field::{polynomial::PolynomialValues, types::Field},
+    hash::hash_types::RichField,
+};
 
 use super::layout::*;
 use crate::util::{is_power_of_two, trace_rows_to_poly_values};
@@ -134,17 +133,35 @@ impl<F: RichField> Tree5TraceGenerator<F> {
         }
     }
 
-    pub fn gen_with_hash_trace<C: Fn([u32; 8], [u32; 8]) -> [u32; 8]>(&mut self, compress: C) -> ([u32; 8], [F; NUM_PUBLIC_INPUTS], Vec<([[u32; 8]; 2], [u32; 8])>) {
+    pub fn gen_with_hash_trace<C: Fn([u32; 8], [u32; 8]) -> [u32; 8]>(
+        &mut self,
+        compress: C,
+    ) -> (
+        [u32; 8],
+        [F; NUM_PUBLIC_INPUTS],
+        Vec<([[u32; 8]; 2], [u32; 8])>,
+    ) {
         let (root, pis, hash_trace) = self.gen_inner(true, compress);
         (root, pis, hash_trace.unwrap())
     }
 
-    pub fn gen<C: Fn([u32; 8], [u32; 8]) -> [u32; 8]>(&mut self, compress: C) ->  ([u32; 8], [F; NUM_PUBLIC_INPUTS]) {
+    pub fn gen<C: Fn([u32; 8], [u32; 8]) -> [u32; 8]>(
+        &mut self,
+        compress: C,
+    ) -> ([u32; 8], [F; NUM_PUBLIC_INPUTS]) {
         let (root, pis, _) = self.gen_inner(false, compress);
         (root, pis)
     }
 
-    fn gen_inner<C: Fn([u32; 8], [u32; 8]) -> [u32; 8]>(&mut self, emit_hash_trace: bool, compress: C) -> ([u32; 8], [F; NUM_PUBLIC_INPUTS], Option<Vec<([[u32; 8]; 2], [u32; 8])>>) {
+    fn gen_inner<C: Fn([u32; 8], [u32; 8]) -> [u32; 8]>(
+        &mut self,
+        emit_hash_trace: bool,
+        compress: C,
+    ) -> (
+        [u32; 8],
+        [F; NUM_PUBLIC_INPUTS],
+        Option<Vec<([[u32; 8]; 2], [u32; 8])>>,
+    ) {
         let max_rows = self.max_rows();
 
         // load leaves into first row of val cols
@@ -282,9 +299,9 @@ impl<F: RichField> Tree5TraceGenerator<F> {
 #[cfg(test)]
 mod tests {
     use plonky2_field::{goldilocks_field::GoldilocksField, types::PrimeField64};
-    use crate::starky2lib::sha2_compression::util::compress;
 
     use super::*;
+    use crate::starky2lib::sha2_compression::util::compress;
 
     type F = GoldilocksField;
 

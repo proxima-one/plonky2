@@ -1,6 +1,7 @@
 #![allow(clippy::needless_range_loop)]
 
 use core::convert::TryInto;
+
 use arrayref::{array_mut_ref, array_ref};
 use plonky2::field::{polynomial::PolynomialValues, types::Field};
 
@@ -263,7 +264,7 @@ impl<F: Field> Sha2TraceGenerator<F> {
                     efgh[1] >>= 1;
                     efgh[2] >>= 1;
                 }
-                
+
                 curr_row[D_COL] = F::from_canonical_u32(abcd[3]);
                 curr_row[H_COL] = F::from_canonical_u32(efgh[3]);
 
@@ -325,18 +326,16 @@ impl<F: Field> Sha2TraceGenerator<F> {
                         row[wi_minus_2_bit(bit)] = F::from_canonical_u32(wi_minus_2 & 1);
                         wi_minus_2 >>= 1;
                     }
-                },
+                }
                 0 => {
                     let mut wi_minus_15 = wis[0];
                     for bit in 0..32 {
                         row[wi_minus_15_bit(bit)] = F::from_canonical_u32(wi_minus_15 & 1);
                         wi_minus_15 >>= 1;
                     }
-                },
-                14 | 1..=12 => {
-                    row[wi_field(i)] = F::from_canonical_u32(wis[i])
                 }
-                _ => unreachable!()
+                14 | 1..=12 => row[wi_field(i)] = F::from_canonical_u32(wis[i]),
+                _ => unreachable!(),
             }
         }
     }

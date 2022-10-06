@@ -297,7 +297,7 @@ where
                 vars.foreign_col_indices.push(looking_last_idx);
             }
         }
-        
+
         res
     }
 }

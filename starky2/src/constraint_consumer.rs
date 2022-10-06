@@ -77,7 +77,6 @@ impl<P: PackedField> ConstraintConsumer<P> {
         self.constraint(constraint * self.lagrange_basis_first);
     }
 
-
     /// Add one constraint, but first multiply it by a filter such that it will only apply to the
     /// last row of the trace.
     pub fn constraint_last_row(&mut self, constraint: P) {

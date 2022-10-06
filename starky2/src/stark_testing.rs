@@ -55,7 +55,6 @@ where
                 vec![alpha],
                 subgroup[i] - last,
                 subgroup[i] - first,
-
                 lagrange_first.values[i],
                 lagrange_last.values[i],
             );

@@ -1,32 +1,31 @@
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 
-use plonky2::hash::hash_types::RichField;
+use itertools::Itertools;
 use plonky2::field::extension::Extendable;
-use plonky2::iop::ext_target::ExtensionTarget;
-use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::field::extension::FieldExtension;
 use plonky2::field::packed::PackedField;
-use itertools::Itertools;
-
-use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
-use crate::stark::Stark;
-use crate::vars::{StarkEvaluationVars, StarkEvaluationTargets};
+use plonky2::hash::hash_types::RichField;
+use plonky2::iop::ext_target::ExtensionTarget;
+use plonky2::plonk::circuit_builder::CircuitBuilder;
 
 use self::layout::XorLayout;
+use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
+use crate::stark::Stark;
+use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
 
-pub mod layout;
 pub mod generation;
+pub mod layout;
 
 /// N-bit XOR up to 63 bits;
 pub struct XorStark<F: RichField + Extendable<D>, const D: usize, const N: usize> {
-    _phantom: PhantomData<F>
+    _phantom: PhantomData<F>,
 }
 
 impl<F: RichField + Extendable<D>, const D: usize, const N: usize> XorStark<F, D, N> {
     pub fn new() -> XorStark<F, D, N> {
         XorStark {
-            _phantom: PhantomData
+            _phantom: PhantomData,
         }
     }
 }
@@ -35,7 +34,6 @@ impl<F: RichField + Extendable<D>, const D: usize, const N: usize> XorStark<F, D
 pub(crate) fn xor_gen<P: PackedField>(x: P, y: P) -> P {
     x + y - x * y.doubles()
 }
-
 
 /// Computes the arithmetic generalization of `xor(x, y)`, i.e. `x + y - 2 x y`.
 pub(crate) fn xor_gen_circuit<F: RichField + Extendable<D>, const D: usize>(
@@ -49,11 +47,10 @@ pub(crate) fn xor_gen_circuit<F: RichField + Extendable<D>, const D: usize>(
 
 macro_rules! impl_xor_stark_n {
     ($n:expr) => {
-        impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for XorStark<F, D, $n>
-        {
+        impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for XorStark<F, D, $n> {
             const COLUMNS: usize = 3 + 2 * $n;
             const PUBLIC_INPUTS: usize = 0;
-        
+
             fn eval_packed_generic<FE, P, const D2: usize>(
                 &self,
                 vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
@@ -62,55 +59,66 @@ macro_rules! impl_xor_stark_n {
                 FE: FieldExtension<D2, BaseField = F>,
                 P: PackedField<Scalar = FE>,
             {
-                let row: &XorLayout::<P, $n> = vars.local_values.borrow();
+                let row: &XorLayout<P, $n> = vars.local_values.borrow();
 
-                let c: P = (0..$n).map(|i| row.a_bits[i] * FE::from_canonical_u64(1 << i)).sum();
+                let c: P = (0..$n)
+                    .map(|i| row.a_bits[i] * FE::from_canonical_u64(1 << i))
+                    .sum();
                 yield_constr.constraint(row.a - c);
-                
-                let c: P = (0..$n).map(|i| row.b_bits[i] * FE::from_canonical_u64(1 << i)).sum();
+
+                let c: P = (0..$n)
+                    .map(|i| row.b_bits[i] * FE::from_canonical_u64(1 << i))
+                    .sum();
                 yield_constr.constraint(row.b - c);
 
-                let c: P = (0..$n).map(|i| xor_gen(row.a_bits[i], row.b_bits[i]) * FE::from_canonical_u64(1 << i)).sum();
+                let c: P = (0..$n)
+                    .map(|i| xor_gen(row.a_bits[i], row.b_bits[i]) * FE::from_canonical_u64(1 << i))
+                    .sum();
                 yield_constr.constraint(row.output - c);
             }
-        
+
             fn eval_ext_circuit(
                 &self,
                 builder: &mut CircuitBuilder<F, D>,
                 vars: StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
                 yield_constr: &mut RecursiveConstraintConsumer<F, D>,
             ) {
+                let row: &XorLayout<ExtensionTarget<D>, $n> = vars.local_values.borrow();
 
-                let row: &XorLayout::<ExtensionTarget<D>, $n> = vars.local_values.borrow(); 
-
-                let addends = (0..$n).map(|i| {
-                    builder.mul_const_extension(F::from_canonical_u64(1 << i), row.a_bits[i])
-                }).collect_vec();
+                let addends = (0..$n)
+                    .map(|i| {
+                        builder.mul_const_extension(F::from_canonical_u64(1 << i), row.a_bits[i])
+                    })
+                    .collect_vec();
                 let mut c = builder.add_many_extension(addends);
                 c = builder.sub_extension(row.a, c);
                 yield_constr.constraint(builder, c);
 
-                let addends = (0..$n).map(|i| {
-                    builder.mul_const_extension(F::from_canonical_u64(1 << i), row.a_bits[i])
-                }).collect_vec();
+                let addends = (0..$n)
+                    .map(|i| {
+                        builder.mul_const_extension(F::from_canonical_u64(1 << i), row.a_bits[i])
+                    })
+                    .collect_vec();
                 let mut c = builder.add_many_extension(addends);
                 c = builder.sub_extension(row.b, c);
                 yield_constr.constraint(builder, c);
 
-                let addends = (0..$n).map(|i| {
-                    let xor = xor_gen_circuit(builder, row.a_bits[i], row.b_bits[i]);
-                    builder.mul_const_extension(F::from_canonical_u64(1 << i), xor)
-                }).collect_vec();
+                let addends = (0..$n)
+                    .map(|i| {
+                        let xor = xor_gen_circuit(builder, row.a_bits[i], row.b_bits[i]);
+                        builder.mul_const_extension(F::from_canonical_u64(1 << i), xor)
+                    })
+                    .collect_vec();
                 let mut c = builder.add_many_extension(addends);
                 c = builder.sub_extension(row.output, c);
                 yield_constr.constraint(builder, c);
             }
-        
+
             fn constraint_degree(&self) -> usize {
                 3
-            } 
+            }
         }
-    }
+    };
 }
 
 impl_xor_stark_n!(1);
@@ -179,16 +187,16 @@ impl_xor_stark_n!(63);
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::starky2lib::xor::generation::XorGenerator;
-    use crate::verifier::verify_stark_proof_no_ctl;
-    use crate::prover::prove_no_ctl;
-    use crate::config::StarkConfig;
-
     use anyhow::Result;
     use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
     use plonky2::util::timing::TimingTree;
     use rand::Rng;
+
+    use super::*;
+    use crate::config::StarkConfig;
+    use crate::prover::prove_no_ctl;
+    use crate::starky2lib::xor::generation::XorGenerator;
+    use crate::verifier::verify_stark_proof_no_ctl;
 
     macro_rules! test_xor {
         ($n:expr, $fn_name:ident) => {
@@ -199,7 +207,7 @@ mod tests {
                     type C = PoseidonGoldilocksConfig;
                     type F = <C as GenericConfig<D>>::F;
                     type S = XorStark<F, D, $n>;
-                    
+
                     let mut rng = rand::thread_rng();
                     let mut generator = XorGenerator::<F, $n>::new(32);
                     for _ in 0..32 {
@@ -207,7 +215,7 @@ mod tests {
                         let b = rng.gen_range(0..(1 << $n));
                         generator.gen_op(a, b);
                     }
-               
+
                     let config = StarkConfig::standard_fast_config();
                     let stark = S::new();
                     let trace = generator.into_polynomial_values();
