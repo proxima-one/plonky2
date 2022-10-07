@@ -176,14 +176,17 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Keccak256Spon
         // see the `keccak_256_hash` example for what this looks like in practice
         // when `invoke_permutation_filter` is not set, assert new_state is zero
         for i in 0..KECCAK_WIDTH_U32S {
-        	// degree 3
-        	yield_constr.constraint((P::ONES - curr_row.invoke_permutation_filter) * curr_row.new_state[i]);
+            // degree 3
+            yield_constr
+                .constraint((P::ONES - curr_row.invoke_permutation_filter) * curr_row.new_state[i]);
         }
 
         // assert invoke_permutation_filter is set to 1 unless we're in a padding row, in which case it's 0
         // degree 2
         yield_constr.constraint(curr_is_padding_row * curr_row.invoke_permutation_filter);
-        yield_constr.constraint((P::ONES - curr_is_padding_row) * (P::ONES - curr_row.invoke_permutation_filter));
+        yield_constr.constraint(
+            (P::ONES - curr_is_padding_row) * (P::ONES - curr_row.invoke_permutation_filter),
+        );
     }
 
     fn eval_ext_circuit(

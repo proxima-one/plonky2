@@ -43,10 +43,7 @@ impl<F: RichField + Extendable<D>, const D: usize> KeccakStark<F, D> {
 
     /// Generate the rows of the trace. Note that this does not generate the permuted columns used
     /// in our lookup arguments, as those are computed after transposing to column-wise form.
-    pub fn generate_trace_rows(
-        &self,
-        inputs: Vec<[u64; NUM_INPUTS]>,
-    ) -> Vec<[F; NUM_COLUMNS]> {
+    pub fn generate_trace_rows(&self, inputs: Vec<[u64; NUM_INPUTS]>) -> Vec<[F; NUM_COLUMNS]> {
         let num_rows = (inputs.len() * NUM_ROUNDS).next_power_of_two();
         info!("{} rows", num_rows);
         let mut rows = Vec::with_capacity(num_rows);

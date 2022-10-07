@@ -19,9 +19,7 @@ where
     [(); 3 + 2 * N]:,
 {
     pub fn new() -> XorGenerator<F, N> {
-        Self {
-            trace: Vec::new(),
-        }
+        Self { trace: Vec::new() }
     }
 
     pub const fn a_col() -> usize {

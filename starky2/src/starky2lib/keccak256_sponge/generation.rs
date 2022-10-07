@@ -102,34 +102,43 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
         }
     }
 
-    fn gen_hash_nopad(&mut self, blocks: &[[u32; KECCAK_RATE_U32S]], trace: bool) -> (u16, [u32; 8], Option<Vec<[u32; KECCAK_WIDTH_U32S]>>, Option<Vec<[u32; KECCAK_RATE_U32S]>>) {
+    fn gen_hash_nopad(
+        &mut self,
+        blocks: &[[u32; KECCAK_RATE_U32S]],
+        trace: bool,
+    ) -> (
+        u16,
+        [u32; 8],
+        Option<Vec<[u32; KECCAK_WIDTH_U32S]>>,
+        Option<Vec<[u32; KECCAK_RATE_U32S]>>,
+    ) {
         self.init_sponge();
-		let mut state_trace = if trace { Some(Vec::new())} else { None };
-		let mut xor_trace = if trace { Some(Vec::new())} else { None };
+        let mut state_trace = if trace { Some(Vec::new()) } else { None };
+        let mut xor_trace = if trace { Some(Vec::new()) } else { None };
         for block in blocks {
-			if let Some(ref mut trace) = state_trace {
-				trace.push(self.state);
-			}
+            if let Some(ref mut trace) = state_trace {
+                trace.push(self.state);
+            }
 
             let xored_rate = self.gen_absorb_block(block);
 
-			if let Some(ref mut trace) = xor_trace {
-				trace.push(xored_rate);
-			}
+            if let Some(ref mut trace) = xor_trace {
+                trace.push(xored_rate);
+            }
         }
 
-		if let Some(ref mut trace) = state_trace {
-			trace.push(self.state);
-		}
-
-        if let Some(ref mut trace) = xor_trace {
-            trace.push(*array_ref![self.state, 0, KECCAK_RATE_U32S]);
+        if let Some(ref mut trace) = state_trace {
+            trace.push(self.state);
         }
 
         let res = self.gen_squeeze();
 
-
-        (self.hash_idx, *array_ref![res, 0, 8], state_trace, xor_trace)
+        (
+            self.hash_idx,
+            *array_ref![res, 0, 8],
+            state_trace,
+            xor_trace,
+        )
     }
 
     /// adds a keccak256 hash to the trace, returning the `hash_idx` (for lookup usage) and the resulting hash
@@ -149,7 +158,15 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
         (id, res)
     }
 
-	pub fn gen_hash_with_trace(&mut self, data: &[u8]) -> (u16, [u8; 32], Vec<[u32; KECCAK_WIDTH_U32S]>, Vec<[u32; KECCAK_RATE_U32S]>) {
+    pub fn gen_hash_with_trace(
+        &mut self,
+        data: &[u8],
+    ) -> (
+        u16,
+        [u8; 32],
+        Vec<[u32; KECCAK_WIDTH_U32S]>,
+        Vec<[u32; KECCAK_RATE_U32S]>,
+    ) {
         let data = to_le_blocks(&pad101(data));
         let (id, hash_u32s, state_trace, xor_trace) = self.gen_hash_nopad(&data, true);
         let mut res = [0u8; 32];
@@ -162,7 +179,7 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
         }
 
         (id, res, state_trace.unwrap(), xor_trace.unwrap())
-	}
+    }
 
     fn init_sponge(&mut self) {
         self.state = [0; KECCAK_WIDTH_U32S];
@@ -206,7 +223,7 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
 
         row.new_state = self.state.map(F::from_canonical_u32);
         self.trace.push(row.into());
-		xored
+        xored
     }
 
     fn xor_in_input(&mut self, input: &[u32; KECCAK_RATE_U32S]) {
@@ -366,9 +383,8 @@ mod tests {
 
         let mut generator = Keccak256SpongeGenerator::<F>::new();
 
-        let _ = generator.gen_hash(
-            b"we don't play / we gon rock it till the wheels fall off / hold up hey",
-        );
+        let _ = generator
+            .gen_hash(b"we don't play / we gon rock it till the wheels fall off / hold up hey");
 
         let cols = generator.into_polynomial_values();
 

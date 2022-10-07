@@ -206,13 +206,23 @@ pub fn keccak_ctl_col_input(tid: TableID) -> impl Iterator<Item = CtlColumn> {
 }
 
 pub fn input_ctl_col(tid: TableID) -> impl Iterator<Item = CtlColumn> {
-    (0..KECCAK_RATE_U32S)
-        .map(move |i| CtlColumn::new(tid, input_block_encoded_start_col() + i, Some(mode_bits_start_col())))
+    (0..KECCAK_RATE_U32S).map(move |i| {
+        CtlColumn::new(
+            tid,
+            input_block_encoded_start_col() + i,
+            Some(mode_bits_start_col()),
+        )
+    })
 }
 
 pub fn output_ctl_col(tid: TableID) -> impl Iterator<Item = CtlColumn> {
-    (0..KECCAK_RATE_U32S)
-        .map(move |i| CtlColumn::new(tid, curr_state_rate_start_col() + i, Some(mode_bits_start_col())))
+    (0..KECCAK_RATE_U32S).map(move |i| {
+        CtlColumn::new(
+            tid,
+            curr_state_rate_start_col() + i,
+            Some(mode_bits_start_col()),
+        )
+    })
 }
 
 impl<T: Copy + Default> Default for Keccak256SpongeRow<T> {
