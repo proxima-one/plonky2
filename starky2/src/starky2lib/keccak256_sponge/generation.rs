@@ -60,7 +60,7 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
 
     pub fn into_polynomial_values(mut self) -> Vec<PolynomialValues<F>> {
         println!("pre-pad length: {}", self.trace.len());
-        let target_len_bits = self.trace.len().next_power_of_two(); 
+        let target_len_bits = log2_ceil(self.trace.len());
         self.pad_to_num_rows(target_len_bits);
         println!("post-pad length: {}", self.trace.len());
 
@@ -111,19 +111,23 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
 				trace.push(self.state);
 			}
 
-            let xored_state = self.gen_absorb_block(block);
+            let xored_rate = self.gen_absorb_block(block);
 
 			if let Some(ref mut trace) = xor_trace {
-				trace.push(xored_state);
+				trace.push(xored_rate);
 			}
-
         }
 
 		if let Some(ref mut trace) = state_trace {
 			trace.push(self.state);
 		}
 
+        if let Some(ref mut trace) = xor_trace {
+            trace.push(*array_ref![self.state, 0, KECCAK_RATE_U32S]);
+        }
+
         let res = self.gen_squeeze();
+
 
         (self.hash_idx, *array_ref![res, 0, 8], state_trace, xor_trace)
     }

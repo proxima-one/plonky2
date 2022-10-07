@@ -266,8 +266,7 @@ fn main() -> Result<()> {
     let all_stark = Merkle5Stark::<F, C, D>::new();
     let (public_inputses, trace_poly_valueses) = all_stark.generate(leaves)?;
 
-    let mut config = StarkConfig::standard_fast_config();
-    config.fri_config.cap_height = 0;
+    let config = StarkConfig::standard_fast_config();
     let starks = all_stark.get_starks(&config);
 
     let mut timing = TimingTree::new("prove", Level::Debug);

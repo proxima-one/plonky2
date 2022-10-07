@@ -1,5 +1,3 @@
-use plonky2::field::types::Field;
-
 use crate::starky2lib::keccak_f::keccak_stark::{NUM_INPUTS, NUM_ROUNDS};
 
 pub const NUM_PUBLIC_INPUTS: usize = 0;
