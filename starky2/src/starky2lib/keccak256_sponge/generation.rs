@@ -110,24 +110,26 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
         u16,
         [u32; 8],
         Option<Vec<[u32; KECCAK_WIDTH_U32S]>>,
-        Option<Vec<[u32; KECCAK_RATE_U32S]>>,
+        Option<Vec<[[u32; KECCAK_RATE_U32S]; 2]>>,
     ) {
         self.init_sponge();
-        let mut state_trace = if trace { Some(Vec::new()) } else { None };
+        let mut permutation_trace = if trace { Some(Vec::new()) } else { None };
         let mut xor_trace = if trace { Some(Vec::new()) } else { None };
         for block in blocks {
-            if let Some(ref mut trace) = state_trace {
-                trace.push(self.state);
+            if let Some(ref mut trace) = xor_trace {
+                trace.push([*block, *array_ref![self.state, 0, KECCAK_RATE_U32S]]);
             }
+            let old_state = self.state;
 
             let xored_rate = self.gen_absorb_block(block);
-
-            if let Some(ref mut trace) = xor_trace {
-                trace.push(xored_rate);
+            if let Some(ref mut trace) = permutation_trace {
+                let mut permutation_input = old_state;
+                permutation_input[..KECCAK_RATE_U32S].copy_from_slice(&xored_rate);
+                trace.push(permutation_input);
             }
         }
 
-        if let Some(ref mut trace) = state_trace {
+        if let Some(ref mut trace) = permutation_trace {
             trace.push(self.state);
         }
 
@@ -136,7 +138,7 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
         (
             self.hash_idx,
             *array_ref![res, 0, 8],
-            state_trace,
+            permutation_trace,
             xor_trace,
         )
     }
@@ -157,7 +159,9 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
 
         (id, res)
     }
-
+    
+    /// also returns a trace of the permutation inputs
+    /// and xor inputs in the order in which they are "applied"
     pub fn gen_hash_with_trace(
         &mut self,
         data: &[u8],
@@ -165,7 +169,7 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
         u16,
         [u8; 32],
         Vec<[u32; KECCAK_WIDTH_U32S]>,
-        Vec<[u32; KECCAK_RATE_U32S]>,
+        Vec<[[u32; KECCAK_RATE_U32S]; 2]>,
     ) {
         let data = to_le_blocks(&pad101(data));
         let (id, hash_u32s, state_trace, xor_trace) = self.gen_hash_nopad(&data, true);
@@ -212,12 +216,11 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
             word + F::from_canonical_u64(1 << 32) * F::from_canonical_u16(self.hash_idx)
                 + F::from_canonical_u64(1 << 48) * F::from_canonical_u16(self.block_idx)
         });
-        let xored = block
-            .zip(*array_ref![self.state, 0, KECCAK_RATE_U32S])
-            .map(|(input_block_word, state_word)| input_block_word ^ state_word);
-        row.xored_state_rate = xored.map(F::from_canonical_u32);
 
         self.xor_in_input(block);
+        let xored = *array_ref![self.state, 0, KECCAK_RATE_U32S];
+        row.xored_state_rate = xored.map(F::from_canonical_u32);
+
         keccakf_u32s(&mut self.state);
         self.block_idx += 1;
 

@@ -75,7 +75,7 @@ pub(crate) unsafe fn transmute_no_compile_time_size_checks<T, U>(value: T) -> U 
 
 pub fn bit_decompose_n_le(mut num: usize, n: usize) -> Vec<u8> {
     let mut bits = vec![];
-    for i in 0..n {
+    for _ in 0..n {
         bits.push((num & 1) as u8);
         num >>= 1;
     }

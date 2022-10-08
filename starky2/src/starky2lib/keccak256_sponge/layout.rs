@@ -133,7 +133,7 @@ pub(crate) const fn hash_idx_bytes_permuted_start_col() -> usize {
     hash_idx_bytes_start_col() + 2
 }
 
-pub(crate) const fn input_block_start_col() -> usize {
+pub const fn input_block_start_col() -> usize {
     hash_idx_bytes_permuted_start_col() + 2
 }
 
@@ -145,16 +145,16 @@ pub const fn xored_state_rate_start_col() -> usize {
     curr_state_rate_start_col() + KECCAK_RATE_U32S
 }
 
-pub const fn input_block_encoded_start_col() -> usize {
-    KECCAK_256_NUM_COLS - 8
-}
-
-pub(crate) const fn curr_state_capacity_start_col() -> usize {
+pub const fn curr_state_capacity_start_col() -> usize {
     xored_state_rate_start_col() + KECCAK_RATE_U32S
 }
 
-pub(crate) const fn new_state_start_col() -> usize {
-    curr_state_capacity_start_col() + KECCAK_WIDTH_U32S
+pub const fn new_state_start_col() -> usize {
+    curr_state_capacity_start_col() + KECCAK_CAPACITY_U32S
+}
+
+pub const fn input_block_encoded_start_col() -> usize {
+    KECCAK_256_NUM_COLS - 8
 }
 
 pub fn xor_ctl_cols_a(tid: TableID) -> impl Iterator<Item = CtlColumn> {
@@ -203,6 +203,17 @@ pub fn keccak_ctl_col_input(tid: TableID) -> impl Iterator<Item = CtlColumn> {
                 Some(invoke_permutation_filter_col()),
             )
         }))
+}
+
+pub fn keccak_ctl_col_output(tid: TableID) -> impl Iterator<Item = CtlColumn> {
+    (0..KECCAK_WIDTH_U32S)
+        .map(move |i| {
+            CtlColumn::new(
+                tid,
+                new_state_start_col() + i,
+                Some(invoke_permutation_filter_col()),
+            )
+        })
 }
 
 pub fn input_ctl_col(tid: TableID) -> impl Iterator<Item = CtlColumn> {

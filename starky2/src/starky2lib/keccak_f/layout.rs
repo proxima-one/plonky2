@@ -126,4 +126,7 @@ pub(crate) const fn reg_a_prime_prime_prime(x: usize, y: usize) -> usize {
     }
 }
 
-pub(crate) const NUM_COLUMNS: usize = REG_A_PRIME_PRIME_PRIME_0_0_HI + 1;
+pub const REG_INPUT_FILTER: usize = REG_A_PRIME_PRIME_PRIME_0_0_HI + 1;
+pub const REG_OUTPUT_FILTER: usize = REG_INPUT_FILTER + 1;
+
+pub(crate) const NUM_COLUMNS: usize = REG_OUTPUT_FILTER + 1;

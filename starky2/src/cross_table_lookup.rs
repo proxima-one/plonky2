@@ -1,4 +1,4 @@
-use anyhow::{ensure, Result};
+use anyhow::{ensure, Result, anyhow};
 use itertools::Itertools;
 use maybe_rayon::*;
 use plonky2::field::extension::{Extendable, FieldExtension};
@@ -372,15 +372,15 @@ pub fn verify_cross_table_lookups<
                 let local_z = ctl_zs_openings[tid][idx];
                 let foreign_z = ctl_zs_openings[foreign_tid.0][foreign_idx];
 
-                (local_z, foreign_z)
+                (local_z, foreign_z, tid, foreign_tid)
             })
     });
 
-    for (local_z, foreign_z) in z_pairs {
-        ensure!(
-            local_z == foreign_z,
-            "cross table lookup verification failed."
-        );
+    for (local_z, foreign_z, tid, foreign_tid) in z_pairs {
+        if local_z != foreign_z {
+            let msg = format!("cross table lookup verification failed. TableID: {}, Foreign TableID: {}", tid, foreign_tid.0);
+            return Err(anyhow!(msg));
+        }
     }
 
     Ok(())
