@@ -10,12 +10,18 @@ use starky2::{
     verifier::verify_stark_proof_no_ctl,
 };
 
+use jemallocator::Jemalloc;
+
+#[cfg(target_arch = "x86_64")]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 const D: usize = 2;
 type C = PoseidonGoldilocksConfig;
 type F = <C as GenericConfig<D>>::F;
 type S = Sha2CompressionStark<F, D>;
 
-const NUM_HASHES: usize = 63;
+const NUM_HASHES: usize = 67;
 
 fn main() {
     let mut builder = env_logger::Builder::from_default_env();
