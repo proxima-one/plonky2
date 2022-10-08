@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 
 use anyhow::{anyhow, bail, ensure};
-use ethereum_types::{BigEndianHash, U256, U512};
+use ethereum_types::{U256, U512};
 use keccak_hash::keccak;
 use plonky2::field::goldilocks_field::GoldilocksField;
 
 use crate::cpu::kernel::aggregator::KERNEL;
 use crate::cpu::kernel::assembler::Kernel;
-use crate::cpu::kernel::global_metadata::GlobalMetadata;
-use crate::cpu::kernel::txn_fields::NormalizedTxnField;
+use crate::cpu::kernel::constants::global_metadata::GlobalMetadata;
+use crate::cpu::kernel::constants::txn_fields::NormalizedTxnField;
 use crate::generation::memory::{MemoryContextState, MemorySegmentState};
 use crate::generation::prover_input::ProverInputFn;
 use crate::generation::state::GenerationState;
@@ -20,7 +20,7 @@ type F = GoldilocksField;
 /// Halt interpreter execution whenever a jump to this offset is done.
 const DEFAULT_HALT_OFFSET: usize = 0xdeadbeef;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct InterpreterMemory {
     pub(crate) context_memory: Vec<MemoryContextState>,
 }
@@ -47,10 +47,21 @@ impl InterpreterMemory {
 
 impl InterpreterMemory {
     fn mload_general(&self, context: usize, segment: Segment, offset: usize) -> U256 {
-        self.context_memory[context].segments[segment as usize].get(offset)
+        let value = self.context_memory[context].segments[segment as usize].get(offset);
+        assert!(
+            value.bits() <= segment.bit_range(),
+            "Value read from memory exceeds expected range of {:?} segment",
+            segment
+        );
+        value
     }
 
     fn mstore_general(&mut self, context: usize, segment: Segment, offset: usize, value: U256) {
+        assert!(
+            value.bits() <= segment.bit_range(),
+            "Value written to memory exceeds expected range of {:?} segment",
+            segment
+        );
         self.context_memory[context].segments[segment as usize].set(offset, value)
     }
 }
@@ -162,7 +173,7 @@ impl<'a> Interpreter<'a> {
     }
 
     pub(crate) fn get_rlp_memory(&self) -> Vec<u8> {
-        self.memory.context_memory[self.context].segments[Segment::RlpRaw as usize]
+        self.memory.context_memory[0].segments[Segment::RlpRaw as usize]
             .content
             .iter()
             .map(|x| x.as_u32() as u8)
@@ -170,7 +181,7 @@ impl<'a> Interpreter<'a> {
     }
 
     pub(crate) fn set_rlp_memory(&mut self, rlp: Vec<u8>) {
-        self.memory.context_memory[self.context].segments[Segment::RlpRaw as usize].content =
+        self.memory.context_memory[0].segments[Segment::RlpRaw as usize].content =
             rlp.into_iter().map(U256::from).collect();
     }
 
@@ -226,9 +237,10 @@ impl<'a> Interpreter<'a> {
             0x19 => self.run_not(),                                     // "NOT",
             0x1a => self.run_byte(),                                    // "BYTE",
             0x1b => self.run_shl(),                                     // "SHL",
-            0x1c => todo!(),                                            // "SHR",
+            0x1c => self.run_shr(),                                     // "SHR",
             0x1d => todo!(),                                            // "SAR",
             0x20 => self.run_keccak256(),                               // "KECCAK256",
+            0x21 => self.run_keccak_general(),                          // "KECCAK_GENERAL",
             0x30 => todo!(),                                            // "ADDRESS",
             0x31 => todo!(),                                            // "BALANCE",
             0x32 => todo!(),                                            // "ORIGIN",
@@ -263,7 +275,7 @@ impl<'a> Interpreter<'a> {
             0x56 => self.run_jump(),                                    // "JUMP",
             0x57 => self.run_jumpi(),                                   // "JUMPI",
             0x58 => todo!(),                                            // "GETPC",
-            0x59 => todo!(),                                            // "MSIZE",
+            0x59 => self.run_msize(),                                   // "MSIZE",
             0x5a => todo!(),                                            // "GAS",
             0x5b => self.run_jumpdest(),                                // "JUMPDEST",
             0x5c => todo!(),                                            // "GET_STATE_ROOT",
@@ -423,8 +435,14 @@ impl<'a> Interpreter<'a> {
 
     fn run_shl(&mut self) {
         let shift = self.pop();
-        let x = self.pop();
-        self.push(x << shift);
+        let value = self.pop();
+        self.push(value << shift);
+    }
+
+    fn run_shr(&mut self) {
+        let shift = self.pop();
+        let value = self.pop();
+        self.push(value >> shift);
     }
 
     fn run_keccak256(&mut self) {
@@ -438,7 +456,19 @@ impl<'a> Interpreter<'a> {
             })
             .collect::<Vec<_>>();
         let hash = keccak(bytes);
-        self.push(hash.into_uint());
+        self.push(U256::from_big_endian(hash.as_bytes()));
+    }
+
+    fn run_keccak_general(&mut self) {
+        let context = self.pop().as_usize();
+        let segment = Segment::all()[self.pop().as_usize()];
+        let offset = self.pop().as_usize();
+        let size = self.pop().as_usize();
+        let bytes = (offset..offset + size)
+            .map(|i| self.memory.mload_general(context, segment, i).byte(0))
+            .collect::<Vec<_>>();
+        let hash = keccak(bytes);
+        self.push(U256::from_big_endian(hash.as_bytes()));
     }
 
     fn run_prover_input(&mut self) -> anyhow::Result<()> {
@@ -503,6 +533,14 @@ impl<'a> Interpreter<'a> {
         if !b.is_zero() {
             self.jump_to(x);
         }
+    }
+
+    fn run_msize(&mut self) {
+        let num_bytes = self.memory.context_memory[self.context].segments
+            [Segment::MainMemory as usize]
+            .content
+            .len();
+        self.push(U256::from(num_bytes));
     }
 
     fn run_jumpdest(&mut self) {

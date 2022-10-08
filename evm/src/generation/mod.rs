@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use eth_trie_utils::partial_trie::PartialTrie;
-use ethereum_types::{Address, H256};
+use ethereum_types::{Address, BigEndianHash, H256};
 use plonky2::field::extension::Extendable;
 use plonky2::field::polynomial::PolynomialValues;
 use plonky2::field::types::Field;
@@ -13,7 +13,7 @@ use crate::all_stark::{AllStark, NUM_TABLES};
 use crate::config::StarkConfig;
 use crate::cpu::bootstrap_kernel::generate_bootstrap_kernel;
 use crate::cpu::columns::NUM_CPU_COLUMNS;
-use crate::cpu::kernel::global_metadata::GlobalMetadata;
+use crate::cpu::kernel::constants::global_metadata::GlobalMetadata;
 use crate::generation::state::GenerationState;
 use crate::memory::segments::Segment;
 use crate::memory::NUM_CHANNELS;
@@ -23,6 +23,7 @@ use crate::util::trace_rows_to_poly_values;
 pub(crate) mod memory;
 pub(crate) mod mpt;
 pub(crate) mod prover_input;
+pub(crate) mod rlp;
 pub(crate) mod state;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
@@ -86,14 +87,18 @@ pub(crate) fn generate_traces<F: RichField + Extendable<D>, const D: usize>(
     };
 
     let trie_roots_before = TrieRoots {
-        state_root: read_metadata(GlobalMetadata::StateTrieRootDigestBefore),
-        transactions_root: read_metadata(GlobalMetadata::TransactionsTrieRootDigestBefore),
-        receipts_root: read_metadata(GlobalMetadata::ReceiptsTrieRootDigestBefore),
+        state_root: H256::from_uint(&read_metadata(GlobalMetadata::StateTrieRootDigestBefore)),
+        transactions_root: H256::from_uint(&read_metadata(
+            GlobalMetadata::TransactionTrieRootDigestBefore,
+        )),
+        receipts_root: H256::from_uint(&read_metadata(GlobalMetadata::ReceiptTrieRootDigestBefore)),
     };
     let trie_roots_after = TrieRoots {
-        state_root: read_metadata(GlobalMetadata::StateTrieRootDigestAfter),
-        transactions_root: read_metadata(GlobalMetadata::TransactionsTrieRootDigestAfter),
-        receipts_root: read_metadata(GlobalMetadata::ReceiptsTrieRootDigestAfter),
+        state_root: H256::from_uint(&read_metadata(GlobalMetadata::StateTrieRootDigestAfter)),
+        transactions_root: H256::from_uint(&read_metadata(
+            GlobalMetadata::TransactionTrieRootDigestAfter,
+        )),
+        receipts_root: H256::from_uint(&read_metadata(GlobalMetadata::ReceiptTrieRootDigestAfter)),
     };
 
     let GenerationState {
@@ -111,7 +116,7 @@ pub(crate) fn generate_traces<F: RichField + Extendable<D>, const D: usize>(
     let keccak_trace = all_stark.keccak_stark.generate_trace(keccak_inputs, timing);
     let keccak_memory_trace = all_stark.keccak_memory_stark.generate_trace(
         keccak_memory_inputs,
-        1 << config.fri_config.cap_height,
+        config.fri_config.num_cap_elements(),
         timing,
     );
     let logic_trace = all_stark.logic_stark.generate_trace(logic_ops, timing);

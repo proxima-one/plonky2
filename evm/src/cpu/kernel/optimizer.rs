@@ -22,6 +22,7 @@ pub(crate) fn optimize_asm(code: &mut Vec<Item>) {
 /// A single optimization pass.
 fn optimize_asm_once(code: &mut Vec<Item>) {
     constant_propagation(code);
+    identity_operations(code);
     no_op_jumps(code);
     remove_swapped_pushes(code);
     remove_swaps_commutative(code);
@@ -75,14 +76,33 @@ fn constant_propagation(code: &mut Vec<Item>) {
     });
 }
 
+/// Remove identity operations, e.g. `[PUSH 1, MUL] -> []`.
+fn identity_operations(code: &mut Vec<Item>) {
+    let zero = U256::zero();
+    let one = U256::one();
+    replace_windows(code, |window| {
+        if let [Push(Literal(x)), StandardOp(op)] = window {
+            match op.as_str() {
+                "ADD" => (x == zero).then_some(vec![]),
+                "MUL" => (x == one).then_some(vec![]),
+                "OR" => (x == zero).then_some(vec![]),
+                "XOR" => (x == zero).then_some(vec![]),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    })
+}
+
 /// Remove no-op jumps: `[PUSH label, JUMP, label:] -> [label:]`.
 fn no_op_jumps(code: &mut Vec<Item>) {
     replace_windows(code, |window| {
         if let [Push(Label(l)), StandardOp(jump), decl] = window
             && &jump == "JUMP"
-            && (decl == LocalLabelDeclaration(l.clone()) || decl == GlobalLabelDeclaration(l.clone()))
+            && (decl == LocalLabelDeclaration(l.clone()) || decl == GlobalLabelDeclaration(l))
         {
-            Some(vec![LocalLabelDeclaration(l)])
+            Some(vec![decl])
         } else {
             None
         }

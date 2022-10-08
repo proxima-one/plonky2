@@ -4,18 +4,24 @@ use ethereum_types::U256;
 use hex_literal::hex;
 
 use crate::cpu::decode::invalid_opcodes_user;
+use crate::cpu::kernel::constants::context_metadata::ContextMetadata;
+use crate::cpu::kernel::constants::global_metadata::GlobalMetadata;
 use crate::cpu::kernel::constants::trie_type::PartialTrieType;
-use crate::cpu::kernel::context_metadata::ContextMetadata;
-use crate::cpu::kernel::global_metadata::GlobalMetadata;
-use crate::cpu::kernel::txn_fields::NormalizedTxnField;
+use crate::cpu::kernel::constants::txn_fields::NormalizedTxnField;
 use crate::memory::segments::Segment;
 
+pub(crate) mod context_metadata;
+pub(crate) mod global_metadata;
 pub(crate) mod trie_type;
+pub(crate) mod txn_fields;
 
 /// Constants that are accessible to our kernel assembly code.
 pub fn evm_constants() -> HashMap<String, U256> {
     let mut c = HashMap::new();
     for (name, value) in EC_CONSTANTS {
+        c.insert(name.into(), U256::from_big_endian(&value));
+    }
+    for (name, value) in HASH_CONSTANTS {
         c.insert(name.into(), U256::from_big_endian(&value));
     }
     for (name, value) in GAS_CONSTANTS {
@@ -42,6 +48,14 @@ pub fn evm_constants() -> HashMap<String, U256> {
     );
     c
 }
+
+const HASH_CONSTANTS: [(&str, [u8; 32]); 1] = [
+    // Hash of an empty node: keccak(rlp.encode(b'')).hex()
+    (
+        "EMPTY_NODE_HASH",
+        hex!("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"),
+    ),
+];
 
 const EC_CONSTANTS: [(&str, [u8; 32]); 3] = [
     (
