@@ -23,7 +23,7 @@ type C = PoseidonGoldilocksConfig;
 type F = <C as GenericConfig<D>>::F;
 type S = Sha2CompressionStark<F, D>;
 
-const NUM_HASHES: usize = 67;
+const NUM_HASHES: usize = 63;
 
 fn main() {
     let mut builder = env_logger::Builder::from_default_env();
