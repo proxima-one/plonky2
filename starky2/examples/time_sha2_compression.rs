@@ -10,6 +10,8 @@ use starky2::{
     verifier::verify_stark_proof_no_ctl,
 };
 
+
+#[cfg(target_arch = "x86_64")]
 use jemallocator::Jemalloc;
 
 #[cfg(target_arch = "x86_64")]
