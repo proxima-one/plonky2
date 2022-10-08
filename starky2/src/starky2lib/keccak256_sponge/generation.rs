@@ -159,7 +159,7 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
 
         (id, res)
     }
-    
+
     /// also returns a trace of the permutation inputs
     /// and xor inputs in the order in which they are "applied"
     pub fn gen_hash_with_trace(

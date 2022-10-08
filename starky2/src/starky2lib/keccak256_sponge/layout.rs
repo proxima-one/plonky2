@@ -206,14 +206,13 @@ pub fn keccak_ctl_col_input(tid: TableID) -> impl Iterator<Item = CtlColumn> {
 }
 
 pub fn keccak_ctl_col_output(tid: TableID) -> impl Iterator<Item = CtlColumn> {
-    (0..KECCAK_WIDTH_U32S)
-        .map(move |i| {
-            CtlColumn::new(
-                tid,
-                new_state_start_col() + i,
-                Some(invoke_permutation_filter_col()),
-            )
-        })
+    (0..KECCAK_WIDTH_U32S).map(move |i| {
+        CtlColumn::new(
+            tid,
+            new_state_start_col() + i,
+            Some(invoke_permutation_filter_col()),
+        )
+    })
 }
 
 pub fn input_ctl_col(tid: TableID) -> impl Iterator<Item = CtlColumn> {

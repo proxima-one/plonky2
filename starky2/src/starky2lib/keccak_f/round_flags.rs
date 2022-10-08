@@ -30,12 +30,21 @@ pub(crate) fn eval_round_flags<F: Field, P: PackedField<Scalar = F>>(
     }
 
     // check i/o filters are binary
-    yield_constr.constraint(vars.local_values[REG_INPUT_FILTER] * (P::ONES - vars.local_values[REG_INPUT_FILTER]));
-    yield_constr.constraint(vars.local_values[REG_OUTPUT_FILTER] * (P::ONES - vars.local_values[REG_OUTPUT_FILTER]));
+    yield_constr.constraint(
+        vars.local_values[REG_INPUT_FILTER] * (P::ONES - vars.local_values[REG_INPUT_FILTER]),
+    );
+    yield_constr.constraint(
+        vars.local_values[REG_OUTPUT_FILTER] * (P::ONES - vars.local_values[REG_OUTPUT_FILTER]),
+    );
 
     // check output filter is only set when it's the last round and input filter is only set when it's the first round
-    yield_constr.constraint(vars.local_values[REG_INPUT_FILTER] * (P::ONES - vars.local_values[reg_step(0)]));
-    yield_constr.constraint(vars.local_values[REG_OUTPUT_FILTER] * (P::ONES - vars.local_values[reg_step(NUM_ROUNDS - 1)]));
+    yield_constr.constraint(
+        vars.local_values[REG_INPUT_FILTER] * (P::ONES - vars.local_values[reg_step(0)]),
+    );
+    yield_constr.constraint(
+        vars.local_values[REG_OUTPUT_FILTER]
+            * (P::ONES - vars.local_values[reg_step(NUM_ROUNDS - 1)]),
+    );
 }
 
 pub(crate) fn eval_round_flags_recursively<F: RichField + Extendable<D>, const D: usize>(

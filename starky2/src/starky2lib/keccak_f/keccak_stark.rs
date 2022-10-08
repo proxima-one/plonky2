@@ -16,7 +16,8 @@ use crate::stark::Stark;
 use crate::starky2lib::keccak_f::constants::{rc_value, rc_value_bit};
 use crate::starky2lib::keccak_f::layout::{
     reg_a, reg_a_prime, reg_a_prime_prime, reg_a_prime_prime_0_0_bit, reg_a_prime_prime_prime,
-    reg_b, reg_c, reg_c_prime, reg_step, NUM_COLUMNS, NUM_PUBLIC_INPUTS, REG_OUTPUT_FILTER, REG_INPUT_FILTER
+    reg_b, reg_c, reg_c_prime, reg_step, NUM_COLUMNS, NUM_PUBLIC_INPUTS, REG_INPUT_FILTER,
+    REG_OUTPUT_FILTER,
 };
 use crate::starky2lib::keccak_f::logic::{
     andn, andn_gen, andn_gen_circuit, xor, xor3_gen, xor3_gen_circuit, xor_gen, xor_gen_circuit,
@@ -59,7 +60,11 @@ impl<F: RichField + Extendable<D>, const D: usize> KeccakStark<F, D> {
         rows
     }
 
-    fn generate_trace_rows_for_perm(&self, input: [u64; NUM_INPUTS], is_padding: bool) -> Vec<[F; NUM_COLUMNS]> {
+    fn generate_trace_rows_for_perm(
+        &self,
+        input: [u64; NUM_INPUTS],
+        is_padding: bool,
+    ) -> Vec<[F; NUM_COLUMNS]> {
         let mut rows = vec![[F::ZERO; NUM_COLUMNS]; NUM_ROUNDS];
 
         for x in 0..5 {
@@ -94,10 +99,23 @@ impl<F: RichField + Extendable<D>, const D: usize> KeccakStark<F, D> {
         }
     }
 
-    fn generate_trace_row_for_round(&self, row: &mut [F; NUM_COLUMNS], round: usize, is_padding: bool) {
+    fn generate_trace_row_for_round(
+        &self,
+        row: &mut [F; NUM_COLUMNS],
+        round: usize,
+        is_padding: bool,
+    ) {
         row[reg_step(round)] = F::ONE;
-        row[REG_INPUT_FILTER] = if !is_padding && round == 0 { F::ONE } else { F::ZERO };
-        row[REG_OUTPUT_FILTER] = if !is_padding && round == NUM_ROUNDS - 1 { F::ONE } else { F::ZERO };
+        row[REG_INPUT_FILTER] = if !is_padding && round == 0 {
+            F::ONE
+        } else {
+            F::ZERO
+        };
+        row[REG_OUTPUT_FILTER] = if !is_padding && round == NUM_ROUNDS - 1 {
+            F::ONE
+        } else {
+            F::ZERO
+        };
 
         // Populate C[x] = xor(A[x, 0], A[x, 1], A[x, 2], A[x, 3], A[x, 4]).
         for x in 0..5 {

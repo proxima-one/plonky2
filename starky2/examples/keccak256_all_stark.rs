@@ -28,9 +28,13 @@ use starky2::get_challenges::{get_ctl_challenges, start_all_proof_challenger};
 use starky2::prover::{prove_single_table, start_all_proof};
 use starky2::stark::Stark;
 use starky2::starky2lib::keccak256_sponge::generation::Keccak256SpongeGenerator;
-use starky2::starky2lib::keccak256_sponge::layout::{input_block_start_col, curr_state_rate_start_col, curr_state_capacity_start_col, new_state_start_col, xored_state_rate_start_col};
+use starky2::starky2lib::keccak256_sponge::layout::{
+    curr_state_capacity_start_col, curr_state_rate_start_col, input_block_start_col,
+    new_state_start_col, xored_state_rate_start_col,
+};
 use starky2::starky2lib::keccak256_sponge::{
-    layout as sponge_layout, layout::KECCAK_RATE_U32S, layout::KECCAK_CAPACITY_U32S, layout::KECCAK_WIDTH_U32S, Keccak256SpongeStark,
+    layout as sponge_layout, layout::KECCAK_CAPACITY_U32S, layout::KECCAK_RATE_U32S,
+    layout::KECCAK_WIDTH_U32S, Keccak256SpongeStark,
 };
 use starky2::starky2lib::keccak_f::{keccak_stark::KeccakStark, layout as permutation_layout};
 use starky2::starky2lib::xor::layout::XorLayout;
@@ -68,17 +72,12 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> C
 
     fn get_ctl_descriptor(&self) -> CtlDescriptor {
         // sponge looks up inputs and output from xor
-        let instances =
-            sponge_layout::xor_ctl_cols_a(SPONGE_TID)
-                .zip(XorLayout::<F, 32, 34>::ctl_cols_a(XOR_TID));
-        let instances =
-            instances.chain(sponge_layout::xor_ctl_cols_b(SPONGE_TID).zip(XorLayout::<
-                F,
-                32,
-                34
-            >::ctl_cols_b(
-                XOR_TID
-            )));
+        let instances = sponge_layout::xor_ctl_cols_a(SPONGE_TID)
+            .zip(XorLayout::<F, 32, 34>::ctl_cols_a(XOR_TID));
+        let instances = instances.chain(
+            sponge_layout::xor_ctl_cols_b(SPONGE_TID)
+                .zip(XorLayout::<F, 32, 34>::ctl_cols_b(XOR_TID)),
+        );
         let instances = instances.chain(
             sponge_layout::xor_ctl_cols_output(SPONGE_TID)
                 .zip(XorLayout::<F, 32, 34>::ctl_cols_output(XOR_TID)),
@@ -139,10 +138,9 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> C
 
                 input
             });
-            
+
             keccak_f_inputs.extend(permutation_inputs_u64)
         }
-
 
         let permutation_generator = KeccakStark::<F, D>::new();
 
@@ -155,65 +153,142 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> C
         let mut xor_b_vals = HashSet::new();
         let mut xor_output_vals = HashSet::new();
 
-        for ((a, b), output) in xor_trace[0].values.iter().zip(xor_trace[1].values.iter()).zip(xor_trace[2].values.iter()) {
+        for ((a, b), output) in xor_trace[0]
+            .values
+            .iter()
+            .zip(xor_trace[1].values.iter())
+            .zip(xor_trace[2].values.iter())
+        {
             xor_a_vals.insert(*a);
             xor_b_vals.insert(*b);
             xor_output_vals.insert(*output);
         }
 
         for xor_input_col in (0..KECCAK_RATE_U32S).map(|i| i + input_block_start_col()) {
-            for (row, val) in sponge_trace[xor_input_col].values.iter().enumerate().filter(|&(i, _)| sponge_trace[0].values[i] == F::ONE) {
-                assert!(xor_a_vals.contains(val),"xor a value not found: value: {}, sponge_col: {}. sponge_row: {}", val, xor_input_col, row);
+            for (row, val) in sponge_trace[xor_input_col]
+                .values
+                .iter()
+                .enumerate()
+                .filter(|&(i, _)| sponge_trace[0].values[i] == F::ONE)
+            {
+                assert!(
+                    xor_a_vals.contains(val),
+                    "xor a value not found: value: {}, sponge_col: {}. sponge_row: {}",
+                    val,
+                    xor_input_col,
+                    row
+                );
             }
         }
 
         for xor_input_col in (0..KECCAK_RATE_U32S).map(|i| i + curr_state_rate_start_col()) {
-            for (row, val) in sponge_trace[xor_input_col].values.iter().enumerate().filter(|&(i, _)| sponge_trace[0].values[i] == F::ONE) {
-                assert!(xor_b_vals.contains(val),"xor b value not found: value: {}, sponge_col: {}. sponge_row: {}", val, xor_input_col, row);
+            for (row, val) in sponge_trace[xor_input_col]
+                .values
+                .iter()
+                .enumerate()
+                .filter(|&(i, _)| sponge_trace[0].values[i] == F::ONE)
+            {
+                assert!(
+                    xor_b_vals.contains(val),
+                    "xor b value not found: value: {}, sponge_col: {}. sponge_row: {}",
+                    val,
+                    xor_input_col,
+                    row
+                );
             }
         }
 
         for xor_input_col in (0..KECCAK_RATE_U32S).map(|i| i + xored_state_rate_start_col()) {
-            for (row, val) in sponge_trace[xor_input_col].values.iter().enumerate().filter(|&(i, _)| sponge_trace[0].values[i] == F::ONE) {
-                assert!(xor_output_vals.contains(val),"xor output value not found: value: {}, sponge_col: {}. sponge_row: {}", val, xor_input_col, row);
+            for (row, val) in sponge_trace[xor_input_col]
+                .values
+                .iter()
+                .enumerate()
+                .filter(|&(i, _)| sponge_trace[0].values[i] == F::ONE)
+            {
+                assert!(
+                    xor_output_vals.contains(val),
+                    "xor output value not found: value: {}, sponge_col: {}. sponge_row: {}",
+                    val,
+                    xor_input_col,
+                    row
+                );
             }
         }
 
-        let permutation_input_vals = (0..KECCAK_WIDTH_U32S).map(permutation_layout::reg_input_limb).map(|col| {
-            let mut vals = HashSet::new();
-            for (_, val) in permutation_trace[col].values.iter().enumerate().filter(|&(i, _)| permutation_trace[permutation_layout::REG_INPUT_FILTER].values[i] == F::ONE) {
-                vals.insert(*val);
-            }
-
-            vals
-        }).collect::<Vec<_>>();
-       
-        let mut first_output_col_filtered = Vec::new();
-        let permutation_output_vals = (0..KECCAK_WIDTH_U32S).map(permutation_layout::reg_output_limb).map(|col| {
-            let mut vals = HashSet::new();
-            for (_, val) in permutation_trace[col].values.iter().enumerate().filter(|&(i, _)| permutation_trace[permutation_layout::REG_OUTPUT_FILTER].values[i] == F::ONE) {
-                vals.insert(*val);
-                if col == permutation_layout::reg_output_limb(0) {
-                    first_output_col_filtered.push(*val);
+        let permutation_input_vals = (0..KECCAK_WIDTH_U32S)
+            .map(permutation_layout::reg_input_limb)
+            .map(|col| {
+                let mut vals = HashSet::new();
+                for (_, val) in
+                    permutation_trace[col]
+                        .values
+                        .iter()
+                        .enumerate()
+                        .filter(|&(i, _)| {
+                            permutation_trace[permutation_layout::REG_INPUT_FILTER].values[i]
+                                == F::ONE
+                        })
+                {
+                    vals.insert(*val);
                 }
-            }
 
-            vals
-        }).collect::<Vec<_>>();
+                vals
+            })
+            .collect::<Vec<_>>();
+
+        let mut first_output_col_filtered = Vec::new();
+        let permutation_output_vals = (0..KECCAK_WIDTH_U32S)
+            .map(permutation_layout::reg_output_limb)
+            .map(|col| {
+                let mut vals = HashSet::new();
+                for (_, val) in
+                    permutation_trace[col]
+                        .values
+                        .iter()
+                        .enumerate()
+                        .filter(|&(i, _)| {
+                            permutation_trace[permutation_layout::REG_OUTPUT_FILTER].values[i]
+                                == F::ONE
+                        })
+                {
+                    vals.insert(*val);
+                    if col == permutation_layout::reg_output_limb(0) {
+                        first_output_col_filtered.push(*val);
+                    }
+                }
+
+                vals
+            })
+            .collect::<Vec<_>>();
 
         for (row, i) in (0..KECCAK_RATE_U32S).enumerate() {
             let col = i + xored_state_rate_start_col();
-            let filter = sponge_trace[sponge_layout::invoke_permutation_filter_col()].values[row] == F::ONE;
+            let filter =
+                sponge_trace[sponge_layout::invoke_permutation_filter_col()].values[row] == F::ONE;
             if filter {
-                assert!(permutation_input_vals[i].contains(&sponge_trace[col].values[row]), "permutation input value not found: value: {}, sponge_col: {}. sponge_row: {}", sponge_trace[col].values[row], col, row);
+                assert!(
+                    permutation_input_vals[i].contains(&sponge_trace[col].values[row]),
+                    "permutation input value not found: value: {}, sponge_col: {}. sponge_row: {}",
+                    sponge_trace[col].values[row],
+                    col,
+                    row
+                );
             }
         }
 
         for (row, i) in (0..KECCAK_CAPACITY_U32S).enumerate() {
             let col = i + curr_state_capacity_start_col();
-            let filter = sponge_trace[sponge_layout::invoke_permutation_filter_col()].values[row] == F::ONE;
+            let filter =
+                sponge_trace[sponge_layout::invoke_permutation_filter_col()].values[row] == F::ONE;
             if filter {
-                assert!(permutation_input_vals[i + KECCAK_RATE_U32S].contains(&sponge_trace[col].values[row]), "permutation input value not found: value: {}, sponge_col: {}. sponge_row: {}", sponge_trace[col].values[row], col, row);
+                assert!(
+                    permutation_input_vals[i + KECCAK_RATE_U32S]
+                        .contains(&sponge_trace[col].values[row]),
+                    "permutation input value not found: value: {}, sponge_col: {}. sponge_row: {}",
+                    sponge_trace[col].values[row],
+                    col,
+                    row
+                );
             }
         }
 
@@ -221,7 +296,9 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> C
         for i in 0..KECCAK_WIDTH_U32S {
             let col = i + new_state_start_col();
             for row in 0..sponge_trace[col].values.len() {
-                let filter = sponge_trace[sponge_layout::invoke_permutation_filter_col()].values[row] == F::ONE;
+                let filter = sponge_trace[sponge_layout::invoke_permutation_filter_col()].values
+                    [row]
+                    == F::ONE;
                 if filter {
                     if i == 0 {
                         first_output_col_sponge.push(sponge_trace[col].values[row])

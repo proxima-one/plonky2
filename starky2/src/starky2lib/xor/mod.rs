@@ -18,11 +18,18 @@ pub mod generation;
 pub mod layout;
 
 /// N-bit XOR up to 63 bits;
-pub struct XorStark<F: RichField + Extendable<D>, const D: usize, const N: usize, const NUM_CHANNELS: usize> {
+pub struct XorStark<
+    F: RichField + Extendable<D>,
+    const D: usize,
+    const N: usize,
+    const NUM_CHANNELS: usize,
+> {
     _phantom: PhantomData<F>,
 }
 
-impl<F: RichField + Extendable<D>, const D: usize, const N: usize, const NUM_CHANNELS: usize> XorStark<F, D, N, NUM_CHANNELS> {
+impl<F: RichField + Extendable<D>, const D: usize, const N: usize, const NUM_CHANNELS: usize>
+    XorStark<F, D, N, NUM_CHANNELS>
+{
     pub fn new() -> XorStark<F, D, N, NUM_CHANNELS> {
         XorStark {
             _phantom: PhantomData,
@@ -47,7 +54,9 @@ pub(crate) fn xor_gen_circuit<F: RichField + Extendable<D>, const D: usize>(
 
 macro_rules! impl_xor_stark_n {
     ($n:expr, $channels:expr) => {
-        impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for XorStark<F, D, $n, $channels> {
+        impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D>
+            for XorStark<F, D, $n, $channels>
+        {
             const COLUMNS: usize = 3 + 2 * $n + $channels;
             const PUBLIC_INPUTS: usize = 0;
 
@@ -77,7 +86,8 @@ macro_rules! impl_xor_stark_n {
                 yield_constr.constraint(row.output - c);
 
                 for i in 0..$channels {
-                    yield_constr.constraint(row.channel_filters[i] * (P::ONES - row.channel_filters[i]));
+                    yield_constr
+                        .constraint(row.channel_filters[i] * (P::ONES - row.channel_filters[i]));
                 }
 
                 for i in 0..$n {
@@ -128,7 +138,7 @@ macro_rules! impl_xor_stark_n {
                     c = builder.mul_extension(row.channel_filters[i], c);
                     yield_constr.constraint(builder, c);
                 }
-                
+
                 for i in 0..$n {
                     let mut c = builder.sub_extension(one_ext, row.a_bits[i]);
                     c = builder.mul_extension(row.a_bits[i], c);
@@ -280,7 +290,6 @@ impl_xor_starks_for_num_channels!(34);
 // impl_xor_starks_for_num_channels!(62);
 // impl_xor_starks_for_num_channels!(63);
 // impl_xor_starks_for_num_channels!(64);
-
 
 #[cfg(test)]
 mod tests {

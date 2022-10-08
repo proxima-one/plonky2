@@ -43,7 +43,7 @@ where
         layout.a = F::from_canonical_u64(a);
         layout.b = F::from_canonical_u64(b);
         layout.output = F::from_canonical_u64(a ^ b);
-        
+
         if NUM_CHANNELS > 0 {
             assert!(channel < NUM_CHANNELS);
             layout.channel_filters[channel] = F::ONE;
@@ -62,7 +62,8 @@ where
     pub fn into_polynomial_values(mut self) -> Vec<PolynomialValues<F>> {
         if !is_power_of_two(self.trace.len() as u64) {
             let next_power_of_two = self.trace.len().next_power_of_two();
-            self.trace.resize(next_power_of_two, [F::ZERO; 3 + 2 * N + NUM_CHANNELS]);
+            self.trace
+                .resize(next_power_of_two, [F::ZERO; 3 + 2 * N + NUM_CHANNELS]);
         }
         trace_rows_to_poly_values(self.trace)
     }
