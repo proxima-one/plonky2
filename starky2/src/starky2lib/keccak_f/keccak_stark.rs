@@ -629,6 +629,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(release)]
     #[test]
     fn test_keccak_stark() -> Result<()> {
         const NUM_PERMS: usize = 85;
