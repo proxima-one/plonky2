@@ -19,13 +19,21 @@ use crate::constraint_consumer::ConstraintConsumer;
 use crate::stark::Stark;
 use crate::vars::StarkEvaluationVars;
 
-pub struct Ecgfp5Stark<F: RichField + Extendable<D>, const D: usize> {
+pub struct Ecgfp5Stark<F: RichField + Extendable<D>, const D: usize, const NUM_CHANNELS: usize> {
 	_phantom: PhantomData<F>
+}
+
+impl<F: RichField + Extendable<D>, const D: usize, const NUM_CHANNELS: usize> Ecgfp5Stark<F, D, NUM_CHANNELS> {
+	pub fn new() -> Self {
+		Self {
+			_phantom: PhantomData
+		}
+	}
 }
 
 // TODO: wrap this in a macro so it can be instasntiated for different sizes
 const NUM_CHANNELS: usize = 3;
-impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Ecgfp5Stark<F, D>
+impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Ecgfp5Stark<F, D, NUM_CHANNELS>
 where
 	[(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:
 {
@@ -182,7 +190,7 @@ where
 		// x3 = lambda^2 - x1 - x2
 		let x3 = gfp5_sub(
 			&gfp5_sub(
-				&gfp5_mul(&lambda, &lambda),
+				&gfp5_mul(&curr_row.add_lambda, &curr_row.add_lambda),
 				&curr_row.add_lhs_input[0],
 			),
 			&curr_row.input_2[0],
@@ -192,7 +200,7 @@ where
 		// y3 = lambda * (x1 - x3) - y1
 		let y3 = gfp5_sub(
 			&gfp5_mul(
-				&lambda,
+				&curr_row.add_lambda,
 				&gfp5_sub(
 					&curr_row.add_lhs_input[0],
 					&curr_row.add_x3,
@@ -250,13 +258,13 @@ where
 		constraint_ext_is_equal(&lambda, &curr_row.dbl_lambda, yield_constr);
 
 		// x3 = lambda^2 - x1 - x2 = lambda^2 since x1 = x2
-		let x3 = gfp5_mul(&lambda, &lambda);
+		let x3 = gfp5_mul(&curr_row.dbl_lambda, &curr_row.dbl_lambda);
 		constraint_ext_is_equal(&curr_row.dbl_x3, &x3, yield_constr);
 
 		// y3 = lambda * (x1 - x3) - y1
 		let y3 = gfp5_sub(
 			&gfp5_mul(
-				&lambda,
+				&curr_row.dbl_lambda,
 				&gfp5_sub(
 					&curr_row.input_1[0],
 					&curr_row.dbl_x3,
@@ -343,9 +351,9 @@ where
 		let prod = curr_row.scalar * curr_row.scalar_inv;
 
 		// assert that the product of the scalar and its purported inverse is binary
-		yield_constr.constraint((P::ONES - prod) * prod);
 		// assert that is_last_step_of_scalar_mul is equal to the 1 if prod is zero, 0 otherwise
-		yield_constr.constraint(curr_row.is_last_step_of_scalar_mul - (P::ONES - prod));
+		yield_constr.constraint(curr_row.is_last_step_of_scalar_mul * (P::ONES - prod));
+		yield_constr.constraint((P::ONES - curr_row.is_last_step_of_scalar_mul) * prod);
 		// this alone is not enough, as a malicious prover could simply set the inverse to zero 
 		// even for a for a nonzero scalar
 		// the way we deal with this is to additionally assert that when the flag is set,
@@ -548,4 +556,24 @@ fn constraint_ext_is_zero<P: PackedField>(a: &Ext<P>, yield_constr: &mut Constra
 
 fn or_gen<P: PackedField>(a: P, b: P) -> P {
 	a + b - a * b
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use anyhow::Result;
+	use plonky2::plonk::config::{PoseidonGoldilocksConfig, GenericConfig};
+	use crate::{starky2lib::ecgfp5_vartime::generation::Ecgfp5StarkGenerator, stark_testing::test_stark_low_degree};
+
+    const D: usize = 2;
+	const NUM_CHANNELS: usize = 3;
+    type C = PoseidonGoldilocksConfig;
+    type F = <C as GenericConfig<D>>::F;
+    type S = Ecgfp5Stark<F, D, NUM_CHANNELS>;
+
+    #[test]
+    fn test_stark_degree() -> Result<()> {
+        let stark = Ecgfp5Stark::<F, D, NUM_CHANNELS>::new();
+        test_stark_low_degree(stark)
+    }
 }
