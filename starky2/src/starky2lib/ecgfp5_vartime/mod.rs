@@ -151,7 +151,7 @@ where
 				&three(),
 				&gfp5_mul(&curr_row.add_lhs_input[0], &curr_row.add_lhs_input[0]),
 			),
-			&curve_a()
+			&curve_a_encoded()
 		);
 
 		for i in 0..5 {
@@ -210,252 +210,252 @@ where
 		);
 
 		// I3 = xs_are_same & ys_are_same = xs_are_same * ys_are_same
-		let i3 = xs_are_not_same * (P::ONES - curr_row.add_ys_are_same);
+		let i3 = curr_row.add_xs_are_same * curr_row.add_ys_are_same;
 		yield_constr.constraint(curr_row.add_i3 - i3);
 
-		// conditionally set outputs based on infinity flags
-		constraint_ext_is_equal_cond(curr_row.add_lhs_input_is_infinity, &curr_row.add_output[0], &curr_row.input_2[0], &curr_row.add_x3, yield_constr);
-		constraint_ext_is_equal_cond(curr_row.add_lhs_input_is_infinity, &curr_row.add_output[1], &curr_row.input_2[1], &y3, yield_constr);
-		yield_constr.constraint(curr_row.add_lhs_input_is_infinity * (curr_row.add_output_is_infinity - curr_row.input_2_is_infinity));
-		yield_constr.constraint(curr_row.input_2_is_infinity * (curr_row.add_output_is_infinity - curr_row.add_lhs_input_is_infinity));
+		// // conditionally set outputs based on infinity flags
+		// constraint_ext_is_equal_cond(curr_row.add_lhs_input_is_infinity, &curr_row.add_output[0], &curr_row.input_2[0], &curr_row.add_x3, yield_constr);
+		// constraint_ext_is_equal_cond(curr_row.add_lhs_input_is_infinity, &curr_row.add_output[1], &curr_row.input_2[1], &y3, yield_constr);
+		// yield_constr.constraint(curr_row.add_lhs_input_is_infinity * (curr_row.add_output_is_infinity - curr_row.input_2_is_infinity));
+		// yield_constr.constraint(curr_row.input_2_is_infinity * (curr_row.add_output_is_infinity - curr_row.add_lhs_input_is_infinity));
 
-		let i1_or_i2 = or_gen(curr_row.add_lhs_input_is_infinity, curr_row.input_2_is_infinity);
-		yield_constr.constraint((P::ONES - i1_or_i2) * (curr_row.add_output_is_infinity - curr_row.add_i3));
+		// let i1_or_i2 = or_gen(curr_row.add_lhs_input_is_infinity, curr_row.input_2_is_infinity);
+		// yield_constr.constraint((P::ONES - i1_or_i2) * (curr_row.add_output_is_infinity - curr_row.add_i3));
 
-		// POINT DOUBLER
+		// // POINT DOUBLER
 
-		// lambda0 = 3*x1^2 + A
-		let three_x1_squared_plus_a = gfp5_add(
-			&gfp5_mul(
-				&three(),
-				&gfp5_mul(&curr_row.input_1[0], &curr_row.input_1[0]),
-			),
-			&curve_a()
-		);
-		constraint_ext_is_equal(&curr_row.dbl_num_lambda, &three_x1_squared_plus_a, yield_constr);
+		// // lambda0 = 3*x1^2 + A
+		// let three_x1_squared_plus_a = gfp5_add(
+		// 	&gfp5_mul(
+		// 		&three(),
+		// 		&gfp5_mul(&curr_row.input_1[0], &curr_row.input_1[0]),
+		// 	),
+		// 	&curve_a()
+		// );
+		// constraint_ext_is_equal(&curr_row.dbl_num_lambda, &three_x1_squared_plus_a, yield_constr);
 
-		// lambda1 = 2*y1
-		let two_y1 = gfp5_add(&curr_row.input_1[1], &curr_row.input_1[1]);
-		constraint_ext_is_equal(&curr_row.dbl_denom_lambda, &two_y1, yield_constr);
+		// // lambda1 = 2*y1
+		// let two_y1 = gfp5_add(&curr_row.input_1[1], &curr_row.input_1[1]);
+		// constraint_ext_is_equal(&curr_row.dbl_denom_lambda, &two_y1, yield_constr);
 
-		// lambda1_is_zero should be binary
-		yield_constr.constraint((P::ONES - curr_row.dbl_lambda_denom_is_zero) * curr_row.dbl_lambda_denom_is_zero);
-		// if lambda1_is_zero then lambda1 and lambda1_inv must both zero
-		for i in 0..5 {
-			yield_constr.constraint(curr_row.dbl_lambda_denom_is_zero * curr_row.dbl_denom_lambda[i]);
-			yield_constr.constraint(curr_row.dbl_lambda_denom_is_zero * curr_row.dbl_denom_lambda_inv[i]);
-		}
+		// // lambda1_is_zero should be binary
+		// yield_constr.constraint((P::ONES - curr_row.dbl_lambda_denom_is_zero) * curr_row.dbl_lambda_denom_is_zero);
+		// // if lambda1_is_zero then lambda1 and lambda1_inv must both zero
+		// for i in 0..5 {
+		// 	yield_constr.constraint(curr_row.dbl_lambda_denom_is_zero * curr_row.dbl_denom_lambda[i]);
+		// 	yield_constr.constraint(curr_row.dbl_lambda_denom_is_zero * curr_row.dbl_denom_lambda_inv[i]);
+		// }
 
-		// lambda1 * lambda1_inv = 1 unless if lambda1 is zero, in which case it's zero	
-		let prod = gfp5_mul(&curr_row.dbl_denom_lambda, &curr_row.dbl_denom_lambda_inv);
-		yield_constr.constraint((P::ONES - curr_row.dbl_lambda_denom_is_zero) * (P::ONES - prod[0]));
-		for i in 1..5 {
-			yield_constr.constraint((P::ONES - curr_row.dbl_lambda_denom_is_zero) * prod[i]);
-		}
+		// // lambda1 * lambda1_inv = 1 unless if lambda1 is zero, in which case it's zero	
+		// let prod = gfp5_mul(&curr_row.dbl_denom_lambda, &curr_row.dbl_denom_lambda_inv);
+		// yield_constr.constraint((P::ONES - curr_row.dbl_lambda_denom_is_zero) * (P::ONES - prod[0]));
+		// for i in 1..5 {
+		// 	yield_constr.constraint((P::ONES - curr_row.dbl_lambda_denom_is_zero) * prod[i]);
+		// }
 
-		// lambda = lambda0 * lambda1_inv
-		let lambda = gfp5_mul(&curr_row.dbl_num_lambda, &curr_row.dbl_denom_lambda_inv);
-		constraint_ext_is_equal(&lambda, &curr_row.dbl_lambda, yield_constr);
+		// // lambda = lambda0 * lambda1_inv
+		// let lambda = gfp5_mul(&curr_row.dbl_num_lambda, &curr_row.dbl_denom_lambda_inv);
+		// constraint_ext_is_equal(&lambda, &curr_row.dbl_lambda, yield_constr);
 
-		// x3 = lambda^2 - x1 - x2 = lambda^2 since x1 = x2
-		let x3 = gfp5_mul(&curr_row.dbl_lambda, &curr_row.dbl_lambda);
-		constraint_ext_is_equal(&curr_row.dbl_x3, &x3, yield_constr);
+		// // x3 = lambda^2 - x1 - x2 = lambda^2 since x1 = x2
+		// let x3 = gfp5_mul(&curr_row.dbl_lambda, &curr_row.dbl_lambda);
+		// constraint_ext_is_equal(&curr_row.dbl_x3, &x3, yield_constr);
 
-		// y3 = lambda * (x1 - x3) - y1
-		let y3 = gfp5_sub(
-			&gfp5_mul(
-				&curr_row.dbl_lambda,
-				&gfp5_sub(
-					&curr_row.input_1[0],
-					&curr_row.dbl_x3,
-				),
-			),
-			&curr_row.input_1[1],
-		);
+		// // y3 = lambda * (x1 - x3) - y1
+		// let y3 = gfp5_sub(
+		// 	&gfp5_mul(
+		// 		&curr_row.dbl_lambda,
+		// 		&gfp5_sub(
+		// 			&curr_row.input_1[0],
+		// 			&curr_row.dbl_x3,
+		// 		),
+		// 	),
+		// 	&curr_row.input_1[1],
+		// );
 
-		// I3 = xs_are_not_same & ys_are_not_same = 0 since we're doubling
-		// conditionally set outputs based on infinity flags
-		constraint_ext_is_equal_cond(curr_row.input_1_is_infinity, &curr_row.dbl_output[0], &curr_row.input_1[0], &curr_row.dbl_x3, yield_constr);
-		constraint_ext_is_equal_cond(curr_row.input_1_is_infinity, &curr_row.dbl_output[1], &curr_row.input_1[1], &y3, yield_constr);
-		yield_constr.constraint((P::ONES - curr_row.input_1_is_infinity) * curr_row.dbl_output_is_infinity);
-		yield_constr.constraint(curr_row.input_1_is_infinity * (P::ONES - curr_row.dbl_output_is_infinity));
+		// // I3 = xs_are_not_same & ys_are_not_same = 0 since we're doubling
+		// // conditionally set outputs based on infinity flags
+		// constraint_ext_is_equal_cond(curr_row.input_1_is_infinity, &curr_row.dbl_output[0], &curr_row.input_1[0], &curr_row.dbl_x3, yield_constr);
+		// constraint_ext_is_equal_cond(curr_row.input_1_is_infinity, &curr_row.dbl_output[1], &curr_row.input_1[1], &y3, yield_constr);
+		// yield_constr.constraint((P::ONES - curr_row.input_1_is_infinity) * curr_row.dbl_output_is_infinity);
+		// yield_constr.constraint(curr_row.input_1_is_infinity * (P::ONES - curr_row.dbl_output_is_infinity));
 
-		// filter cols are binary
-		for i in 0..NUM_CHANNELS {
-			for opcode in 0..4 {
-				yield_constr.constraint((P::ONES - curr_row.filter_cols_by_opcode[i][opcode]) * curr_row.filter_cols_by_opcode[i][opcode]);
-			}
-		}
+		// // filter cols are binary
+		// for i in 0..NUM_CHANNELS {
+		// 	for opcode in 0..4 {
+		// 		yield_constr.constraint((P::ONES - curr_row.filter_cols_by_opcode[i][opcode]) * curr_row.filter_cols_by_opcode[i][opcode]);
+		// 	}
+		// }
 
-		// ADD
+		// // ADD
 
-		// add happens in a single row, so only the corresponding input / output filters may be set
-		for i in 0..NUM_CHANNELS {
-			yield_constr.constraint(curr_opcode_is_add * curr_row.filter_cols_by_opcode[i][1]);
-			yield_constr.constraint(curr_opcode_is_add * curr_row.filter_cols_by_opcode[i][2]);
-			yield_constr.constraint(curr_opcode_is_add * curr_row.filter_cols_by_opcode[i][3]);
-		}
+		// // add happens in a single row, so only the corresponding input / output filters may be set
+		// for i in 0..NUM_CHANNELS {
+		// 	yield_constr.constraint(curr_opcode_is_add * curr_row.filter_cols_by_opcode[i][1]);
+		// 	yield_constr.constraint(curr_opcode_is_add * curr_row.filter_cols_by_opcode[i][2]);
+		// 	yield_constr.constraint(curr_opcode_is_add * curr_row.filter_cols_by_opcode[i][3]);
+		// }
 		
-		// when opcode is add, microcode should be the same
-		yield_constr.constraint(curr_opcode_is_add * (curr_opcode_is_add - curr_microcode_is_add));
+		// // when opcode is add, microcode should be the same
+		// yield_constr.constraint(curr_opcode_is_add * (curr_opcode_is_add - curr_microcode_is_add));
 
-		// set output to add's output
-		for i in 0..5 {
-			yield_constr.constraint(curr_opcode_is_add * (curr_row.output[0][i] - curr_row.add_output[0][i]));
-			yield_constr.constraint(curr_opcode_is_add * (curr_row.output[1][i] - curr_row.add_output[1][i]));
-		}
-		yield_constr.constraint(curr_opcode_is_add * (curr_row.output_is_infinity - curr_row.add_output_is_infinity));
+		// // set output to add's output
+		// for i in 0..5 {
+		// 	yield_constr.constraint(curr_opcode_is_add * (curr_row.output[0][i] - curr_row.add_output[0][i]));
+		// 	yield_constr.constraint(curr_opcode_is_add * (curr_row.output[1][i] - curr_row.add_output[1][i]));
+		// }
+		// yield_constr.constraint(curr_opcode_is_add * (curr_row.output_is_infinity - curr_row.add_output_is_infinity));
 	
-		// DOUBLE AND ADD
+		// // DOUBLE AND ADD
 
-		// double_and_add happens in a single row, so only the corresponding input / output filters may be set
-		for i in 0..NUM_CHANNELS {
-			yield_constr.constraint(curr_opcode_is_double_and_add * curr_row.filter_cols_by_opcode[i][0]);
-			yield_constr.constraint(curr_opcode_is_double_and_add * curr_row.filter_cols_by_opcode[i][2]);
-			yield_constr.constraint(curr_opcode_is_double_and_add * curr_row.filter_cols_by_opcode[i][3]);
-		}
+		// // double_and_add happens in a single row, so only the corresponding input / output filters may be set
+		// for i in 0..NUM_CHANNELS {
+		// 	yield_constr.constraint(curr_opcode_is_double_and_add * curr_row.filter_cols_by_opcode[i][0]);
+		// 	yield_constr.constraint(curr_opcode_is_double_and_add * curr_row.filter_cols_by_opcode[i][2]);
+		// 	yield_constr.constraint(curr_opcode_is_double_and_add * curr_row.filter_cols_by_opcode[i][3]);
+		// }
 
-		// when opcode is double and add add, microcode should be the same
-		yield_constr.constraint(curr_opcode_is_double_and_add * (curr_opcode_is_add - curr_microcode_is_add));
+		// // when opcode is double and add add, microcode should be the same
+		// yield_constr.constraint(curr_opcode_is_double_and_add * (curr_opcode_is_add - curr_microcode_is_add));
 
-		// set output to add's output. add's LHS input is already set to double's output above in this case
-		for i in 0..5 {
-			yield_constr.constraint(curr_opcode_is_double_and_add * (curr_row.output[0][i] - curr_row.add_output[0][i]));
-			yield_constr.constraint(curr_opcode_is_double_and_add * (curr_row.output[1][i] - curr_row.add_output[1][i]));
-		}	
-		yield_constr.constraint(curr_opcode_is_double_and_add * (curr_row.output_is_infinity - curr_row.add_output_is_infinity));
+		// // set output to add's output. add's LHS input is already set to double's output above in this case
+		// for i in 0..5 {
+		// 	yield_constr.constraint(curr_opcode_is_double_and_add * (curr_row.output[0][i] - curr_row.add_output[0][i]));
+		// 	yield_constr.constraint(curr_opcode_is_double_and_add * (curr_row.output[1][i] - curr_row.add_output[1][i]));
+		// }	
+		// yield_constr.constraint(curr_opcode_is_double_and_add * (curr_row.output_is_infinity - curr_row.add_output_is_infinity));
 
-		// SCALAR MUL
+		// // SCALAR MUL
 
-		// step flags for scalar mul are binary
-		yield_constr.constraint((P::ONES - curr_row.is_first_step_of_scalar_mul) * curr_row.is_first_step_of_scalar_mul);
-		yield_constr.constraint((P::ONES - curr_row.is_last_step_of_scalar_mul) * curr_row.is_last_step_of_scalar_mul);
+		// // step flags for scalar mul are binary
+		// yield_constr.constraint((P::ONES - curr_row.is_first_step_of_scalar_mul) * curr_row.is_first_step_of_scalar_mul);
+		// yield_constr.constraint((P::ONES - curr_row.is_last_step_of_scalar_mul) * curr_row.is_last_step_of_scalar_mul);
 
-		// step flags for scalar mul not set when opcode isn't scalar mul
-		yield_constr.constraint((P::ONES - curr_row.opcode[1]) * curr_row.is_first_step_of_scalar_mul);
-		yield_constr.constraint((P::ONES - curr_row.opcode[1]) * curr_row.is_last_step_of_scalar_mul);
+		// // step flags for scalar mul not set when opcode isn't scalar mul
+		// yield_constr.constraint((P::ONES - curr_row.opcode[1]) * curr_row.is_first_step_of_scalar_mul);
+		// yield_constr.constraint((P::ONES - curr_row.opcode[1]) * curr_row.is_last_step_of_scalar_mul);
 
-		// check correctness of is_first_step_of_scalar_mul
-		let next_row_is_scalar_mul = next_row.opcode[1];
-		let transition_to_scalar_mul_from_other = (P::ONES - curr_row.opcode[1]) * next_row_is_scalar_mul;
-		let transition_to_scalar_mul_from_scalar_mul = curr_row.is_last_step_of_scalar_mul * next_row_is_scalar_mul;
+		// // check correctness of is_first_step_of_scalar_mul
+		// let next_row_is_scalar_mul = next_row.opcode[1];
+		// let transition_to_scalar_mul_from_other = (P::ONES - curr_row.opcode[1]) * next_row_is_scalar_mul;
+		// let transition_to_scalar_mul_from_scalar_mul = curr_row.is_last_step_of_scalar_mul * next_row_is_scalar_mul;
 
-		// since the flags are binary checked, this also doubles as a check that the two transition cases are mutually exclusive
-		// we apply this constraint with wraparound to deal with the case where the trace starts with a scalar multiplication
-		yield_constr.constraint(
-			next_row.is_first_step_of_scalar_mul - (transition_to_scalar_mul_from_other + transition_to_scalar_mul_from_scalar_mul)
-		);
+		// // since the flags are binary checked, this also doubles as a check that the two transition cases are mutually exclusive
+		// // we apply this constraint with wraparound to deal with the case where the trace starts with a scalar multiplication
+		// yield_constr.constraint(
+		// 	next_row.is_first_step_of_scalar_mul - (transition_to_scalar_mul_from_other + transition_to_scalar_mul_from_scalar_mul)
+		// );
 
-		// check correctness of is_last_step_of_scalar_mul
-		// we do this by having the prover supply an inverse of the `scalar` as advice
-		let prod = curr_row.scalar * curr_row.scalar_inv;
+		// // check correctness of is_last_step_of_scalar_mul
+		// // we do this by having the prover supply an inverse of the `scalar` as advice
+		// let prod = curr_row.scalar * curr_row.scalar_inv;
 
-		// assert that the product of the scalar and its purported inverse is binary
-		// assert that is_last_step_of_scalar_mul is equal to the 1 if prod is zero, 0 otherwise
-		yield_constr.constraint(curr_row.is_last_step_of_scalar_mul * (P::ONES - prod));
-		yield_constr.constraint((P::ONES - curr_row.is_last_step_of_scalar_mul) * prod);
-		// this alone is not enough, as a malicious prover could simply set the inverse to zero 
-		// even for a for a nonzero scalar
-		// the way we deal with this is to additionally assert that when the flag is set,
-		// both the scalar and its inverse are set to zero. This way the prover can't claim the
-		// scalar mul is over when it, in fact, isn't.
-		// the prover can't claim it's not over when it, in fact, is. This is because
-		// scalar will always be zero when the mul is over thanks to constraints below
-		yield_constr.constraint(curr_row.is_last_step_of_scalar_mul * curr_row.scalar);
-		yield_constr.constraint(curr_row.is_last_step_of_scalar_mul * curr_row.scalar_inv);
+		// // assert that the product of the scalar and its purported inverse is binary
+		// // assert that is_last_step_of_scalar_mul is equal to the 1 if prod is zero, 0 otherwise
+		// yield_constr.constraint(curr_row.is_last_step_of_scalar_mul * (P::ONES - prod));
+		// yield_constr.constraint((P::ONES - curr_row.is_last_step_of_scalar_mul) * prod);
+		// // this alone is not enough, as a malicious prover could simply set the inverse to zero 
+		// // even for a for a nonzero scalar
+		// // the way we deal with this is to additionally assert that when the flag is set,
+		// // both the scalar and its inverse are set to zero. This way the prover can't claim the
+		// // scalar mul is over when it, in fact, isn't.
+		// // the prover can't claim it's not over when it, in fact, is. This is because
+		// // scalar will always be zero when the mul is over thanks to constraints below
+		// yield_constr.constraint(curr_row.is_last_step_of_scalar_mul * curr_row.scalar);
+		// yield_constr.constraint(curr_row.is_last_step_of_scalar_mul * curr_row.scalar_inv);
 
-		// CTL filter checks
-		for i in 0..NUM_CHANNELS {
-			// assert that the input filter for scalar mul is only set during the first step
-			yield_constr.constraint(curr_row.filter_cols_by_opcode[i][2] * (P::ONES - curr_row.is_first_step_of_scalar_mul));
-			// assert that the output filter for scalar mul is set during the last step
-			yield_constr.constraint(curr_row.filter_cols_by_opcode[i][3] * (P::ONES - curr_row.is_last_step_of_scalar_mul));
+		// // CTL filter checks
+		// for i in 0..NUM_CHANNELS {
+		// 	// assert that the input filter for scalar mul is only set during the first step
+		// 	yield_constr.constraint(curr_row.filter_cols_by_opcode[i][2] * (P::ONES - curr_row.is_first_step_of_scalar_mul));
+		// 	// assert that the output filter for scalar mul is set during the last step
+		// 	yield_constr.constraint(curr_row.filter_cols_by_opcode[i][3] * (P::ONES - curr_row.is_last_step_of_scalar_mul));
 
-			// assert that the other filters aren't set when opcode is scalar mul
-			yield_constr.constraint(curr_opcode_is_scalar_mul * curr_row.filter_cols_by_opcode[i][0]);
-			yield_constr.constraint(curr_opcode_is_scalar_mul * curr_row.filter_cols_by_opcode[i][1]);
-		}
+		// 	// assert that the other filters aren't set when opcode is scalar mul
+		// 	yield_constr.constraint(curr_opcode_is_scalar_mul * curr_row.filter_cols_by_opcode[i][0]);
+		// 	yield_constr.constraint(curr_opcode_is_scalar_mul * curr_row.filter_cols_by_opcode[i][1]);
+		// }
 
-		// scalar bits are binary
-		for i in 0..32 {
-			yield_constr.constraint(curr_row.scalar_bits[i] * (P::ONES - curr_row.scalar_bits[i]));
-		}
+		// // scalar bits are binary
+		// for i in 0..32 {
+		// 	yield_constr.constraint(curr_row.scalar_bits[i] * (P::ONES - curr_row.scalar_bits[i]));
+		// }
 
-		// scalar bits are big-endian decomp of scalar
-		let decomp: P = (0..32).map(|i| curr_row.scalar_bits[i] * FE::from_canonical_u32(1 << (31 - i as u32))).sum();
-		yield_constr.constraint(curr_row.scalar - decomp);
+		// // scalar bits are big-endian decomp of scalar
+		// let decomp: P = (0..32).map(|i| curr_row.scalar_bits[i] * FE::from_canonical_u32(1 << (31 - i as u32))).sum();
+		// yield_constr.constraint(curr_row.scalar - decomp);
 
-		// at the first step of a scalar mul, set input_1 to the identity element
+		// // at the first step of a scalar mul, set input_1 to the identity element
 
-		let (identity, identity_is_inf) = identity_element::<F, FE, D2>();
-		// when the next row is scalar mul and the next step is not the first step of that scalar mul, copy output to input 1
-		let next_opcode_is_scalar_mul = next_row.opcode[1];
-		for i in 0..5 {
-			// degree 3
-			yield_constr.constraint_transition(next_opcode_is_scalar_mul * (P::ONES - next_row.is_first_step_of_scalar_mul) * (next_row.input_1[0][i] - curr_row.output[0][i]));
-			yield_constr.constraint_transition(next_opcode_is_scalar_mul * (P::ONES - next_row.is_first_step_of_scalar_mul) * (next_row.input_1[1][i] - curr_row.output[1][i]));
+		// let (identity, identity_is_inf) = identity_element::<F, FE, D2>();
+		// // when the next row is scalar mul and the next step is not the first step of that scalar mul, copy output to input 1
+		// let next_opcode_is_scalar_mul = next_row.opcode[1];
+		// for i in 0..5 {
+		// 	// degree 3
+		// 	yield_constr.constraint_transition(next_opcode_is_scalar_mul * (P::ONES - next_row.is_first_step_of_scalar_mul) * (next_row.input_1[0][i] - curr_row.output[0][i]));
+		// 	yield_constr.constraint_transition(next_opcode_is_scalar_mul * (P::ONES - next_row.is_first_step_of_scalar_mul) * (next_row.input_1[1][i] - curr_row.output[1][i]));
 
-		}
+		// }
 
-		// when the next row is scalar mul and the next step is the first step of that scalar mul, assert input1 is the identity element
-		for i in 0..5 {
-			// degree 3
-			yield_constr.constraint_transition(next_opcode_is_scalar_mul * next_row.is_first_step_of_scalar_mul * (next_row.input_1[0][i] - identity[0][i]));
-			yield_constr.constraint_transition(next_opcode_is_scalar_mul * next_row.is_first_step_of_scalar_mul * (next_row.input_1[1][i] - identity[1][i]));
-		}
-		yield_constr.constraint_transition(next_opcode_is_scalar_mul * next_row.is_first_step_of_scalar_mul * (next_row.input_1_is_infinity - FE::from_bool(identity_is_inf)));
+		// // when the next row is scalar mul and the next step is the first step of that scalar mul, assert input1 is the identity element
+		// for i in 0..5 {
+		// 	// degree 3
+		// 	yield_constr.constraint_transition(next_opcode_is_scalar_mul * next_row.is_first_step_of_scalar_mul * (next_row.input_1[0][i] - identity[0][i]));
+		// 	yield_constr.constraint_transition(next_opcode_is_scalar_mul * next_row.is_first_step_of_scalar_mul * (next_row.input_1[1][i] - identity[1][i]));
+		// }
+		// yield_constr.constraint_transition(next_opcode_is_scalar_mul * next_row.is_first_step_of_scalar_mul * (next_row.input_1_is_infinity - FE::from_bool(identity_is_inf)));
 
-		// degree 3
-		yield_constr.constraint_transition(curr_opcode_is_scalar_mul * (P::ONES - next_row.is_first_step_of_scalar_mul));
+		// // degree 3
+		// yield_constr.constraint_transition(curr_opcode_is_scalar_mul * (P::ONES - next_row.is_first_step_of_scalar_mul));
 
-		// during scalar mul, if the most-significant scalar bit is 1, then the current microcode is double-and-add
-		// otherwise, it's double
-		yield_constr.constraint(curr_opcode_is_scalar_mul * curr_row.scalar_bits[0] * (P::ONES - curr_row.microcode[1]));
-		yield_constr.constraint(curr_opcode_is_scalar_mul * (P::ONES - curr_row.scalar_bits[0]) * (P::ONES - curr_row.microcode[0]));
+		// // during scalar mul, if the most-significant scalar bit is 1, then the current microcode is double-and-add
+		// // otherwise, it's double
+		// yield_constr.constraint(curr_opcode_is_scalar_mul * curr_row.scalar_bits[0] * (P::ONES - curr_row.microcode[1]));
+		// yield_constr.constraint(curr_opcode_is_scalar_mul * (P::ONES - curr_row.scalar_bits[0]) * (P::ONES - curr_row.microcode[0]));
 
-		// shift scalar bits left each row
-		for i in 0..31 {
-			yield_constr.constraint_transition(next_row.scalar_bits[i] - curr_row.scalar_bits[i + 1]);
-		}
+		// // shift scalar bits left each row
+		// for i in 0..31 {
+		// 	yield_constr.constraint_transition(next_row.scalar_bits[i] - curr_row.scalar_bits[i + 1]);
+		// }
 
-		// during scalar mul, set output to add output
-		for i in 0..5 {
-			yield_constr.constraint(curr_opcode_is_scalar_mul * (curr_row.output[0][i] - curr_row.add_output[0][i]));
-			yield_constr.constraint(curr_opcode_is_scalar_mul * (curr_row.output[1][i] - curr_row.add_output[1][i]));
-		}
-		yield_constr.constraint(curr_opcode_is_scalar_mul * (curr_row.output_is_infinity - curr_row.add_output_is_infinity));
+		// // during scalar mul, set output to add output
+		// for i in 0..5 {
+		// 	yield_constr.constraint(curr_opcode_is_scalar_mul * (curr_row.output[0][i] - curr_row.add_output[0][i]));
+		// 	yield_constr.constraint(curr_opcode_is_scalar_mul * (curr_row.output[1][i] - curr_row.add_output[1][i]));
+		// }
+		// yield_constr.constraint(curr_opcode_is_scalar_mul * (curr_row.output_is_infinity - curr_row.add_output_is_infinity));
 
-		// I/O
+		// // I/O
 
-		// op_idx starts with 1
-		yield_constr.constraint_first_row(P::ONES - curr_row.op_idx);
+		// // op_idx starts with 1
+		// yield_constr.constraint_first_row(P::ONES - curr_row.op_idx);
 
-		// op_idx is incremented each row when opcode is add or double and add
-		yield_constr.constraint_transition((curr_opcode_is_add + curr_opcode_is_double_and_add) * (next_row.op_idx - curr_row.op_idx - P::ONES));
-		// op_idx is incremented when is_last_step_of_scalar_mul
-		yield_constr.constraint_transition(curr_row.is_last_step_of_scalar_mul * (next_row.op_idx - curr_row.op_idx - P::ONES));
+		// // op_idx is incremented each row when opcode is add or double and add
+		// yield_constr.constraint_transition((curr_opcode_is_add + curr_opcode_is_double_and_add) * (next_row.op_idx - curr_row.op_idx - P::ONES));
+		// // op_idx is incremented when is_last_step_of_scalar_mul
+		// yield_constr.constraint_transition(curr_row.is_last_step_of_scalar_mul * (next_row.op_idx - curr_row.op_idx - P::ONES));
 
-		// check I/O encoding for points
-		for coord in 0..1 {
-			for i in 0..5 {
-				let decoded_lo = curr_row.input_1_encoded[coord][i][0] - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
-				let decoded_hi = curr_row.input_1_encoded[coord][i][1] - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
-				let decoded = decoded_lo + decoded_hi * FE::from_canonical_u64(1 << 32);
-				yield_constr.constraint(curr_row.input_1[coord][i] - decoded);
+		// // check I/O encoding for points
+		// for coord in 0..1 {
+		// 	for i in 0..5 {
+		// 		let decoded_lo = curr_row.input_1_encoded[coord][i][0] - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
+		// 		let decoded_hi = curr_row.input_1_encoded[coord][i][1] - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
+		// 		let decoded = decoded_lo + decoded_hi * FE::from_canonical_u64(1 << 32);
+		// 		yield_constr.constraint(curr_row.input_1[coord][i] - decoded);
 
-				let decoded_lo = curr_row.input_2_encoded[coord][i][0] - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
-				let decoded_hi = curr_row.input_2_encoded[coord][i][1] - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
-				let decoded = decoded_lo + decoded_hi * FE::from_canonical_u64(1 << 32);
-				yield_constr.constraint(curr_row.input_2[coord][i] - decoded);
+		// 		let decoded_lo = curr_row.input_2_encoded[coord][i][0] - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
+		// 		let decoded_hi = curr_row.input_2_encoded[coord][i][1] - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
+		// 		let decoded = decoded_lo + decoded_hi * FE::from_canonical_u64(1 << 32);
+		// 		yield_constr.constraint(curr_row.input_2[coord][i] - decoded);
 
-				let decoded_lo = curr_row.output_encoded[coord][i][0] - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
-				let decoded_hi = curr_row.output_encoded[coord][i][1] - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
-				let decoded = decoded_lo + decoded_hi * FE::from_canonical_u64(1 << 32);
-				yield_constr.constraint(curr_row.output[coord][i] - decoded);
-			}
-		}
-		// check I/O encoding for scalar
-		yield_constr.constraint(curr_row.scalar - (curr_row.scalar_encoded - curr_row.op_idx * FE::from_canonical_u64(1 << 32)));
+		// 		let decoded_lo = curr_row.output_encoded[coord][i][0] - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
+		// 		let decoded_hi = curr_row.output_encoded[coord][i][1] - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
+		// 		let decoded = decoded_lo + decoded_hi * FE::from_canonical_u64(1 << 32);
+		// 		yield_constr.constraint(curr_row.output[coord][i] - decoded);
+		// 	}
+		// }
+		// // check I/O encoding for scalar
+		// yield_constr.constraint(curr_row.scalar - (curr_row.scalar_encoded - curr_row.op_idx * FE::from_canonical_u64(1 << 32)));
 	}
 
     fn eval_ext_circuit(
@@ -492,7 +492,7 @@ pub(crate) fn gfp5_mul<P: PackedField<Scalar = F>, F: Field>(a: &Ext<P>, b: &Ext
 	let d1 = a[0]*b[1] + a[1]*b[0] + (a[2]*b[4] + a[3]*b[3] + a[4]*b[2]) * F::from_canonical_u32(3);
 	let d2 = a[0]*b[2] + a[1]*b[1] + a[2]*b[0] + (a[3]*b[4] + a[4]*b[3]) * F::from_canonical_u32(3);
 	let d3 = a[0]*b[3] + a[1]*b[2] + a[2]*b[1] + a[3]*b[0] + a[4]*b[4] * F::from_canonical_u32(3);
-	let d4 = a[0]*b[4] + a[1]*b[3] + a[2]*b[2] + a[3]*b[1] + a[4]*b[0] * F::from_canonical_u32(3);
+	let d4 = a[0]*b[4] + a[1]*b[3] + a[2]*b[2] + a[3]*b[1] + a[4]*b[0];
 
 	[d0, d1, d2, d3, d4]
 }
@@ -501,14 +501,8 @@ pub fn three<P: PackedField>() -> [P; 5] {
 	[P::ONES + P::ONES + P::ONES, P::ZEROS, P::ZEROS, P::ZEROS, P::ZEROS]
 }
 
-pub fn curve_a<P: PackedField>() -> [P; 5] {
-	[
-		P::ONES + P::ONES,
-		P::ZEROS,
-		P::ZEROS,
-		P::ZEROS,
-		P::ZEROS,
-	]
+fn curve_a_encoded<P: PackedField>() -> [P; 5] {
+	unimplemented!()
 }
 
 fn identity_element<F: RichField, FE: FieldExtension<D, BaseField = F>, const D: usize>() -> (Point<FE>, bool) {
@@ -563,17 +557,61 @@ mod tests {
 	use super::*;
 	use anyhow::Result;
 	use plonky2::plonk::config::{PoseidonGoldilocksConfig, GenericConfig};
+	use plonky2::util::timing::TimingTree;
+	use plonky2::field::extension::quintic::QuinticExtension;
+	use plonky2::field::packable::Packable;
+	use rand::{rngs::ThreadRng, Rng};
+	use ecgfp5::curve::Point as CurvePoint;
+	use ecgfp5::scalar::Scalar;
+    use crate::verifier::verify_stark_proof_no_ctl;
+    use crate::prover::prove_no_ctl;
 	use crate::{starky2lib::ecgfp5_vartime::generation::Ecgfp5StarkGenerator, stark_testing::test_stark_low_degree};
+	use crate::config::StarkConfig;
 
     const D: usize = 2;
 	const NUM_CHANNELS: usize = 3;
     type C = PoseidonGoldilocksConfig;
     type F = <C as GenericConfig<D>>::F;
     type S = Ecgfp5Stark<F, D, NUM_CHANNELS>;
+	type GFP5 = QuinticExtension<F>;
+
+	fn random_point(rng: &mut ThreadRng) -> CurvePoint {
+		CurvePoint::GENERATOR * Scalar::from_u64(rng.gen())
+	}
+
+	#[test]
+	fn test_gfp5_mul() {
+		let a = GFP5::rand();
+		let b = GFP5::rand();
+		let c = a * b;
+
+		let c_arr = gfp5_mul::<F, F>(&a.to_basefield_array(), &b.to_basefield_array());
+		let c_computed = GFP5::from_basefield_array(c_arr);
+		assert_eq!(c, c_computed);
+	}
 
     #[test]
     fn test_stark_degree() -> Result<()> {
-        let stark = Ecgfp5Stark::<F, D, NUM_CHANNELS>::new();
+        let stark = S::new();
         test_stark_low_degree(stark)
     }
+
+	#[test]
+	fn test_only_adds() -> Result<()> {
+		let mut generator = Ecgfp5StarkGenerator::<NUM_CHANNELS>::new();
+		let mut rng = rand::thread_rng();
+
+		for _ in 0..32 {
+			let a = random_point(&mut rng);
+			let b = random_point(&mut rng);
+			let _ = generator.gen_add(a, b, 0);
+		}
+
+		let trace = generator.into_polynomial_values();
+		let config = StarkConfig::standard_fast_config();
+		let stark = S::new();
+		let mut timing = TimingTree::default();
+		let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing)?;
+		verify_stark_proof_no_ctl(&stark, &proof, &config)
+	}
 }

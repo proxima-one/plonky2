@@ -53,11 +53,9 @@ pub struct Ecgfp5Row<T: Copy, const NUM_CHANNELS: usize> {
     // the scalar to be multiplied against. must fit in 32-bits
     // each step, if the current MSB is 1, the current power of two is subtracted from it
     pub(crate) scalar: T,
-    pub(crate) scalar_inv: T,
     // scalar as big-endian bits
     pub(crate) scalar_bits: [T; 32],
-    pub(crate) is_last_step_of_scalar_mul: T,
-    pub(crate) is_first_step_of_scalar_mul: T,
+    pub(crate) scalar_step_bits: [T; 32],
 
     // the output point of the operation at hand. this is always in weierstrass form
     pub(crate) output: Point<T>,
