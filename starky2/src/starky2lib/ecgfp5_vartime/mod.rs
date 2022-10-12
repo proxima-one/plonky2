@@ -64,6 +64,7 @@ where
 		yield_constr.constraint(microcode_digit_sum * (P::ONES - microcode_digit_sum));
 
 		let curr_microcode_is_add = P::ONES - curr_row.microcode[0] - curr_row.microcode[1];
+		let curr_microcode_is_double = curr_row.microcode[0];
 		let curr_microcode_is_double_add = curr_row.microcode[1];
 
 		// opcodes are binary
@@ -91,13 +92,12 @@ where
 
 		// POINT ADDER
 
-		// if microcode is add, then the LHS input is `input_1`
+		// if microcode is add, or double, then the LHS input is `input_1`
 		// if microcode is double and add, then the LHS input is `dbl_output`
-		// otherwise, point addition is ignored
 		// degree 2
 		let lhs_input: Point<P> = [
-			array::from_fn(|i| curr_microcode_is_add * curr_row.input_1[0][i] + curr_microcode_is_double_add * curr_row.dbl_output[0][i]),
-			array::from_fn(|i| curr_microcode_is_add * curr_row.input_1[1][i] + curr_microcode_is_double_add * curr_row.dbl_output[1][i]),
+			array::from_fn(|i| (curr_microcode_is_add + curr_microcode_is_double) * curr_row.input_1[0][i] + curr_microcode_is_double_add * curr_row.dbl_output[0][i]),
+			array::from_fn(|i| (curr_microcode_is_add + curr_microcode_is_double) * curr_row.input_1[1][i] + curr_microcode_is_double_add * curr_row.dbl_output[1][i]),
 		];
 		for i in 0..5 {
 			yield_constr.constraint(curr_row.add_lhs_input[0][i] - lhs_input[0][i]);
@@ -209,8 +209,9 @@ where
 			&curr_row.add_lhs_input[1],
 		);
 
-		// I3 = xs_are_same & ys_are_same = xs_are_same * ys_are_same
-		let i3 = curr_row.add_xs_are_same * curr_row.add_ys_are_same;
+		// I3 = xs_are_same & !ys_are_same = xs_are_same * (1 - ys_are_same)
+		// if they're both the same, then it's a doubling, and the result is the point at infinity iff the input is
+		let i3 = curr_row.add_xs_are_same * (P::ONES - curr_row.add_ys_are_same);
 		yield_constr.constraint(curr_row.add_i3 - i3);
 
 		// conditionally set outputs based on infinity flags
@@ -330,12 +331,16 @@ where
 		// SCALAR MUL
 
 		// step flags for scalar mul are binary
-		yield_constr.constraint((P::ONES - curr_row.scalar_step_bits[0]) * curr_row.scalar_step_bits[0]);
-		yield_constr.constraint((P::ONES - curr_row.scalar_step_bits[31]) * curr_row.scalar_step_bits[31]);
+		for i in 0..32 {
+			yield_constr.constraint((P::ONES - curr_row.scalar_step_bits[i]) * curr_row.scalar_step_bits[i]);
+		}
 
-		// step flags for scalar mul not set when opcode isn't scalar mul
-		yield_constr.constraint((P::ONES - curr_row.opcode[1]) * curr_row.scalar_step_bits[0]);
-		yield_constr.constraint((P::ONES - curr_row.opcode[1]) * curr_row.scalar_step_bits[31]);
+		// at most one of the step flags may be set
+		let step_bit_sum : P = curr_row.scalar_step_bits.iter().copied().sum();
+		yield_constr.constraint((P::ONES - step_bit_sum) * step_bit_sum);
+
+		// when opcode isn't scalar mul, the scalar step bits should be zero
+		yield_constr.constraint((P::ONES - curr_opcode_is_scalar_mul) * step_bit_sum);
 
 		// check correctness of scalar_step_bits[0]
 		let next_row_is_scalar_mul = next_row.opcode[1];
@@ -347,11 +352,6 @@ where
 		yield_constr.constraint(
 			next_row.scalar_step_bits[0] - (transition_to_scalar_mul_from_other + transition_to_scalar_mul_from_scalar_mul)
 		);
-
-		// move the set scalar step bit to the right once each row
-		for i in 0..31 {
-			yield_constr.constraint_transition(curr_row.scalar_step_bits[i] - next_row.scalar_step_bits[i+1]);
-		}
 
 		// CTL filter checks for scalar mul
 		for i in 0..NUM_CHANNELS {
@@ -393,25 +393,31 @@ where
 		}
 		yield_constr.constraint_transition(next_opcode_is_scalar_mul * next_row.scalar_step_bits[0] * (next_row.input_1_is_infinity - FE::from_bool(identity_is_inf)));
 
-		// degree 3
-		yield_constr.constraint_transition(curr_opcode_is_scalar_mul * (P::ONES - next_row.scalar_step_bits[0]));
-
 		// during scalar mul, if the most-significant scalar bit is 1, then the current microcode is double-and-add
 		// otherwise, it's double
 		yield_constr.constraint(curr_opcode_is_scalar_mul * curr_row.scalar_bits[0] * (P::ONES - curr_row.microcode[1]));
 		yield_constr.constraint(curr_opcode_is_scalar_mul * (P::ONES - curr_row.scalar_bits[0]) * (P::ONES - curr_row.microcode[0]));
 
-		// shift scalar bits left each row
+		// shift scalar bits left during scalar mul except for the last step
 		for i in 0..31 {
-			yield_constr.constraint_transition(next_row.scalar_bits[i] - curr_row.scalar_bits[i + 1]);
+			yield_constr.constraint_transition(curr_opcode_is_scalar_mul * (P::ONES - curr_row.scalar_step_bits[31]) * (next_row.scalar_bits[i] - curr_row.scalar_bits[i + 1]));
 		}
 
-		// during scalar mul, set output to add output
-		for i in 0..5 {
-			yield_constr.constraint(curr_opcode_is_scalar_mul * (curr_row.output[0][i] - curr_row.add_output[0][i]));
-			yield_constr.constraint(curr_opcode_is_scalar_mul * (curr_row.output[1][i] - curr_row.add_output[1][i]));
+		// move the set scalar step bit to the right each row during scalar mul
+		for i in 0..31 {
+			yield_constr.constraint_transition(curr_opcode_is_scalar_mul * (curr_row.scalar_step_bits[i] - next_row.scalar_step_bits[i+1]));
 		}
-		yield_constr.constraint(curr_opcode_is_scalar_mul * (curr_row.output_is_infinity - curr_row.add_output_is_infinity));
+
+		// during scalar mul, set output to add output if it's a double-and-add, otherwise set it to double output
+		for i in 0..5 {
+			yield_constr.constraint(curr_opcode_is_scalar_mul * curr_microcode_is_double_add * (curr_row.output[0][i] - curr_row.add_output[0][i]));
+			yield_constr.constraint(curr_opcode_is_scalar_mul * curr_microcode_is_double_add * (curr_row.output[1][i] - curr_row.add_output[1][i]));
+
+			yield_constr.constraint(curr_opcode_is_scalar_mul * curr_microcode_is_double * (curr_row.output[0][i] - curr_row.dbl_output[0][i]));
+			yield_constr.constraint(curr_opcode_is_scalar_mul * curr_microcode_is_double * (curr_row.output[1][i] - curr_row.dbl_output[1][i]));
+		}
+		yield_constr.constraint(curr_opcode_is_scalar_mul * curr_microcode_is_double_add * (curr_row.output_is_infinity - curr_row.add_output_is_infinity));
+		yield_constr.constraint(curr_opcode_is_scalar_mul * curr_microcode_is_double * (curr_row.output_is_infinity - curr_row.dbl_output_is_infinity));
 
 		// I/O
 
@@ -620,6 +626,25 @@ mod tests {
 			let a = random_point(&mut rng);
 			let b = random_point(&mut rng);
 			let _ = generator.gen_double_add(a, b, 0);
+		}
+
+		let trace = generator.into_polynomial_values();
+		let config = StarkConfig::standard_fast_config();
+		let stark = S::new();
+		let mut timing = TimingTree::default();
+		let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing)?;
+		verify_stark_proof_no_ctl(&stark, &proof, &config)
+	}
+
+	#[test]
+	fn test_only_scalar_muls() -> Result<()> {
+		let mut generator = Ecgfp5StarkGenerator::<NUM_CHANNELS>::new();
+		let mut rng = rand::thread_rng();
+
+		for _ in 0..32 {
+			let p = random_point(&mut rng);
+			let s: u32 = rng.gen();
+			let _ = generator.gen_scalar_mul(p, s, 0);
 		}
 
 		let trace = generator.into_polynomial_values();

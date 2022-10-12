@@ -178,19 +178,6 @@ where
 		};
 	}
 
-	fn gen_scalar_mul_unit(&mut self, row: &mut Ecgfp5Row<F, NUM_CHANNELS>) {
-		let curr_opcode_is_scalar_mul = row.opcode == OPCODE_SCALAR_MUL; 
-		let scalar = row.scalar.to_canonical_u64() as u32;
-
-		if curr_opcode_is_scalar_mul {
-			let mut mask = scalar;
-			for o in row.scalar_bits.iter_mut().rev() {
-				*o = F::from_canonical_u32(mask & 1);
-				mask >>= 1;
-			}	
-		}
-	}
-
 	fn gen_input(&mut self, row: &mut Ecgfp5Row<F, NUM_CHANNELS>, a: CurvePoint, b: CurvePoint, scalar: u32) -> (GenPoint, GenPoint) {
 		let a = ecgfp5_to_plonky2(a);
 		let b = ecgfp5_to_plonky2(b);
@@ -200,6 +187,7 @@ where
 
 		let scalar = scalar as u64;
 		let op_idx = self.op_idx as u64;
+		row.scalar = F::from_canonical_u64(scalar);
 		row.scalar_encoded = F::from_canonical_u64(scalar | (op_idx << 32));
 
 		let (a_encoded, a_is_inf_encoded) = trace_encode_point(a);
@@ -262,7 +250,6 @@ where
 		self.gen_input(&mut row, a, b, 0);
 		self.gen_double_unit(&mut row);
 		self.gen_add_unit(&mut row);
-		self.gen_scalar_mul_unit(&mut row);
 		self.gen_output(&mut row);
 		self.gen_ctl_filters(&mut row, channel);
 
@@ -293,7 +280,6 @@ where
 		self.gen_input(&mut row, a, b, 0);
 		self.gen_double_unit(&mut row);
 		self.gen_add_unit(&mut row);
-		self.gen_scalar_mul_unit(&mut row);
 		self.gen_output(&mut row);
 		self.gen_ctl_filters(&mut row, channel);
 
@@ -324,24 +310,30 @@ where
 			row.opcode = OPCODE_SCALAR_MUL;
 			row.scalar_step_bits[i] = F::ONE;
 
+			let is_dbl = mask & 0x8000_0000 == 0;
 
-			row.microcode = if mask & 0x8000_0000 == 0 {
+			row.microcode = if is_dbl {
 				MICROCODE_DBL
 			} else {
 				MICROCODE_DBL_AND_ADD
 			};
 
+			let mut _mask = mask;
+			for i in 0..32 {
+				row.scalar_bits[i] = F::from_bool(_mask & 0x8000_0000 != 0);
+				_mask <<= 1;
+			}
+
 			self.gen_input(&mut row, a, p, mask);
 			self.gen_double_unit(&mut row);
 			self.gen_add_unit(&mut row);
-			self.gen_scalar_mul_unit(&mut row);
 			self.gen_output(&mut row);
 			self.gen_ctl_filters(&mut row, channel);
 
-			a = if mask & 0x8000_0000 != 0 {
-				a.double() + p
-			} else {
+			a = if is_dbl {
 				a.double()
+			} else {
+				a.double() + p
 			};
 			
 			mask <<= 1;	
