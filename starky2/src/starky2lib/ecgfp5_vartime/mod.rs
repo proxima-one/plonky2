@@ -654,4 +654,42 @@ mod tests {
 		let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing)?;
 		verify_stark_proof_no_ctl(&stark, &proof, &config)
 	}
+
+	#[test]
+	fn test_all_ops() -> Result<()> {
+		let mut generator = Ecgfp5StarkGenerator::<NUM_CHANNELS>::new();
+		let mut rng = rand::thread_rng();
+
+		for _ in 0..96 {
+			let op: u32 = rng.gen_range(0..3);
+			match op {
+				// add
+				0 => {
+					let a = random_point(&mut rng);
+					let b = random_point(&mut rng);
+					let _ = generator.gen_add(a, b, 0);
+				},
+				// double-add
+				1 => {
+					let a = random_point(&mut rng);
+					let b = random_point(&mut rng);
+					let _ = generator.gen_double_add(a, b, 0);
+				},
+				// scalar mul
+				2 => {
+					let p = random_point(&mut rng);
+					let s: u32 = rng.gen();
+					let _ = generator.gen_scalar_mul(p, s, 0);
+				},
+				_ => unreachable!()
+			}
+		}
+
+		let trace = generator.into_polynomial_values();
+		let config = StarkConfig::standard_fast_config();
+		let stark = S::new();
+		let mut timing = TimingTree::default();
+		let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing)?;
+		verify_stark_proof_no_ctl(&stark, &proof, &config)
+	}
 }
