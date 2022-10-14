@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use plonky2::field::extension::Extendable;
 use plonky2::field::polynomial::PolynomialCoeffs;
 use plonky2::fri::proof::{FriProof, FriProofTarget};
@@ -15,6 +16,7 @@ use crate::permutation::{
     get_n_permutation_challenge_sets, get_n_permutation_challenge_sets_target,
 };
 use crate::proof::*;
+use crate::ro_memory::get_n_ro_memory_challenges;
 use crate::stark::Stark;
 
 // makes a challenger and overves the trace caps
@@ -57,6 +59,7 @@ where
 fn get_single_table_challenges<F, C, S, const D: usize>(
     stark: &S,
     challenger: &mut Challenger<F, C::Hasher>,
+    ro_memory_cap: Option<&MerkleCap<F, C::Hasher>>,
     permutation_zs_cap: Option<&MerkleCap<F, C::Hasher>>,
     ctl_zs_cap: Option<&MerkleCap<F, C::Hasher>>,
     quotient_polys_cap: &MerkleCap<F, C::Hasher>,
@@ -73,6 +76,17 @@ where
     S: Stark<F, D>,
 {
     let num_challenges = config.num_challenges;
+    let ro_memory_challenges = ro_memory_cap.map(|ro_memory_cap| {
+        let descriptors = stark.ro_memory_descriptors().unwrap();
+        let tmp = (0..descriptors.len())
+            .flat_map(|_| {
+                get_n_ro_memory_challenges(challenger, num_challenges)
+            })
+            .collect_vec();
+        challenger.observe_cap(ro_memory_cap);
+        tmp
+    });
+
     let permutation_challenge_sets = permutation_zs_cap.map(|permutation_zs_cap| {
         let tmp = get_n_permutation_challenge_sets(
             challenger,
@@ -104,6 +118,7 @@ where
     );
 
     StarkProofChallenges {
+        ro_memory_challenges,
         permutation_challenge_sets,
         stark_alphas,
         stark_zeta,
@@ -114,6 +129,7 @@ where
 fn get_stark_challenges<F, C, S, const D: usize>(
     stark: &S,
     trace_cap: &MerkleCap<F, C::Hasher>,
+    ro_memory_cap: Option<&MerkleCap<F, C::Hasher>>,
     permutation_zs_cap: Option<&MerkleCap<F, C::Hasher>>,
     quotient_polys_cap: &MerkleCap<F, C::Hasher>,
     openings: &StarkOpeningSet<F, D>,
@@ -134,6 +150,17 @@ where
 
     challenger.observe_cap(trace_cap);
 
+    let ro_memory_challenges = ro_memory_cap.map(|ro_memory_cap| {
+        let descriptors = stark.ro_memory_descriptors().unwrap();
+        let tmp = (0..descriptors.len())
+            .flat_map(|_| {
+                get_n_ro_memory_challenges(&mut challenger, num_challenges)
+            })
+            .collect_vec();
+        challenger.observe_cap(ro_memory_cap);
+        tmp
+    });
+
     let permutation_challenge_sets = permutation_zs_cap.map(|permutation_zs_cap| {
         let tmp = get_n_permutation_challenge_sets(
             &mut challenger,
@@ -152,6 +179,7 @@ where
     challenger.observe_openings(&openings.to_fri_openings());
 
     StarkProofChallenges {
+        ro_memory_challenges,
         permutation_challenge_sets,
         stark_alphas,
         stark_zeta,
@@ -193,6 +221,7 @@ where
     ) -> StarkProofChallenges<F, D> {
         let StarkProof {
             trace_cap: _,
+            ro_memory_cap,
             permutation_zs_cap,
             ctl_zs_cap,
             quotient_polys_cap,
@@ -209,6 +238,7 @@ where
         get_single_table_challenges::<F, C, S, D>(
             stark,
             challenger,
+            ro_memory_cap.as_ref(),
             permutation_zs_cap.as_ref(),
             ctl_zs_cap.as_ref(),
             quotient_polys_cap,
@@ -230,6 +260,7 @@ where
     ) -> StarkProofChallenges<F, D> {
         let StarkProof {
             trace_cap,
+            ro_memory_cap,
             permutation_zs_cap,
             ctl_zs_cap,
             quotient_polys_cap,
@@ -251,6 +282,7 @@ where
         get_stark_challenges::<F, C, S, D>(
             stark,
             trace_cap,
+            ro_memory_cap.as_ref(),
             permutation_zs_cap.as_ref(),
             quotient_polys_cap,
             openings,

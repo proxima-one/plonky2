@@ -14,6 +14,7 @@ use plonky2_util::ceil_div_usize;
 use crate::config::StarkConfig;
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
 use crate::permutation::PermutationPair;
+use crate::ro_memory::RoMemoryDescriptor;
 use crate::vars::StarkEvaluationTargets;
 use crate::vars::StarkEvaluationVars;
 
@@ -102,6 +103,23 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             blinding: false,
         };
 
+        let ro_memory_oracle_info = if let Some(descriptors) = self.ro_memory_descriptors() {
+            let num_ro_memory_challenges = config.num_challenges;
+            let num_ro_memory_polys = descriptors.len() * num_ro_memory_challenges;
+            let info = FriPolynomialInfo::from_range(
+                oracle_indices.next().unwrap(),
+                0..num_ro_memory_polys
+            );
+
+            let oracle = FriOracleInfo {
+                num_polys: num_ro_memory_polys,
+                blinding: false,
+            };
+            Some((oracle, info))
+        } else {
+            None
+        };
+
         let permutation_oracle_info = if self.uses_permutation_args() {
             let info = FriPolynomialInfo::from_range(
                 oracle_indices.next().unwrap(),
@@ -139,6 +157,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         let zeta_batch = FriBatchInfo {
             point: zeta,
             polynomials: std::iter::once(&trace_info)
+                .chain(ro_memory_oracle_info.as_ref().map(|(_, info)| info))
                 .chain(permutation_oracle_info.as_ref().map(|(_, info)| info))
                 .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| info))
                 .chain(std::iter::once(&quotient_info))
@@ -148,6 +167,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         let zeta_next_batch = FriBatchInfo {
             point: zeta.scalar_mul(g),
             polynomials: std::iter::once(&trace_info)
+                .chain(ro_memory_oracle_info.as_ref().map(|(_, info)| info))
                 .chain(permutation_oracle_info.as_ref().map(|(_, info)| info))
                 .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| info))
                 .flat_map(|info| info.iter().cloned())
@@ -155,6 +175,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         };
 
         let oracles = std::iter::once(trace_oracle)
+            .chain(ro_memory_oracle_info.map(|(oracle, _)| oracle))
             .chain(permutation_oracle_info.map(|(oracle, _)| oracle))
             .chain(
                 ctl_zs_oracle_info
@@ -198,6 +219,23 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             blinding: false,
         };
 
+        let ro_memory_oracle_info = if let Some(descriptors) = self.ro_memory_descriptors() {
+            let num_ro_memory_challenges = config.num_challenges;
+            let num_ro_memory_polys = descriptors.len() * num_ro_memory_challenges;
+            let info = FriPolynomialInfo::from_range(
+                oracle_indices.next().unwrap(),
+                0..num_ro_memory_polys
+            );
+
+            let oracle = FriOracleInfo {
+                num_polys: num_ro_memory_polys,
+                blinding: false,
+            };
+            Some((oracle, info))
+        } else {
+            None
+        };
+
         let permutation_oracle_info = if self.uses_permutation_args() {
             let info = FriPolynomialInfo::from_range(
                 oracle_indices.next().unwrap(),
@@ -235,6 +273,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         let zeta_batch = FriBatchInfoTarget {
             point: zeta,
             polynomials: std::iter::once(&trace_info)
+                .chain(ro_memory_oracle_info.as_ref().map(|(_, info)| info))
                 .chain(permutation_oracle_info.as_ref().map(|(_, info)| info))
                 .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| info))
                 .chain(std::iter::once(&quotient_info))
@@ -245,6 +284,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         let zeta_next_batch = FriBatchInfoTarget {
             point: zeta_next,
             polynomials: std::iter::once(&trace_info)
+                .chain(ro_memory_oracle_info.as_ref().map(|(_, info)| info))
                 .chain(permutation_oracle_info.as_ref().map(|(_, info)| info))
                 .chain(ctl_zs_oracle_info.as_ref().map(|(_, info)| info))
                 .flat_map(|info| info.iter().cloned())
@@ -252,6 +292,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         };
 
         let oracles = std::iter::once(trace_oracle)
+            .chain(ro_memory_oracle_info.map(|(oracle, _)| oracle))
             .chain(permutation_oracle_info.map(|(oracle, _)| oracle))
             .chain(
                 ctl_zs_oracle_info
@@ -284,6 +325,14 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             .collect_vec();
 
         FriInstanceInfoTarget { oracles, batches }
+    }
+
+    fn ro_memory_descriptors(&self) -> Option<Vec<RoMemoryDescriptor>> {
+        None
+    }
+
+    fn uses_ro_memory_args(&self) -> bool {
+        self.ro_memory_descriptors().is_some()
     }
 
     /// Pairs of lists of columns that should be permutations of one another. A permutation argument

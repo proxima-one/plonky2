@@ -22,6 +22,7 @@ use crate::cross_table_lookup::{CtlCheckVars, CtlColumn, CtlTableData, TableID};
 use crate::permutation::compute_permutation_z_polys;
 use crate::permutation::get_n_permutation_challenge_sets;
 use crate::permutation::{PermutationChallengeSet, PermutationCheckVars};
+use crate::ro_memory::{get_ro_memory_data, RoMemoryData, RoMemoryChallenge, RoMemoryCheckVars};
 use crate::proof::{StarkOpeningSet, StarkProof, StarkProofWithPublicInputs};
 use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly;
@@ -163,6 +164,35 @@ where
         "FRI total reduction arity is too large.",
     );
 
+    // Read-only memory arguments
+    let ro_memory_commitment_challenges_cols = stark.uses_ro_memory_args().then(|| {
+        let RoMemoryData { cumulative_products, challenges, addr_cols, value_cols, addr_sorted_cols, value_sorted_cols } = get_ro_memory_data::<F, C, S, D>(stark, config, trace_poly_values, challenger);
+        let ro_memory_pps_commitment = timed!(
+            timing,
+            "compute ro memory commitments",
+            PolynomialBatch::<F, C, D>::from_values(
+                cumulative_products,
+                rate_bits,
+                false,
+                cap_height,
+                timing,
+                None
+            )
+        );
+
+        (ro_memory_pps_commitment, challenges, [addr_cols, value_cols, addr_sorted_cols, value_sorted_cols])
+    });
+
+    let ro_memory_pps_commitment = ro_memory_commitment_challenges_cols
+        .as_ref()
+        .map(|(commitment, _, _)| commitment);
+    let ro_memory_cap = ro_memory_pps_commitment
+        .as_ref()
+        .map(|commitment| commitment.merkle_tree.cap.clone());
+    if let Some(cap) = &ro_memory_cap {
+        challenger.observe_cap(cap);
+    }
+
     // Permutation arguments.
     let permutation_zs_commitment_challenges = stark.uses_permutation_args().then(|| {
         let permutation_challenge_sets = get_n_permutation_challenge_sets(
@@ -242,6 +272,7 @@ where
     let quotient_polys = compute_quotient_polys::<F, <F as Packable>::Packing, C, S, D>(
         stark,
         trace_commitment,
+        &ro_memory_commitment_challenges_cols,
         &permutation_zs_commitment_challenges,
         &ctl_zs_commitment_challenges_cols,
         public_inputs,
@@ -289,6 +320,7 @@ where
         zeta,
         g,
         trace_commitment,
+        ro_memory_pps_commitment,
         permutation_zs_commitment,
         ctl_zs_commitment,
         &quotient_commitment,
@@ -323,6 +355,7 @@ where
 
     let proof = StarkProof {
         trace_cap: trace_commitment.merkle_tree.cap.clone(),
+        ro_memory_cap,
         permutation_zs_cap,
         ctl_zs_cap,
         quotient_polys_cap,
@@ -343,6 +376,11 @@ where
 fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
     stark: &S,
     trace_commitment: &'a PolynomialBatch<F, C, D>,
+    ro_memory_commitment_challenges: &'a Option<(
+        PolynomialBatch<F, C, D>,
+        Vec<RoMemoryChallenge<F>>,
+        ([Vec<usize>; 4])
+    )>,
     permutation_zs_commitment_challenges: &'a Option<(
         PolynomialBatch<F, C, D>,
         Vec<PermutationChallengeSet<F>>,
@@ -447,6 +485,19 @@ where
                 next_values: &get_trace_values_packed(i_next_start),
                 public_inputs: &public_inputs,
             };
+
+            let ro_memory_vars = ro_memory_commitment_challenges.as_ref().map(
+                |(commitment, challenges, [addr_cols, value_cols, addr_sorted_cols, value_sorted_cols])| RoMemoryCheckVars {
+                    local_pps: commitment.get_lde_values_packed(i_start, step),
+                    next_pps: commitment.get_lde_values_packed(i_next_start, step),
+                    challenges: challenges.to_vec(),
+                    addr_cols: addr_cols.to_vec(),
+                    value_cols: value_cols.to_vec(),
+                    addr_sorted_cols: addr_sorted_cols.to_vec(),
+                    value_sorted_cols: value_sorted_cols.to_vec(),
+                }
+            );
+
             let permutation_check_vars = permutation_zs_commitment_challenges.as_ref().map(
                 |(permutation_zs_commitment, permutation_challenge_sets)| PermutationCheckVars {
                     local_zs: permutation_zs_commitment.get_lde_values_packed(i_start, step),
@@ -481,6 +532,7 @@ where
                 stark,
                 config,
                 vars,
+                ro_memory_vars,
                 permutation_check_vars,
                 ctl_vars.as_ref(),
                 &mut consumer,

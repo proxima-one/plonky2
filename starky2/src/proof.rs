@@ -16,11 +16,14 @@ use plonky2::plonk::config::GenericConfig;
 
 use crate::config::StarkConfig;
 use crate::permutation::PermutationChallengeSet;
+use crate::ro_memory::RoMemoryChallenge;
 
 #[derive(Debug, Clone)]
 pub struct StarkProof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> {
     /// Merkle cap of LDEs of trace values.
     pub trace_cap: MerkleCap<F, C::Hasher>,
+    // Merkle cap of LDEs of read-only memory product values
+    pub ro_memory_cap: Option<MerkleCap<F, C::Hasher>>,
     /// Merkle cap of LDEs of permutation Z values.
     pub permutation_zs_cap: Option<MerkleCap<F, C::Hasher>>,
     /// Merkle cap of LDEs of cross-table-lookup Z values
@@ -104,6 +107,9 @@ pub struct CompressedStarkProofWithPublicInputs<
 }
 
 pub(crate) struct StarkProofChallenges<F: RichField + Extendable<D>, const D: usize> {
+    /// Randomness used in read-only memory argument
+    pub ro_memory_challenges: Option<Vec<RoMemoryChallenge<F>>>,
+
     /// Randomness used in any permutation arguments.
     pub permutation_challenge_sets: Option<Vec<PermutationChallengeSet<F>>>,
 
@@ -130,6 +136,10 @@ pub struct StarkOpeningSet<F: RichField + Extendable<D>, const D: usize> {
     pub local_values: Vec<F::Extension>,
     /// Openings of trace polynomials at `g * zeta`.
     pub next_values: Vec<F::Extension>,
+    /// Openings of read-only memory product polynomials at `zeta`.
+    pub ro_memory_pps: Option<Vec<F::Extension>>,
+    /// Openings of permutation polynomials at `g * zeta`.
+    pub ro_memory_pps_next: Option<Vec<F::Extension>>,
     /// Openings of permutation `Z` polynomials at `zeta`.
     pub permutation_zs: Option<Vec<F::Extension>>,
     /// Openings of permutation `Z` polynomials at `g * zeta`.
@@ -151,6 +161,7 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
         zeta: F::Extension,
         g: F,
         trace_commitment: &PolynomialBatch<F, C, D>,
+        ro_memory_pps_commitment: Option<&PolynomialBatch<F, C, D>>,
         permutation_zs_commitment: Option<&PolynomialBatch<F, C, D>>,
         ctl_zs_commitment: Option<&PolynomialBatch<F, C, D>>,
         quotient_commitment: &PolynomialBatch<F, C, D>,
@@ -178,6 +189,8 @@ impl<F: RichField + Extendable<D>, const D: usize> StarkOpeningSet<F, D> {
         Self {
             local_values: eval_commitment(zeta, trace_commitment),
             next_values: eval_commitment(zeta_next, trace_commitment),
+            ro_memory_pps: ro_memory_pps_commitment.map(|c| eval_commitment(zeta, c)),
+            ro_memory_pps_next: ro_memory_pps_commitment.map(|c| eval_commitment(zeta_next, c)),
             permutation_zs: permutation_zs_commitment.map(|c| eval_commitment(zeta, c)),
             permutation_zs_next: permutation_zs_commitment.map(|c| eval_commitment(zeta_next, c)),
             ctl_zs: ctl_zs_commitment.map(|c| eval_commitment(zeta, c)),

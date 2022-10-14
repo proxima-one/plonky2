@@ -7,6 +7,7 @@ use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
 use crate::cross_table_lookup::{eval_cross_table_lookup_checks, CtlCheckVars};
 use crate::permutation::{eval_permutation_checks, PermutationCheckVars};
+use crate::ro_memory::{RoMemoryCheckVars, eval_ro_memory_checks};
 use crate::stark::Stark;
 use crate::vars::StarkEvaluationVars;
 
@@ -14,6 +15,7 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
     stark: &S,
     config: &StarkConfig,
     vars: StarkEvaluationVars<FE, P, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
+    ro_memory_vars: Option<RoMemoryCheckVars<F, FE, P, D2>>,
     permutation_vars: Option<PermutationCheckVars<F, FE, P, D2>>,
     ctl_vars: Option<&CtlCheckVars<F, FE, P, D2>>,
     consumer: &mut ConstraintConsumer<P>,
@@ -27,6 +29,12 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
     [(); S::PUBLIC_INPUTS]:,
 {
     stark.eval_packed_generic(vars, consumer);
+
+    if let Some(ref ro_memory_vars) = ro_memory_vars {
+        let num_challenges = config.num_challenges;
+        eval_ro_memory_checks::<F, FE, P, C, S, D, D2>(vars, ro_memory_vars, consumer, num_challenges);
+    }
+
     if let Some(permutation_data) = permutation_vars {
         eval_permutation_checks::<F, FE, P, C, S, D, D2>(
             stark,
