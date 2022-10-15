@@ -163,7 +163,6 @@ pub(crate) fn eval_ro_memory_checks<F, FE, P, C, S, const D: usize, const D2: us
 	} = ro_memory_vars;
 
 	debug_assert!(local_pps.len() == challenges.len());
-	// println!("challenges.len(): {}", challenges.len());
 
 	let curr_row = vars.local_values;
 	let next_row = vars.next_values;
@@ -185,20 +184,19 @@ pub(crate) fn eval_ro_memory_checks<F, FE, P, C, S, const D: usize, const D2: us
 
 		// permutation
 		// cumulative product starts from the right initial value
-		let lhs = -(curr_row[addr_sorted_col] - curr_row[value_sorted_col] * FE::from_basefield(alpha)) + FE::from_basefield(zeta);
-		let rhs = -(curr_row[addr_col] - curr_row[value_col] * FE::from_basefield(alpha)) + FE::from_basefield(zeta);
+		let lhs = -(curr_row[addr_sorted_col] + curr_row[value_sorted_col] * FE::from_basefield(alpha)) + FE::from_basefield(zeta);
+		let rhs = -(curr_row[addr_col] + curr_row[value_col] * FE::from_basefield(alpha)) + FE::from_basefield(zeta);
 		yield_constr.constraint_first_row(
 			lhs * local_pp - rhs
 		);
+		// cumulative product is 1 at the end
+		yield_constr.constraint_last_row(P::ONES - local_pp);
 
 		// cumulative product is computed correctly
-		let lhs = -(next_row[addr_sorted_col] - next_row[value_sorted_col] * FE::from_basefield(alpha)) + FE::from_basefield(zeta);
-		let rhs = -(next_row[addr_col] - next_row[value_col] * FE::from_basefield(alpha)) + FE::from_basefield(zeta);
-		// yield_constr.constraint_transition(
-		// 	lhs * next_pp - rhs * local_pp
-		// );
-
-		// cumulative product is 1 at the end
-		yield_constr.constraint_last_row(P::ONES - local_pp)
+		let lhs = -(next_row[addr_sorted_col] + next_row[value_sorted_col] * FE::from_basefield(alpha)) + FE::from_basefield(zeta);
+		let rhs = -(next_row[addr_col] + next_row[value_col] * FE::from_basefield(alpha)) + FE::from_basefield(zeta);
+		yield_constr.constraint_transition(
+			lhs * next_pp - rhs * local_pp
+		);
 	}
 }
