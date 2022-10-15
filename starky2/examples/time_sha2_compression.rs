@@ -1,3 +1,5 @@
+#[cfg(target_arch = "x86_64")]
+use jemallocator::Jemalloc;
 use log::{Level, LevelFilter};
 use plonky2::hash::hash_types::BytesHash;
 use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
@@ -9,10 +11,6 @@ use starky2::{
     util::to_u32_array_be,
     verifier::verify_stark_proof_no_ctl,
 };
-
-
-#[cfg(target_arch = "x86_64")]
-use jemallocator::Jemalloc;
 
 #[cfg(target_arch = "x86_64")]
 #[global_allocator]

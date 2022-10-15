@@ -11,7 +11,10 @@ use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::config::{AlgebraicHasher, GenericConfig};
 
 use crate::config::StarkConfig;
-use crate::cross_table_lookup::CtlDescriptor;
+use crate::cross_table_lookup::{
+    get_ctl_challenge, get_ctl_linear_comb_challenge, CtlChallenge, CtlDescriptor,
+    CtlLinearCombChallenge,
+};
 use crate::permutation::{
     get_n_permutation_challenge_sets, get_n_permutation_challenge_sets_target,
 };
@@ -43,16 +46,20 @@ pub fn get_ctl_challenges<F, C, const D: usize>(
     challenger: &mut Challenger<F, C::Hasher>,
     ctl_descriptor: &CtlDescriptor,
     num_challenges: usize,
-) -> Vec<Vec<F>>
+) -> (Vec<CtlLinearCombChallenge<F>>, Vec<CtlChallenge<F>>)
 where
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
 {
-    ctl_descriptor
-        .instances
-        .iter()
-        .map(|_| challenger.get_n_challenges(num_challenges))
-        .collect()
+    let mut ctl_linear_comb_challenges = Vec::new();
+    let mut ctl_challenges = Vec::new();
+    for _ in 0..ctl_descriptor.instances.len() {
+        ctl_linear_comb_challenges
+            .extend((0..num_challenges).map(|_| get_ctl_linear_comb_challenge(challenger)));
+        ctl_challenges.extend((0..num_challenges).map(|_| get_ctl_challenge(challenger)));
+    }
+
+    (ctl_linear_comb_challenges, ctl_challenges)
 }
 
 // IMPORTANT: assumes `challenger` has already observed the trace caps and the ctl challenges have already been extracted
@@ -79,9 +86,7 @@ where
     let ro_memory_challenges = ro_memory_cap.map(|ro_memory_cap| {
         let descriptors = stark.ro_memory_descriptors().unwrap();
         let tmp = (0..descriptors.len())
-            .flat_map(|_| {
-                get_n_ro_memory_challenges(challenger, num_challenges)
-            })
+            .flat_map(|_| get_n_ro_memory_challenges(challenger, num_challenges))
             .collect_vec();
         challenger.observe_cap(ro_memory_cap);
         tmp
@@ -153,9 +158,7 @@ where
     let ro_memory_challenges = ro_memory_cap.map(|ro_memory_cap| {
         let descriptors = stark.ro_memory_descriptors().unwrap();
         let tmp = (0..descriptors.len())
-            .flat_map(|_| {
-                get_n_ro_memory_challenges(&mut challenger, num_challenges)
-            })
+            .flat_map(|_| get_n_ro_memory_challenges(&mut challenger, num_challenges))
             .collect_vec();
         challenger.observe_cap(ro_memory_cap);
         tmp

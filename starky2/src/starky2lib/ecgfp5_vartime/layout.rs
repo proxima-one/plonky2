@@ -1,6 +1,9 @@
-use std::{mem::{transmute, size_of}, borrow::{Borrow, BorrowMut}};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::{size_of, transmute},
+};
 
-use crate::{util::transmute_no_compile_time_size_checks};
+use crate::util::transmute_no_compile_time_size_checks;
 
 // NOTE: THIS IS ONLY DEFINED OVER GOLDILOCKS FIELD (p = w^64 - 2^32 + 1). ONLY INSTANTIATE IT OVER GOLDILOCKS
 
@@ -23,7 +26,6 @@ pub struct Ecgfp5Row<T: Copy, const NUM_CHANNELS: usize> {
     pub(crate) output_encoded: Point<[T; 2]>,
     // scalar for scalar mul. It's encoded the same way
     pub(crate) scalar_encoded: T,
-
 
     // 00 add
     // 01 double
@@ -103,62 +105,67 @@ pub type Point<T> = [Ext<T>; 2];
 
 impl<T: Copy + Default, const NUM_CHANNELS: usize> Ecgfp5Row<T, NUM_CHANNELS>
 where
-    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:
+    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:,
 {
     pub fn new() -> Self {
         [T::default(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS].into()
     }
 }
 
-
-impl<T: Copy, const NUM_CHANNELS: usize> From<[T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]> for Ecgfp5Row<T, NUM_CHANNELS> 
+impl<T: Copy, const NUM_CHANNELS: usize> From<[T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]>
+    for Ecgfp5Row<T, NUM_CHANNELS>
 where
-    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:
+    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:,
 {
     fn from(value: [T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]) -> Self {
         unsafe { transmute_no_compile_time_size_checks(value) }
     }
 }
 
-impl<T: Copy, const NUM_CHANNELS: usize> From<Ecgfp5Row<T, NUM_CHANNELS>> for [T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS] 
+impl<T: Copy, const NUM_CHANNELS: usize> From<Ecgfp5Row<T, NUM_CHANNELS>>
+    for [T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]
 where
-    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:
+    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:,
 {
     fn from(value: Ecgfp5Row<T, NUM_CHANNELS>) -> Self {
         unsafe { transmute_no_compile_time_size_checks(value) }
     }
 }
 
-impl<T: Copy, const NUM_CHANNELS: usize> Borrow<Ecgfp5Row<T, NUM_CHANNELS>> for [T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS] 
+impl<T: Copy, const NUM_CHANNELS: usize> Borrow<Ecgfp5Row<T, NUM_CHANNELS>>
+    for [T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]
 where
-    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:
+    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:,
 {
-    fn borrow(&self) -> &Ecgfp5Row<T, NUM_CHANNELS>{
+    fn borrow(&self) -> &Ecgfp5Row<T, NUM_CHANNELS> {
         unsafe { transmute(self) }
     }
 }
 
-impl<T: Copy, const NUM_CHANNELS: usize> BorrowMut<Ecgfp5Row<T, NUM_CHANNELS>> for [T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]
+impl<T: Copy, const NUM_CHANNELS: usize> BorrowMut<Ecgfp5Row<T, NUM_CHANNELS>>
+    for [T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]
 where
-    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:
+    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:,
 {
     fn borrow_mut(&mut self) -> &mut Ecgfp5Row<T, NUM_CHANNELS> {
         unsafe { transmute(self) }
     }
 }
 
-impl<T: Copy, const NUM_CHANNELS: usize> Borrow<[T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]> for Ecgfp5Row<T, NUM_CHANNELS> 
+impl<T: Copy, const NUM_CHANNELS: usize> Borrow<[T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]>
+    for Ecgfp5Row<T, NUM_CHANNELS>
 where
-    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:
+    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:,
 {
     fn borrow(&self) -> &[T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS] {
         unsafe { transmute(self) }
     }
 }
 
-impl<T: Copy, const NUM_CHANNELS: usize> BorrowMut<[T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]> for Ecgfp5Row<T, NUM_CHANNELS> 
+impl<T: Copy, const NUM_CHANNELS: usize> BorrowMut<[T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]>
+    for Ecgfp5Row<T, NUM_CHANNELS>
 where
-    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:
+    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:,
 {
     fn borrow_mut(&mut self) -> &mut [T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS] {
         unsafe { transmute(self) }

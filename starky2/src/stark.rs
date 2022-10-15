@@ -108,7 +108,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             let num_ro_memory_polys = descriptors.len() * num_ro_memory_challenges;
             let info = FriPolynomialInfo::from_range(
                 oracle_indices.next().unwrap(),
-                0..num_ro_memory_polys
+                0..num_ro_memory_polys,
             );
 
             let oracle = FriOracleInfo {
@@ -224,7 +224,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             let num_ro_memory_polys = descriptors.len() * num_ro_memory_challenges;
             let info = FriPolynomialInfo::from_range(
                 oracle_indices.next().unwrap(),
-                0..num_ro_memory_polys
+                0..num_ro_memory_polys,
             );
 
             let oracle = FriOracleInfo {

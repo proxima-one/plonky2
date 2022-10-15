@@ -22,7 +22,7 @@ use plonky2::util::timing::TimingTree;
 use starky2::all_stark::{AllProof, AllStark, CtlStark};
 use starky2::config::StarkConfig;
 use starky2::cross_table_lookup::{
-    get_ctl_data, verify_cross_table_lookups, CtlCheckVars, CtlColumn, CtlDescriptor, TableID,
+    get_ctl_data, verify_cross_table_lookups, CtlCheckVars, CtlColSet, CtlDescriptor, TableID,
 };
 use starky2::get_challenges::{get_ctl_challenges, start_all_proof_challenger};
 use starky2::prover::{prove_single_table, start_all_proof};
@@ -86,7 +86,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> C
         // sponge looks up xored state from permutation
         let instances = instances.chain(sponge_layout::keccak_ctl_col_input(SPONGE_TID).zip(
             (0..KECCAK_RATE_U32S).map(|i| {
-                CtlColumn::new(
+                CtlColSet::new(
                     PERMUTATION_TID,
                     permutation_layout::reg_input_limb(i),
                     Some(permutation_layout::REG_INPUT_FILTER),
@@ -99,7 +99,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> C
             instances
                 .chain(sponge_layout::keccak_ctl_col_output(SPONGE_TID).zip(
                     (0..KECCAK_RATE_U32S).map(|i| {
-                        CtlColumn::new(
+                        CtlColSet::new(
                             PERMUTATION_TID,
                             permutation_layout::reg_output_limb(i),
                             Some(permutation_layout::REG_OUTPUT_FILTER),
