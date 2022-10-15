@@ -193,6 +193,7 @@ where
     }
 
     let merkle_caps = std::iter::once(proof.trace_cap.clone())
+        .chain(proof.ro_memory_cap.clone())
         .chain(proof.permutation_zs_cap.clone())
         .chain(proof.ctl_zs_cap.clone())
         .chain(std::iter::once(proof.quotient_polys_cap.clone()))

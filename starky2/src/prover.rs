@@ -330,6 +330,7 @@ where
     challenger.observe_openings(&openings.to_fri_openings());
 
     let initial_merkle_trees = std::iter::once(trace_commitment)
+        .chain(ro_memory_pps_commitment)
         .chain(permutation_zs_commitment)
         .chain(ctl_zs_commitment)
         .chain(std::iter::once(&quotient_commitment))

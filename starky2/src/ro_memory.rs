@@ -80,36 +80,39 @@ pub(crate) fn get_ro_memory_data<F: RichField + Extendable<D>, C: GenericConfig<
 			value_sorted_col,
 		} = descriptor;
 
-		let new_products = (0..config.num_challenges)
-			.map(|chal_idx| {
+		let new_products = new_challenges
+			.iter()
+			.map(|challenge| {
 				let addr_values = &trace_poly_values[addr_col];
 				let value_values = &trace_poly_values[value_col];
 				let addr_sorted_values = &trace_poly_values[addr_sorted_col];
 				let value_sorted_values = &trace_poly_values[value_sorted_col];
-				let zeta = new_challenges[chal_idx].zeta;
-				let alpha = new_challenges[chal_idx].alpha;
+				let zeta = challenge.zeta;
+				let alpha = challenge.alpha;
 
-				izip!(addr_values.values.iter(), value_values.values.iter(), addr_sorted_values.values.iter(), value_sorted_values.values.iter())
+				let product_poly = izip!(addr_values.values.iter(), value_values.values.iter(), addr_sorted_values.values.iter(), value_sorted_values.values.iter())
 					.scan(F::ONE, |p_prev, (&a, &v, &a_prime, &v_prime)| {
 						let num = (zeta - (a + alpha * v)) * *p_prev;
 						let denom = zeta - (a_prime + alpha * v_prime);
 						let p = num * denom.inverse();
-						let res = *p_prev;
 						*p_prev = p;
-						Some(res)
+						Some(p)
 					})
-					.collect_vec()
+					.collect_vec();
+
+				debug_assert_eq!(*product_poly.last().unwrap(), F::ONE);
+				product_poly
 			})
 			.map(|values| PolynomialValues::new(values));
+
 		cumulative_products.extend(new_products);
 		challenges.extend(new_challenges);
-
 		addr_cols.extend(std::iter::repeat(addr_col).take(num_challenges));
 		value_cols.extend(std::iter::repeat(value_col).take(num_challenges));
 		addr_sorted_cols.extend(std::iter::repeat(addr_sorted_col).take(num_challenges));
 		value_sorted_cols.extend(std::iter::repeat(value_sorted_col).take(num_challenges));
 	}
-	
+
 	RoMemoryData {
 		challenges,
 		cumulative_products,
@@ -140,7 +143,6 @@ pub(crate) fn eval_ro_memory_checks<F, FE, P, C, S, const D: usize, const D2: us
 	vars: StarkEvaluationVars<FE, P, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
 	ro_memory_vars: &RoMemoryCheckVars<F, FE, P, D2>,
 	yield_constr: &mut ConstraintConsumer<P>,
-	num_challenges: usize
 ) where
     F: RichField + Extendable<D>,
     FE: FieldExtension<D2, BaseField = F>,
@@ -160,11 +162,14 @@ pub(crate) fn eval_ro_memory_checks<F, FE, P, C, S, const D: usize, const D2: us
 		value_sorted_cols,
 	} = ro_memory_vars;
 
+	debug_assert!(local_pps.len() == challenges.len());
+	// println!("challenges.len(): {}", challenges.len());
+
 	let curr_row = vars.local_values;
 	let next_row = vars.next_values;
 
-	let mut instances = izip!(challenges.iter(), addr_cols.iter(), value_cols.iter(), addr_sorted_cols.iter(), value_sorted_cols.iter());
-	let mut pps = izip!(local_pps.iter(), next_pps.iter());
+	let instances = izip!(challenges.iter(), addr_cols.iter(), value_cols.iter(), addr_sorted_cols.iter(), value_sorted_cols.iter());
+	let pps = izip!(local_pps.iter(), next_pps.iter());
 	for ((&RoMemoryChallenge { alpha, zeta }, &addr_col, &value_col, &addr_sorted_col, &value_sorted_col), (&local_pp, &next_pp)) in instances.zip(pps) {
 		// continuity - addresses fall into a continuous range
 		yield_constr.constraint_transition(
@@ -189,9 +194,9 @@ pub(crate) fn eval_ro_memory_checks<F, FE, P, C, S, const D: usize, const D2: us
 		// cumulative product is computed correctly
 		let lhs = -(next_row[addr_sorted_col] - next_row[value_sorted_col] * FE::from_basefield(alpha)) + FE::from_basefield(zeta);
 		let rhs = -(next_row[addr_col] - next_row[value_col] * FE::from_basefield(alpha)) + FE::from_basefield(zeta);
-		yield_constr.constraint_transition(
-			lhs * next_pp - rhs * local_pp
-		);
+		// yield_constr.constraint_transition(
+		// 	lhs * next_pp - rhs * local_pp
+		// );
 
 		// cumulative product is 1 at the end
 		yield_constr.constraint_last_row(P::ONES - local_pp)

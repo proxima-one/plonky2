@@ -31,8 +31,7 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
     stark.eval_packed_generic(vars, consumer);
 
     if let Some(ref ro_memory_vars) = ro_memory_vars {
-        let num_challenges = config.num_challenges;
-        eval_ro_memory_checks::<F, FE, P, C, S, D, D2>(vars, ro_memory_vars, consumer, num_challenges);
+        eval_ro_memory_checks::<F, FE, P, C, S, D, D2>(vars, ro_memory_vars, consumer);
     }
 
     if let Some(permutation_data) = permutation_vars {
