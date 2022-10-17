@@ -17,9 +17,9 @@ use plonky2::util::timing::TimingTree;
 use starky2::all_stark::{AllProof, AllStark, CtlStark};
 use starky2::config::StarkConfig;
 use starky2::cross_table_lookup::{
-    get_ctl_data, verify_cross_table_lookups, CtlCheckVars, CtlColumn, CtlDescriptor, TableID,
+    get_ctl_data, verify_cross_table_lookups, CtlCheckVars, CtlColSet, CtlDescriptor, TableID,
 };
-use starky2::get_challenges::{get_ctl_challenges, start_all_proof_challenger};
+use starky2::get_challenges::{get_ctl_challenges_by_table, start_all_proof_challenger};
 use starky2::prover::{prove_single_table, start_all_proof};
 use starky2::stark::Stark;
 use starky2::starky2lib::depth_5_merkle_tree::{
@@ -59,47 +59,26 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> C
     }
 
     fn get_ctl_descriptor(&self) -> CtlDescriptor {
-        let instances = (0..8).map(|i| {
-            (
-                CtlColumn::new(
-                    TREE_TID,
-                    tree_layout::hash_output_word(i),
-                    Some(tree_layout::OUTPUT_FILTER),
-                ),
-                CtlColumn::new(
-                    HASH_TID,
-                    sha2_layout::output_i(i),
-                    Some(sha2_layout::OUTPUT_FILTER),
-                ),
-            )
-        });
+        let mut instances = Vec::new();
+        let tree_output_cols = (0..8).map(|i| tree_layout::hash_output_word(i)).collect();
+        let sha2_output_cols = (0..8).map(|i| sha2_layout::output_i(i)).collect();
 
-        let instances = instances
-            .chain((0..16).map(|i| {
-                (
-                    CtlColumn::new(
-                        HASH_TID,
-                        sha2_layout::input_i(i),
-                        Some(sha2_layout::INPUT_FILTER),
-                    ),
-                    if i < 8 {
-                        CtlColumn::new(
-                            TREE_TID,
-                            tree_layout::hash_input_0_word(i),
-                            Some(tree_layout::INPUT_FILTER),
-                        )
-                    } else {
-                        CtlColumn::new(
-                            TREE_TID,
-                            tree_layout::hash_input_1_word(i - 8),
-                            Some(tree_layout::INPUT_FILTER),
-                        )
-                    },
-                )
-            }))
+        instances.push((
+            CtlColSet::new(TREE_TID, tree_output_cols, Some(tree_layout::OUTPUT_FILTER)),
+            CtlColSet::new(HASH_TID, sha2_output_cols, Some(sha2_layout::OUTPUT_FILTER)),
+        ));
+
+        let hash_input_cols = (0..16).map(|i| sha2_layout::input_i(i)).collect();
+        let tree_input_cols = (0..8)
+            .map(|i| tree_layout::hash_input_0_word(i))
+            .chain((0..8).map(|i| tree_layout::hash_input_1_word(i)))
             .collect();
+        instances.push((
+            CtlColSet::new(HASH_TID, hash_input_cols, Some(sha2_layout::INPUT_FILTER)),
+            CtlColSet::new(TREE_TID, tree_input_cols, Some(tree_layout::INPUT_FILTER)),
+        ));
 
-        CtlDescriptor::from_instances(instances)
+        CtlDescriptor::from_instances(instances, self.num_tables())
     }
 
     fn generate(
@@ -231,11 +210,18 @@ where
         let num_challenges = config.num_challenges;
 
         let ctl_descriptor = self.get_ctl_descriptor();
-        let ctl_challenges =
-            get_ctl_challenges::<F, C, D>(&mut challenger, &ctl_descriptor, num_challenges);
+        let (linear_comb_challenges, ctl_challenges) = get_ctl_challenges_by_table::<F, C, D>(
+            &mut challenger,
+            &ctl_descriptor,
+            num_challenges,
+        );
 
-        let ctl_vars =
-            CtlCheckVars::from_proofs(&all_proof.proofs, &ctl_descriptor, &ctl_challenges);
+        let ctl_vars = CtlCheckVars::from_proofs(
+            &all_proof.proofs,
+            &ctl_descriptor,
+            &linear_comb_challenges,
+            &ctl_challenges,
+        );
 
         let stark = &starks.0;
         let proof = &all_proof.proofs[TREE_TID.0];
@@ -245,7 +231,11 @@ where
         let proof = &all_proof.proofs[HASH_TID.0];
         verify_stark_proof_with_ctl(stark, proof, &ctl_vars[HASH_TID.0], &mut challenger, config)?;
 
-        verify_cross_table_lookups(&ctl_vars, all_proof.proofs.iter().map(|p| &p.proof))?;
+        verify_cross_table_lookups(
+            all_proof.proofs.iter().map(|p| &p.proof),
+            &ctl_descriptor,
+            num_challenges,
+        )?;
 
         Ok(())
     }

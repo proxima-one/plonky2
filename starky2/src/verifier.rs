@@ -1,5 +1,5 @@
 use anyhow::{ensure, Result};
-use itertools::{Itertools, izip};
+use itertools::{izip, Itertools};
 use plonky2::field::extension::{Extendable, FieldExtension};
 use plonky2::field::types::Field;
 use plonky2::fri::verifier::verify_fri_proof;
@@ -134,15 +134,23 @@ where
 
     let ro_memory_vars = if let Some(descriptors) = stark.ro_memory_descriptors() {
         let num_challenges = config.num_challenges;
-        let (addr_cols, value_cols, addr_sorted_cols, value_sorted_cols) = descriptors.into_iter().flat_map(|descriptor| {
-            let RoMemoryDescriptor { addr_col, value_col, addr_sorted_col, value_sorted_col } = descriptor;
-            izip!(
-                std::iter::repeat(addr_col).take(num_challenges),
-                std::iter::repeat(value_col).take(num_challenges),
-                std::iter::repeat(addr_sorted_col).take(num_challenges),
-                std::iter::repeat(value_sorted_col).take(num_challenges),
-            )
-        }).multiunzip();
+        let (addr_cols, value_cols, addr_sorted_cols, value_sorted_cols) = descriptors
+            .into_iter()
+            .flat_map(|descriptor| {
+                let RoMemoryDescriptor {
+                    addr_col,
+                    value_col,
+                    addr_sorted_col,
+                    value_sorted_col,
+                } = descriptor;
+                izip!(
+                    std::iter::repeat(addr_col).take(num_challenges),
+                    std::iter::repeat(value_col).take(num_challenges),
+                    std::iter::repeat(addr_sorted_col).take(num_challenges),
+                    std::iter::repeat(value_sorted_col).take(num_challenges),
+                )
+            })
+            .multiunzip();
 
         Some(RoMemoryCheckVars {
             local_pps: ro_memory_pps.as_ref().unwrap().clone(),

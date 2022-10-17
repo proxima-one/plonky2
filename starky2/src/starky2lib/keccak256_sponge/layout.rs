@@ -3,7 +3,9 @@ use std::{
     mem::{size_of, transmute},
 };
 
-use crate::cross_table_lookup::CtlColumn;
+use itertools::Itertools;
+
+use crate::cross_table_lookup::CtlColSet;
 use crate::{cross_table_lookup::TableID, util::transmute_no_compile_time_size_checks};
 
 pub const KECCAK_WIDTH_BYTES: usize = 200;
@@ -157,82 +159,66 @@ pub const fn input_block_encoded_start_col() -> usize {
     KECCAK_256_NUM_COLS - 8
 }
 
-pub fn xor_ctl_cols_a(tid: TableID) -> impl Iterator<Item = CtlColumn> {
-    (0..KECCAK_RATE_U32S).map(move |i| {
-        CtlColumn::new(
-            tid,
-            input_block_start_col() + i,
-            Some(mode_bits_start_col()),
-        )
-    })
-}
-
-pub fn xor_ctl_cols_b(tid: TableID) -> impl Iterator<Item = CtlColumn> {
-    (0..KECCAK_RATE_U32S).map(move |i| {
-        CtlColumn::new(
-            tid,
-            curr_state_rate_start_col() + i,
-            Some(mode_bits_start_col()),
-        )
-    })
-}
-
-pub fn xor_ctl_cols_output(tid: TableID) -> impl Iterator<Item = CtlColumn> {
-    (0..KECCAK_RATE_U32S).map(move |i| {
-        CtlColumn::new(
-            tid,
-            xored_state_rate_start_col() + i,
-            Some(mode_bits_start_col()),
-        )
-    })
-}
-
-pub fn keccak_ctl_col_input(tid: TableID) -> impl Iterator<Item = CtlColumn> {
+pub fn xor_ctl_cols_a(tid: TableID) -> impl Iterator<Item = CtlColSet> {
     (0..KECCAK_RATE_U32S)
-        .map(move |i| {
-            CtlColumn::new(
-                tid,
-                xored_state_rate_start_col() + i,
-                Some(invoke_permutation_filter_col()),
-            )
-        })
-        .chain((0..KECCAK_CAPACITY_U32S).map(move |i| {
-            CtlColumn::new(
-                tid,
-                curr_state_capacity_start_col() + i,
-                Some(invoke_permutation_filter_col()),
-            )
-        }))
+        .map(move |i| CtlColSet::new(
+            tid,
+            vec![input_block_start_col() + i],
+            Some(mode_bits_start_col())
+        ))
 }
 
-pub fn keccak_ctl_col_output(tid: TableID) -> impl Iterator<Item = CtlColumn> {
-    (0..KECCAK_WIDTH_U32S).map(move |i| {
-        CtlColumn::new(
+pub fn xor_ctl_cols_b(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+    (0..KECCAK_RATE_U32S)
+        .map(move |i| CtlColSet::new(
             tid,
-            new_state_start_col() + i,
-            Some(invoke_permutation_filter_col()),
-        )
-    })
+            vec![curr_state_rate_start_col() + i],
+            Some(mode_bits_start_col())
+        ))
 }
 
-pub fn input_ctl_col(tid: TableID) -> impl Iterator<Item = CtlColumn> {
-    (0..KECCAK_RATE_U32S).map(move |i| {
-        CtlColumn::new(
+pub fn xor_ctl_cols_output(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+    (0..KECCAK_RATE_U32S)
+        .map(move |i| CtlColSet::new(
             tid,
-            input_block_encoded_start_col() + i,
-            Some(mode_bits_start_col()),
-        )
-    })
+            vec![xored_state_rate_start_col() + i],
+            Some(mode_bits_start_col())
+        ))
 }
 
-pub fn output_ctl_col(tid: TableID) -> impl Iterator<Item = CtlColumn> {
-    (0..KECCAK_RATE_U32S).map(move |i| {
-        CtlColumn::new(
-            tid,
-            curr_state_rate_start_col() + i,
-            Some(mode_bits_start_col()),
-        )
-    })
+pub fn keccak_ctl_col_input(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+    let cols = (0..KECCAK_RATE_U32S).map(|i| xored_state_rate_start_col() + i);
+    let cols = cols.chain((0..KECCAK_CAPACITY_U32S).map(|i| curr_state_capacity_start_col() + i));
+    std::iter::once(CtlColSet::new(
+        tid,
+        cols.collect_vec(),
+        Some(invoke_permutation_filter_col()),
+    ))
+}
+
+pub fn keccak_ctl_col_output(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+    let cols = (0..KECCAK_WIDTH_U32S)
+        .map(|i| new_state_start_col() + i)
+        .collect_vec();
+    std::iter::once(CtlColSet::new(
+        tid,
+        cols,
+        Some(invoke_permutation_filter_col()),
+    ))
+}
+
+pub fn input_ctl_col(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+    let cols = (0..KECCAK_RATE_U32S)
+        .map(|i| input_block_encoded_start_col() + i)
+        .collect_vec();
+    std::iter::once(CtlColSet::new(tid, cols, Some(mode_bits_start_col() + 1)))
+}
+
+pub fn output_ctl_col(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+    let cols = (0..KECCAK_RATE_U32S)
+        .map(|i| curr_state_rate_start_col() + i)
+        .collect_vec();
+    std::iter::once(CtlColSet::new(tid, cols, Some(mode_bits_start_col() + 1)))
 }
 
 impl<T: Copy + Default> Default for Keccak256SpongeRow<T> {

@@ -11,7 +11,10 @@ use plonky2::plonk::circuit_builder::CircuitBuilder;
 use plonky2::plonk::config::{AlgebraicHasher, GenericConfig};
 
 use crate::config::StarkConfig;
-use crate::cross_table_lookup::CtlDescriptor;
+use crate::cross_table_lookup::{
+    get_ctl_challenge, get_ctl_linear_comb_challenge, CtlChallenge, CtlDescriptor,
+    CtlLinearCombChallenge,
+};
 use crate::permutation::{
     get_n_permutation_challenge_sets, get_n_permutation_challenge_sets_target,
 };
@@ -39,20 +42,56 @@ where
 }
 
 // assumes `start_all_proof_challenges` was used to get the challenger
-pub fn get_ctl_challenges<F, C, const D: usize>(
+pub fn get_ctl_challenges_by_table<F, C, const D: usize>(
     challenger: &mut Challenger<F, C::Hasher>,
     ctl_descriptor: &CtlDescriptor,
     num_challenges: usize,
-) -> Vec<Vec<F>>
+) -> (
+    Vec<Vec<CtlLinearCombChallenge<F>>>,
+    Vec<Vec<CtlChallenge<F>>>,
+)
 where
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
 {
-    ctl_descriptor
-        .instances
-        .iter()
-        .map(|_| challenger.get_n_challenges(num_challenges))
-        .collect()
+    let mut linear_comb_challenges_by_table =
+        vec![(Vec::new(), Vec::new()); ctl_descriptor.num_tables];
+    let mut ctl_challenges_by_table = vec![(Vec::new(), Vec::new()); ctl_descriptor.num_tables];
+    for (looking, looked) in ctl_descriptor.instances.iter() {
+        let linear_comb_challenges = (0..num_challenges)
+            .map(|_| get_ctl_linear_comb_challenge(challenger))
+            .collect_vec();
+
+        let ctl_challenges = (0..num_challenges)
+            .map(|_| get_ctl_challenge(challenger))
+            .collect_vec();
+
+        linear_comb_challenges_by_table[looking.tid.0]
+            .0
+            .extend(linear_comb_challenges.clone());
+        linear_comb_challenges_by_table[looked.tid.0]
+            .1
+            .extend(linear_comb_challenges);
+
+        ctl_challenges_by_table[looking.tid.0]
+            .0
+            .extend(ctl_challenges.clone());
+        ctl_challenges_by_table[looked.tid.0]
+            .1
+            .extend(ctl_challenges);
+    }
+
+    let linear_comb_challenges_by_table = linear_comb_challenges_by_table
+        .into_iter()
+        .map(|(looking, looked)| [looking, looked].concat())
+        .collect_vec();
+
+    let ctl_challenges_by_table = ctl_challenges_by_table
+        .into_iter()
+        .map(|(looking, looked)| [looking, looked].concat())
+        .collect_vec();
+
+    (linear_comb_challenges_by_table, ctl_challenges_by_table)
 }
 
 // IMPORTANT: assumes `challenger` has already observed the trace caps and the ctl challenges have already been extracted
@@ -79,9 +118,7 @@ where
     let ro_memory_challenges = ro_memory_cap.map(|ro_memory_cap| {
         let descriptors = stark.ro_memory_descriptors().unwrap();
         let tmp = (0..descriptors.len())
-            .flat_map(|_| {
-                get_n_ro_memory_challenges(challenger, num_challenges)
-            })
+            .flat_map(|_| get_n_ro_memory_challenges(challenger, num_challenges))
             .collect_vec();
         challenger.observe_cap(ro_memory_cap);
         tmp
@@ -153,9 +190,7 @@ where
     let ro_memory_challenges = ro_memory_cap.map(|ro_memory_cap| {
         let descriptors = stark.ro_memory_descriptors().unwrap();
         let tmp = (0..descriptors.len())
-            .flat_map(|_| {
-                get_n_ro_memory_challenges(&mut challenger, num_challenges)
-            })
+            .flat_map(|_| get_n_ro_memory_challenges(&mut challenger, num_challenges))
             .collect_vec();
         challenger.observe_cap(ro_memory_cap);
         tmp

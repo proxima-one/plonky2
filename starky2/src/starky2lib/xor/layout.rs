@@ -1,7 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 use std::mem::transmute;
 
-use crate::cross_table_lookup::{CtlColumn, TableID};
+use crate::cross_table_lookup::{CtlColSet, TableID};
 use crate::util::transmute_no_compile_time_size_checks;
 
 #[repr(C)]
@@ -32,19 +32,25 @@ impl<T: Copy, const N: usize, const NUM_CHANNELS: usize> XorLayout<T, N, NUM_CHA
         3 + 2 * N + channel
     }
 
-    pub fn ctl_cols_a(tid: TableID) -> impl Iterator<Item = CtlColumn> {
-        (0..NUM_CHANNELS)
-            .map(move |i| CtlColumn::new(tid, Self::a_col(), Some(Self::channel_filter_col(i))))
-    }
-
-    pub fn ctl_cols_b(tid: TableID) -> impl Iterator<Item = CtlColumn> {
-        (0..NUM_CHANNELS)
-            .map(move |i| CtlColumn::new(tid, Self::b_col(), Some(Self::channel_filter_col(i))))
-    }
-
-    pub fn ctl_cols_output(tid: TableID) -> impl Iterator<Item = CtlColumn> {
+    pub fn ctl_cols_a(tid: TableID) -> impl Iterator<Item = CtlColSet> {
         (0..NUM_CHANNELS).map(move |i| {
-            CtlColumn::new(tid, Self::output_col(), Some(Self::channel_filter_col(i)))
+            CtlColSet::new(tid, vec![Self::a_col()], Some(Self::channel_filter_col(i)))
+        })
+    }
+
+    pub fn ctl_cols_b(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+        (0..NUM_CHANNELS).map(move |i| {
+            CtlColSet::new(tid, vec![Self::b_col()], Some(Self::channel_filter_col(i)))
+        })
+    }
+
+    pub fn ctl_cols_output(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+        (0..NUM_CHANNELS).map(move |i| {
+            CtlColSet::new(
+                tid,
+                vec![Self::output_col()],
+                Some(Self::channel_filter_col(i)),
+            )
         })
     }
 }

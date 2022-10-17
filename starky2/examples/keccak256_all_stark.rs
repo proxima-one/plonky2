@@ -22,9 +22,9 @@ use plonky2::util::timing::TimingTree;
 use starky2::all_stark::{AllProof, AllStark, CtlStark};
 use starky2::config::StarkConfig;
 use starky2::cross_table_lookup::{
-    get_ctl_data, verify_cross_table_lookups, CtlCheckVars, CtlColumn, CtlDescriptor, TableID,
+    get_ctl_data, verify_cross_table_lookups, CtlCheckVars, CtlColSet, CtlDescriptor, TableID,
 };
-use starky2::get_challenges::{get_ctl_challenges, start_all_proof_challenger};
+use starky2::get_challenges::{get_ctl_challenges_by_table, start_all_proof_challenger};
 use starky2::prover::{prove_single_table, start_all_proof};
 use starky2::stark::Stark;
 use starky2::starky2lib::keccak256_sponge::generation::Keccak256SpongeGenerator;
@@ -84,31 +84,30 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> C
         );
 
         // sponge looks up xored state from permutation
+        let permutation_input_cols = (0..KECCAK_WIDTH_U32S)
+            .map(|i| permutation_layout::reg_input_limb(i))
+            .collect();
         let instances = instances.chain(sponge_layout::keccak_ctl_col_input(SPONGE_TID).zip(
-            (0..KECCAK_RATE_U32S).map(|i| {
-                CtlColumn::new(
-                    PERMUTATION_TID,
-                    permutation_layout::reg_input_limb(i),
-                    Some(permutation_layout::REG_INPUT_FILTER),
-                )
-            }),
+            std::iter::once(CtlColSet::new(
+                PERMUTATION_TID,
+                permutation_input_cols,
+                Some(permutation_layout::REG_INPUT_FILTER),
+            )),
         ));
 
         // sponge looks up output from permutation
-        let instances =
-            instances
-                .chain(sponge_layout::keccak_ctl_col_output(SPONGE_TID).zip(
-                    (0..KECCAK_RATE_U32S).map(|i| {
-                        CtlColumn::new(
-                            PERMUTATION_TID,
-                            permutation_layout::reg_output_limb(i),
-                            Some(permutation_layout::REG_OUTPUT_FILTER),
-                        )
-                    }),
-                ))
-                .collect();
+        let permutation_output_cols = (0..KECCAK_WIDTH_U32S)
+            .map(|i| permutation_layout::reg_output_limb(i))
+            .collect();
+        let instances = instances.chain(sponge_layout::keccak_ctl_col_output(SPONGE_TID).zip(
+            std::iter::once(CtlColSet::new(
+                PERMUTATION_TID,
+                permutation_output_cols,
+                Some(permutation_layout::REG_OUTPUT_FILTER),
+            )),
+        ));
 
-        CtlDescriptor::from_instances(instances)
+        CtlDescriptor::from_instances(instances.collect(), self.num_tables())
     }
 
     fn generate(
@@ -420,10 +419,17 @@ where
         let num_challenges = config.num_challenges;
 
         let ctl_descriptor = self.get_ctl_descriptor();
-        let ctl_challenges =
-            get_ctl_challenges::<F, C, D>(&mut challenger, &ctl_descriptor, num_challenges);
-        let ctl_vars =
-            CtlCheckVars::from_proofs(&all_proof.proofs, &ctl_descriptor, &ctl_challenges);
+        let (linear_comb_challenges, ctl_challenges) = get_ctl_challenges_by_table::<F, C, D>(
+            &mut challenger,
+            &ctl_descriptor,
+            num_challenges,
+        );
+        let ctl_vars = CtlCheckVars::from_proofs(
+            &all_proof.proofs,
+            &ctl_descriptor,
+            &linear_comb_challenges,
+            &ctl_challenges,
+        );
 
         let stark = &starks.0;
         let proof = &all_proof.proofs[SPONGE_TID.0];
@@ -449,7 +455,11 @@ where
         let proof = &all_proof.proofs[XOR_TID.0];
         verify_stark_proof_with_ctl(stark, proof, &ctl_vars[XOR_TID.0], &mut challenger, config)?;
 
-        verify_cross_table_lookups(&ctl_vars, all_proof.proofs.iter().map(|p| &p.proof))?;
+        verify_cross_table_lookups(
+            all_proof.proofs.iter().map(|p| &p.proof),
+            &ctl_descriptor,
+            num_challenges,
+        )?;
 
         Ok(())
     }

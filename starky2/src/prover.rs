@@ -18,12 +18,14 @@ use plonky2_util::{log2_ceil, log2_strict};
 
 use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
-use crate::cross_table_lookup::{CtlCheckVars, CtlColumn, CtlTableData, TableID};
+use crate::cross_table_lookup::{
+    CtlChallenge, CtlCheckVars, CtlColSet, CtlLinearCombChallenge, CtlTableData, TableID,
+};
 use crate::permutation::compute_permutation_z_polys;
 use crate::permutation::get_n_permutation_challenge_sets;
 use crate::permutation::{PermutationChallengeSet, PermutationCheckVars};
-use crate::ro_memory::{get_ro_memory_data, RoMemoryData, RoMemoryChallenge, RoMemoryCheckVars};
 use crate::proof::{StarkOpeningSet, StarkProof, StarkProofWithPublicInputs};
+use crate::ro_memory::{get_ro_memory_data, RoMemoryChallenge, RoMemoryCheckVars, RoMemoryData};
 use crate::stark::Stark;
 use crate::vanishing_poly::eval_vanishing_poly;
 use crate::vars::StarkEvaluationVars;
@@ -166,7 +168,14 @@ where
 
     // Read-only memory arguments
     let ro_memory_commitment_challenges_cols = stark.uses_ro_memory_args().then(|| {
-        let RoMemoryData { cumulative_products, challenges, addr_cols, value_cols, addr_sorted_cols, value_sorted_cols } = get_ro_memory_data::<F, C, S, D>(stark, config, trace_poly_values, challenger);
+        let RoMemoryData {
+            cumulative_products,
+            challenges,
+            addr_cols,
+            value_cols,
+            addr_sorted_cols,
+            value_sorted_cols,
+        } = get_ro_memory_data::<F, C, S, D>(stark, config, trace_poly_values, challenger);
         let ro_memory_pps_commitment = timed!(
             timing,
             "compute ro memory commitments",
@@ -180,7 +189,11 @@ where
             )
         );
 
-        (ro_memory_pps_commitment, challenges, [addr_cols, value_cols, addr_sorted_cols, value_sorted_cols])
+        (
+            ro_memory_pps_commitment,
+            challenges,
+            [addr_cols, value_cols, addr_sorted_cols, value_sorted_cols],
+        )
     });
 
     let ro_memory_pps_commitment = ro_memory_commitment_challenges_cols
@@ -234,11 +247,12 @@ where
     }
 
     let ctl_zs_commitment_challenges_cols = ctl_data.map(|ctl_data| {
+        let zs = ctl_data.zs();
         let commitment = timed!(
             timing,
             "compute CTL Z commitments",
             PolynomialBatch::<F, C, D>::from_values(
-                ctl_data.table_zs.clone(),
+                zs,
                 rate_bits,
                 false,
                 config.fri_config.cap_height,
@@ -246,16 +260,9 @@ where
                 None
             )
         );
-        let challenges = ctl_data.challenges.clone();
-        (
-            commitment,
-            challenges,
-            (
-                ctl_data.cols.clone(),
-                ctl_data.foreign_col_tids.clone(),
-                ctl_data.foreign_col_indices.clone(),
-            ),
-        )
+        let challenges = ctl_data.challenges();
+        let cols = ctl_data.cols();
+        (commitment, challenges, cols)
     });
 
     let ctl_zs_commitment = ctl_zs_commitment_challenges_cols
@@ -344,7 +351,7 @@ where
                 zeta,
                 g,
                 degree_bits,
-                ctl_data.map(|data| data.table_zs.len()).unwrap_or(0),
+                ctl_data.map(|data| data.num_zs()).unwrap_or(0),
                 config
             ),
             &initial_merkle_trees,
@@ -380,7 +387,7 @@ fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
     ro_memory_commitment_challenges: &'a Option<(
         PolynomialBatch<F, C, D>,
         Vec<RoMemoryChallenge<F>>,
-        ([Vec<usize>; 4])
+        ([Vec<usize>; 4]),
     )>,
     permutation_zs_commitment_challenges: &'a Option<(
         PolynomialBatch<F, C, D>,
@@ -388,8 +395,8 @@ fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
     )>,
     ctl_zs_commitment_challenges_cols: &'a Option<(
         PolynomialBatch<F, C, D>,
-        Vec<F>,
-        (Vec<CtlColumn>, Vec<TableID>, Vec<usize>),
+        (Vec<CtlLinearCombChallenge<F>>, Vec<CtlChallenge<F>>),
+        Vec<CtlColSet>,
     )>,
     public_inputs: [F; S::PUBLIC_INPUTS],
     alphas: Vec<F>,
@@ -488,7 +495,11 @@ where
             };
 
             let ro_memory_vars = ro_memory_commitment_challenges.as_ref().map(
-                |(commitment, challenges, [addr_cols, value_cols, addr_sorted_cols, value_sorted_cols])| RoMemoryCheckVars {
+                |(
+                    commitment,
+                    challenges,
+                    [addr_cols, value_cols, addr_sorted_cols, value_sorted_cols],
+                )| RoMemoryCheckVars {
                     local_pps: commitment.get_lde_values_packed(i_start, step),
                     next_pps: commitment.get_lde_values_packed(i_next_start, step),
                     challenges: challenges.to_vec(),
@@ -496,7 +507,7 @@ where
                     value_cols: value_cols.to_vec(),
                     addr_sorted_cols: addr_sorted_cols.to_vec(),
                     value_sorted_cols: value_sorted_cols.to_vec(),
-                }
+                },
             );
 
             let permutation_check_vars = permutation_zs_commitment_challenges.as_ref().map(
@@ -513,8 +524,8 @@ where
                     .map(|(commitment, challenges, cols)| {
                         let local_zs = commitment.get_lde_values_packed(i_start, step);
                         let next_zs = commitment.get_lde_values_packed(i_next_start, step);
-                        let challenges = challenges.clone();
-                        let (cols, foreign_col_tids, foreign_col_indices) = cols.clone();
+                        let (linear_comb_challenges, challenges) = challenges.clone();
+                        let cols = cols.clone();
                         let (first_zs, last_zs) = ctl_zs_first_last.clone().unwrap();
 
                         CtlCheckVars {
@@ -522,10 +533,9 @@ where
                             next_zs,
                             first_zs,
                             last_zs,
+                            linear_comb_challenges,
                             challenges,
                             cols,
-                            foreign_col_tids,
-                            foreign_col_indices,
                         }
                     });
 

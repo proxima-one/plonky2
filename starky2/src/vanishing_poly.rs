@@ -7,7 +7,7 @@ use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
 use crate::cross_table_lookup::{eval_cross_table_lookup_checks, CtlCheckVars};
 use crate::permutation::{eval_permutation_checks, PermutationCheckVars};
-use crate::ro_memory::{RoMemoryCheckVars, eval_ro_memory_checks};
+use crate::ro_memory::{eval_ro_memory_checks, RoMemoryCheckVars};
 use crate::stark::Stark;
 use crate::vars::StarkEvaluationVars;
 
