@@ -19,7 +19,7 @@ use starky2::config::StarkConfig;
 use starky2::cross_table_lookup::{
     get_ctl_data, verify_cross_table_lookups, CtlCheckVars, CtlColSet, CtlDescriptor, TableID,
 };
-use starky2::get_challenges::{get_ctl_challenges, start_all_proof_challenger};
+use starky2::get_challenges::{get_ctl_challenges_by_table, start_all_proof_challenger};
 use starky2::prover::{prove_single_table, start_all_proof};
 use starky2::stark::Stark;
 use starky2::starky2lib::depth_5_merkle_tree::{
@@ -211,7 +211,7 @@ where
 
         let ctl_descriptor = self.get_ctl_descriptor();
         let (linear_comb_challenges, ctl_challenges) =
-            get_ctl_challenges::<F, C, D>(&mut challenger, &ctl_descriptor, num_challenges);
+            get_ctl_challenges_by_table::<F, C, D>(&mut challenger, &ctl_descriptor, num_challenges);
 
         let ctl_vars = CtlCheckVars::from_proofs(
             &all_proof.proofs,
@@ -228,7 +228,7 @@ where
         let proof = &all_proof.proofs[HASH_TID.0];
         verify_stark_proof_with_ctl(stark, proof, &ctl_vars[HASH_TID.0], &mut challenger, config)?;
 
-        verify_cross_table_lookups(all_proof.proofs.iter().map(|p| &p.proof), &ctl_descriptor)?;
+        verify_cross_table_lookups(all_proof.proofs.iter().map(|p| &p.proof), &ctl_descriptor, num_challenges)?;
 
         Ok(())
     }

@@ -21,7 +21,7 @@ use crate::vars::StarkEvaluationVars;
 #[derive(Debug, Clone)]
 pub struct CtlDescriptor {
     /// instances of CTLs, where a colset in one table "looks up" a column in another table
-    /// represented as pairs of columns where the LHS is a column in this table and the RHS is a column in another tabe
+    /// represented as pairs of columns where the LHS is a set of columns in some table "looking" up the RHS, another set of columns in some table
     pub instances: Vec<(CtlColSet, CtlColSet)>,
     /// the number of tables involved
     pub num_tables: usize,
@@ -206,13 +206,10 @@ pub fn get_ctl_data<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, co
             filter_col: looked_filter_col,
         } = looked_colset.clone();
 
-        // linear combinations
-
         let linear_comb_challenges = (0..num_challenges)
             .map(|_| get_ctl_linear_comb_challenge(challenger))
             .collect_vec();
 
-        // Z polynomials
         let ctl_challenges = (0..num_challenges)
             .map(|_| get_ctl_challenge(challenger))
             .collect_vec();
@@ -340,16 +337,12 @@ where
     pub fn from_proofs<C: GenericConfig<D, F = F>>(
         proofs: &[StarkProofWithPublicInputs<F, C, D>],
         ctl_descriptor: &CtlDescriptor,
-        linear_comb_challenges: &[CtlLinearCombChallenge<F>],
-        ctl_challenges: &[CtlChallenge<F>],
+        linear_comb_challenges_by_table: &[Vec<CtlLinearCombChallenge<F>>],
+        ctl_challenges_by_table: &[Vec<CtlChallenge<F>>],
     ) -> Vec<Self> {
         let num_tables = ctl_descriptor.num_tables;
         debug_assert_eq!(num_tables, proofs.len());
-        debug_assert_eq!(linear_comb_challenges.len(), ctl_challenges.len());
-        debug_assert_eq!(
-            linear_comb_challenges.len() % ctl_descriptor.instances.len(), 0);
 
-        let num_challenges = linear_comb_challenges.len() / ctl_descriptor.instances.len();
         let first_last_zs = proofs.iter().map(|p| {
             (
                 p.proof
@@ -391,22 +384,16 @@ where
             .into_iter()
             .map(|(looking, looked)| looking.into_iter().chain(looked.into_iter()));
 
-        let linear_comb_challenges = linear_comb_challenges.iter().cloned().chain(linear_comb_challenges.iter().cloned()).collect_vec();
-        let challenges = ctl_challenges.iter().cloned().chain(ctl_challenges.iter().cloned()).collect_vec();
-        let mut challenges_offset = 0;
         instances_by_table
             .zip(first_last_zs.zip(ctl_zs))
+            .zip(linear_comb_challenges_by_table.into_iter().zip(ctl_challenges_by_table.into_iter()))
             .map(
-                |(instances, ((first_zs, last_zs), ctl_zs))| {
+                |((instances, ((first_zs, last_zs), ctl_zs)), (linear_comb_challenges, ctl_challenges))| {
                     let cols = instances.cloned().collect_vec();
                     let (local_zs, next_zs) = ctl_zs.unzip();
 
-                    let challenges = challenges[challenges_offset..challenges_offset + num_challenges * cols.len()].to_vec(); 
-                    let linear_comb_challenges = linear_comb_challenges[challenges_offset..challenges_offset + num_challenges * cols.len()].to_vec();
-                    challenges_offset += num_challenges * cols.len();
-
-                    println!("challenges.len(): {}", challenges.len());
-                    println!("cols.len(): {}", cols.len());
+                    let challenges = ctl_challenges.clone();
+                    let linear_comb_challenges = linear_comb_challenges.clone();
 
                     CtlCheckVars {
                         local_zs,
@@ -461,7 +448,13 @@ pub(crate) fn eval_cross_table_lookup_checks<F, FE, P, C, S, const D: usize, con
             .map(|&col| vars.next_values[col])
             .collect_vec();
 
-        for i in (0..num_challenges) {
+        let sel = filter_col.map_or(P::ONES, |col| vars.local_values[col]);
+        // check filter is binary
+        consumer.constraint(sel * (P::ONES - sel));
+
+        let next_sel = filter_col.map_or(P::ONES, |col| vars.next_values[col]);
+
+        for i in 0..num_challenges {
             let linear_comb_challenge =
                 &ctl_vars.linear_comb_challenges[instance * num_challenges + i];
             let challenge = &ctl_vars.challenges[instance * num_challenges + i];
@@ -475,24 +468,24 @@ pub(crate) fn eval_cross_table_lookup_checks<F, FE, P, C, S, const D: usize, con
             consumer.constraint_last_row(local_z - FE::from_basefield(last_z));
 
             // check grand product
-            let sel = filter_col.map_or(P::ONES, |col| vars.next_values[col]);
             let reduced_eval = eval_reduced(
                 &next_ctl_col_values,
                 linear_comb_challenge.alpha,
                 linear_comb_challenge.gamma,
             );
             let eval = reduced_eval + FE::from_basefield(challenge.gamma) - P::ONES;
-            consumer.constraint_transition(next_z - (local_z * (sel * eval + P::ONES)));
+            consumer.constraint_transition(next_z - (local_z * (next_sel * eval + P::ONES)));
             consumer.constraint_last_row(next_z - FE::from_basefield(first_z));
 
-            let sel = filter_col.map_or(P::ONES, |col| vars.local_values[col]);
+            // check grand product start
             let reduced_eval = eval_reduced(
                 &local_ctl_col_values,
                 linear_comb_challenge.alpha,
                 linear_comb_challenge.gamma,
             );
-            let eval = reduced_eval + FE::from_basefield(challenge.gamma);
-            consumer.constraint_first_row(local_z - sel * eval);
+            let eval = reduced_eval + FE::from_basefield(challenge.gamma) - P::ONES;
+            consumer.constraint_first_row((sel * eval + P::ONES) - FE::from_basefield(first_z));
+            
         }
     }
 }
@@ -506,33 +499,36 @@ pub fn verify_cross_table_lookups<
 >(
     proofs: I,
     descriptor: &CtlDescriptor,
+    num_challenges: usize
 ) -> Result<()> {
     let ctl_zs_openings = proofs
         .flat_map(|p| p.openings.ctl_zs_last.iter())
         .collect_vec();
 
-    let z_pairs = descriptor.instances.iter().scan(
-        vec![0; ctl_zs_openings.len()],
-        |indices, (looking, looked)| {
-            let looking_idx = indices[looking.tid.0];
-            let looked_idx = indices[looked.tid.0];
-            indices[looking.tid.0] += 1;
-            indices[looked.tid.0] += 1;
+    let mut looking_zs = Vec::new();
+    let mut looked_zs = Vec::new();
+    let mut indices = vec![0; descriptor.num_tables];
+    for (looking, _) in descriptor.instances.iter() {
+        let tid = looking.tid;
+        let idx = indices[tid.0];
+        let zs = &ctl_zs_openings[tid.0][idx..idx + num_challenges];
+        indices[tid.0] += num_challenges;
+        looking_zs.extend(zs.iter().map(move |z| (z, tid)));
+    }
 
-            Some((
-                &ctl_zs_openings[looking.tid.0][looking_idx],
-                &ctl_zs_openings[looked.tid.0][looked_idx],
-                looking.tid,
-                looked.tid,
-            ))
-        },
-    );
+    for (_, looked) in descriptor.instances.iter() {
+        let tid = looked.tid;
+        let idx = indices[tid.0];
+        let zs = &ctl_zs_openings[tid.0][idx..idx + num_challenges];
+        indices[tid.0] += num_challenges;
+        looked_zs.extend(zs.iter().map(move |z| (z, tid)));
+    }
 
-    for (looking_z, looked_z, looking_tid, looked_tid) in z_pairs {
+    for ((looking_z, looking_tid), (looked_z, looked_tid)) in looking_zs.into_iter().zip(looked_zs.into_iter()) {
         if looking_z != looked_z {
             let msg = format!(
-                "cross table lookup verification failed. looking TableID: {}, looked TableID: {}",
-                looking_tid.0, looked_tid.0
+                "cross table lookup verification failed. looking TableID: {}, looked TableID: {}, looking_z: {:?}, looked_z: {:?}",
+                looking_tid.0, looked_tid.0, looking_z, looked_z
             );
             return Err(anyhow!(msg));
         }
