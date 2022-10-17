@@ -46,27 +46,39 @@ pub fn get_ctl_challenges_by_table<F, C, const D: usize>(
     challenger: &mut Challenger<F, C::Hasher>,
     ctl_descriptor: &CtlDescriptor,
     num_challenges: usize,
-) -> (Vec<Vec<CtlLinearCombChallenge<F>>>, Vec<Vec<CtlChallenge<F>>>)
+) -> (
+    Vec<Vec<CtlLinearCombChallenge<F>>>,
+    Vec<Vec<CtlChallenge<F>>>,
+)
 where
     F: RichField + Extendable<D>,
     C: GenericConfig<D, F = F>,
 {
-    let mut linear_comb_challenges_by_table = vec![(Vec::new(), Vec::new()); ctl_descriptor.num_tables];
+    let mut linear_comb_challenges_by_table =
+        vec![(Vec::new(), Vec::new()); ctl_descriptor.num_tables];
     let mut ctl_challenges_by_table = vec![(Vec::new(), Vec::new()); ctl_descriptor.num_tables];
     for (looking, looked) in ctl_descriptor.instances.iter() {
         let linear_comb_challenges = (0..num_challenges)
             .map(|_| get_ctl_linear_comb_challenge(challenger))
             .collect_vec();
-            
+
         let ctl_challenges = (0..num_challenges)
             .map(|_| get_ctl_challenge(challenger))
             .collect_vec();
 
-        linear_comb_challenges_by_table[looking.tid.0].0.extend(linear_comb_challenges.clone());
-        linear_comb_challenges_by_table[looked.tid.0].1.extend(linear_comb_challenges);
+        linear_comb_challenges_by_table[looking.tid.0]
+            .0
+            .extend(linear_comb_challenges.clone());
+        linear_comb_challenges_by_table[looked.tid.0]
+            .1
+            .extend(linear_comb_challenges);
 
-        ctl_challenges_by_table[looking.tid.0].0.extend(ctl_challenges.clone());
-        ctl_challenges_by_table[looked.tid.0].1.extend(ctl_challenges);
+        ctl_challenges_by_table[looking.tid.0]
+            .0
+            .extend(ctl_challenges.clone());
+        ctl_challenges_by_table[looked.tid.0]
+            .1
+            .extend(ctl_challenges);
     }
 
     let linear_comb_challenges_by_table = linear_comb_challenges_by_table

@@ -386,9 +386,16 @@ where
 
         instances_by_table
             .zip(first_last_zs.zip(ctl_zs))
-            .zip(linear_comb_challenges_by_table.into_iter().zip(ctl_challenges_by_table.into_iter()))
+            .zip(
+                linear_comb_challenges_by_table
+                    .into_iter()
+                    .zip(ctl_challenges_by_table.into_iter()),
+            )
             .map(
-                |((instances, ((first_zs, last_zs), ctl_zs)), (linear_comb_challenges, ctl_challenges))| {
+                |(
+                    (instances, ((first_zs, last_zs), ctl_zs)),
+                    (linear_comb_challenges, ctl_challenges),
+                )| {
                     let cols = instances.cloned().collect_vec();
                     let (local_zs, next_zs) = ctl_zs.unzip();
 
@@ -424,7 +431,10 @@ pub(crate) fn eval_cross_table_lookup_checks<F, FE, P, C, S, const D: usize, con
     [(); S::COLUMNS]:,
     [(); S::PUBLIC_INPUTS]:,
 {
-    debug_assert_eq!(ctl_vars.challenges.len(), num_challenges * ctl_vars.cols.len());
+    debug_assert_eq!(
+        ctl_vars.challenges.len(),
+        num_challenges * ctl_vars.cols.len()
+    );
 
     let eval_reduced = |evals: &[P], alpha: F, gamma: F| {
         let mut sum = P::ZEROS;
@@ -485,7 +495,6 @@ pub(crate) fn eval_cross_table_lookup_checks<F, FE, P, C, S, const D: usize, con
             );
             let eval = reduced_eval + FE::from_basefield(challenge.gamma) - P::ONES;
             consumer.constraint_first_row((sel * eval + P::ONES) - FE::from_basefield(first_z));
-            
         }
     }
 }
@@ -499,7 +508,7 @@ pub fn verify_cross_table_lookups<
 >(
     proofs: I,
     descriptor: &CtlDescriptor,
-    num_challenges: usize
+    num_challenges: usize,
 ) -> Result<()> {
     let ctl_zs_openings = proofs
         .flat_map(|p| p.openings.ctl_zs_last.iter())
@@ -524,7 +533,9 @@ pub fn verify_cross_table_lookups<
         looked_zs.extend(zs.iter().map(move |z| (z, tid)));
     }
 
-    for ((looking_z, looking_tid), (looked_z, looked_tid)) in looking_zs.into_iter().zip(looked_zs.into_iter()) {
+    for ((looking_z, looking_tid), (looked_z, looked_tid)) in
+        looking_zs.into_iter().zip(looked_zs.into_iter())
+    {
         if looking_z != looked_z {
             let msg = format!(
                 "cross table lookup verification failed. looking TableID: {}, looked TableID: {}, looking_z: {:?}, looked_z: {:?}",

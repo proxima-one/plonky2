@@ -210,8 +210,11 @@ where
         let num_challenges = config.num_challenges;
 
         let ctl_descriptor = self.get_ctl_descriptor();
-        let (linear_comb_challenges, ctl_challenges) =
-            get_ctl_challenges_by_table::<F, C, D>(&mut challenger, &ctl_descriptor, num_challenges);
+        let (linear_comb_challenges, ctl_challenges) = get_ctl_challenges_by_table::<F, C, D>(
+            &mut challenger,
+            &ctl_descriptor,
+            num_challenges,
+        );
 
         let ctl_vars = CtlCheckVars::from_proofs(
             &all_proof.proofs,
@@ -228,7 +231,11 @@ where
         let proof = &all_proof.proofs[HASH_TID.0];
         verify_stark_proof_with_ctl(stark, proof, &ctl_vars[HASH_TID.0], &mut challenger, config)?;
 
-        verify_cross_table_lookups(all_proof.proofs.iter().map(|p| &p.proof), &ctl_descriptor, num_challenges)?;
+        verify_cross_table_lookups(
+            all_proof.proofs.iter().map(|p| &p.proof),
+            &ctl_descriptor,
+            num_challenges,
+        )?;
 
         Ok(())
     }
