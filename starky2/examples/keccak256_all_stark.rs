@@ -24,7 +24,7 @@ use starky2::config::StarkConfig;
 use starky2::cross_table_lookup::{
     get_ctl_data, verify_cross_table_lookups, CtlCheckVars, CtlColSet, CtlDescriptor, TableID,
 };
-use starky2::get_challenges::{get_ctl_challenges, start_all_proof_challenger};
+use starky2::get_challenges::{get_ctl_challenges_by_table, start_all_proof_challenger};
 use starky2::prover::{prove_single_table, start_all_proof};
 use starky2::stark::Stark;
 use starky2::starky2lib::keccak256_sponge::generation::Keccak256SpongeGenerator;
@@ -420,10 +420,10 @@ where
         let num_challenges = config.num_challenges;
 
         let ctl_descriptor = self.get_ctl_descriptor();
-        let ctl_challenges =
-            get_ctl_challenges::<F, C, D>(&mut challenger, &ctl_descriptor, num_challenges);
+        let (linear_comb_challenges, ctl_challenges) =
+            get_ctl_challenges_by_table::<F, C, D>(&mut challenger, &ctl_descriptor, num_challenges);
         let ctl_vars =
-            CtlCheckVars::from_proofs(&all_proof.proofs, &ctl_descriptor, &ctl_challenges);
+            CtlCheckVars::from_proofs(&all_proof.proofs, &ctl_descriptor, &linear_comb_challenges, &ctl_challenges);
 
         let stark = &starks.0;
         let proof = &all_proof.proofs[SPONGE_TID.0];
@@ -449,7 +449,7 @@ where
         let proof = &all_proof.proofs[XOR_TID.0];
         verify_stark_proof_with_ctl(stark, proof, &ctl_vars[XOR_TID.0], &mut challenger, config)?;
 
-        verify_cross_table_lookups(&ctl_vars, all_proof.proofs.iter().map(|p| &p.proof))?;
+        verify_cross_table_lookups( all_proof.proofs.iter().map(|p| &p.proof), &ctl_descriptor, num_challenges)?;
 
         Ok(())
     }
