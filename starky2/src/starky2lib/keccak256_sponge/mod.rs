@@ -117,8 +117,9 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Keccak256Spon
 
         // evaluate the lookups
         // degree 2
+        // TODO: we don't actually need these or the "encoded input block" with the new CTLs.
         // eval_lookups(&vars, yield_constr, block_idx_bytes_permuted_start_col(), u8_lut_permuted_col());
-        // eval_lookups(&vars, yield_constr, block_idx_bytes_start_col() + 1, u7_lut_col());
+        // eval_lookups(&vars, yield_constr, block_idx_bytes_permuted_start_col() + 1, u7_lut_permuted_col());
         // eval_lookups(&vars, yield_constr, hash_idx_bytes_start_col(), u8_lut_col());
         // eval_lookups(&vars, yield_constr, hash_idx_bytes_start_col() + 1, u8_lut_col());
 
