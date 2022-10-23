@@ -15,7 +15,8 @@ The decoded memory is a series of entries, where, abstractly, each entry represe
 * `is_list`: a cell containing a boolean flag indicating whether or not the current represents a list
 * `id`: a cell containing a unique identifier of the structure. The RLP STARK will ignore this if the current entry isn't a top-level entry. These IDs must start with 0 and increase by 1 with each top-level item to encode
 * `len`: a cell indicating the length in cells of the entry's `content`
-* `next_toplevel`: a cell containing a pointer to the next top-level item to encode. This is ignored when depth != 0.
+* `next_item`: a cell containing a pointer to the next top-level item to encode. This is ignored when depth != 0.
+* `is_last_item`: a binary flag indicating whether or not this is the last item to encode. This is ignored when depth != 0
 * `content`:
 	* if `is_list` is `1`, then `content` is a possibly-entry series of cells, where each cell is a the address of a child entry in the memory
 	* if `is_list` is `0`, then `content` is a possibly-entry byte-string where each cell corresponds to 1 byte
