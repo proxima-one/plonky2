@@ -71,6 +71,18 @@ impl<P: PackedField> ConstraintConsumer<P> {
         }
     }
 
+    /// helper for applying a filter to a constraint
+    /// degree = degree(constraint) + degree(filter)
+    pub fn constraint_filtered(&mut self, constraint: P, filter: P) {
+        self.constraint(constraint * filter);
+    }
+
+    /// helper for applying a filter to a constraint
+    /// degree = degree(constraint) + degree(filter)
+    pub fn constraint_transition_filtered(&mut self, constraint: P, filter: P) {
+        self.constraint_transition(constraint * filter);
+    }
+
     /// Add one constraint, but first multiply it by a filter such that it will only apply to the
     /// first row of the trace.
     pub fn constraint_first_row(&mut self, constraint: P) {

@@ -8,7 +8,7 @@ use crate::{util::transmute_no_compile_time_size_checks, permutation::Permutatio
 #[repr(C)]
 #[derive(Eq, PartialEq, Debug)]
 pub struct RlpRow<T: Copy> {
-    // register state
+    // register state: 8 cols
 	pub(crate) op_id: T,
     pub(crate) pc: T,
     pub(crate) count: T,
@@ -18,7 +18,7 @@ pub struct RlpRow<T: Copy> {
 	pub(crate) next: T,
     pub(crate) is_last: T,
 
-    // opcode
+    // opcode: 8 cols
     // 00000000: NewEntry
     // 00000001: List
     // 00000010: Recurse
@@ -32,12 +32,16 @@ pub struct RlpRow<T: Copy> {
 
 
     // advice columns for checking register state / transitions
+    // 14 cols
     // for checking if depth is 0
     pub(crate) depth_is_zero: T,
     pub(crate) depth_inv: T,
     // for checking if content len is 0
     pub(crate) content_len_is_zero: T,
     pub(crate) content_len_inv: T,
+    // for checking if list count is 0
+    pub(crate) list_count_is_zero: T,
+    pub(crate) list_count_inv: T,
     // for chcecking if count == content.len
     pub(crate) content_len_minus_count_is_zero: T,
     pub(crate) content_len_minus_count_inv: T,
@@ -52,9 +56,37 @@ pub struct RlpRow<T: Copy> {
     // 1000: list whose inner encodings total >55 bytes long
     pub(crate) prefix_case_flags: [T; 4],
 
-    // LUTs for range checks
-    pub(crate) rc_u8: T,
-    pub(crate) rc_55: T,
+    // byte range checks via LUT
+    // 16 cols
+    // there are 5 rc'd cells - one is for
+    // bytes read from input memory
+    // the other are for the byte decomposition of count
+    // used to calculate the ceil(log_256(count))
+    pub(crate) rc_u8s: [T; 5],
+    pub(crate) rc_u8_permuted: [T; 5],
+    pub(crate) lut_u8: T,
+    pub(crate) lut_u8_permuteds: [T; 5],
+
+    // range checking for prefix calculation
+    // 19 cols
+    pub(crate) rc_55_limbs: [T; 6],
+    pub(crate) rc_55_limbs_permuted: [T; 6],
+    pub(crate) lut_55: T,
+    pub(crate) lut_55_permuted_limbs: [T; 6],
+
+    // advice for checks applied when the prover claims
+    // count is greater than 55
+    pub(crate) upper_limbs_sum_inv: T,
+    pub(crate) count_in_range: T,
+    // 0000: 0,
+    // 0001: 1,
+    // 0010: 2,
+    // 0100: 3,
+    // 1000: 4,
+    pub(crate) log256_flags: [T; 4],
+    pub(crate) top_byte_inv: T,
+    pub(crate) prefix_case_tmp: T,
+
     
     // advice for checking LUT contents
     pub(crate) count_u8: T,
@@ -66,14 +98,22 @@ pub struct RlpRow<T: Copy> {
 
     // 5-channel CTL to the input memory
     // each represented as [addr, val]
-    pub(crate) input_memory_ctl: [[T; 2]; 5],
+    pub(crate) input_memory: [[T; 2]; 5],
+    pub(crate) input_memory_filters: [T; 5],
     // 3-channel CTL to the call stack
     // each represented as [is_pop, val]
-    pub(crate) call_stack_ctl: [[T; 2]; 3],
+    pub(crate) call_stack: [[T; 2]; 3],
+    pub(crate) call_stack_filters: [T; 3],
     // 2-channel CTL to the output stack
     // each represented as [is_pop, val]
-    pub(crate) output_stack_ctl: [[T; 2]; 2],
+    pub(crate) output_stack: [[T; 2]; 2],
+    pub(crate) output_stack_filters: [T; 2],
 }
+
+pub const RC_55_LIMBS_PERMUTED_START: usize = 52;
+pub const LUT_55_LIMBS_PERMUTED_START: usize = 58;
+pub const RC_U8_PERMUTED_START: usize = 35;
+pub const LUT_U8_PERMUTED_START: usize = 41;
 
 pub(crate) const RLP_NUM_COLS: usize = size_of::<RlpRow<u8>>();
 
