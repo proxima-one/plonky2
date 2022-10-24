@@ -131,17 +131,20 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 							}
 						},
 						false => {
-							self.opcode = RlpOpcode::StrPush;
+							if self.content_len == 0 {
+								self.opcode = RlpOpcode::StrPrefix;
+							} else {
+								self.opcode = RlpOpcode::StrPush;
+							}
 						}
 					}
 				}
 				RlpOpcode::StrPush => {
+					let val = self.read_pc_advance();
+					self.push_output_stack(val);
+					self.count += 1;
 					if self.content_len == self.count {
 						self.opcode = RlpOpcode::StrPrefix;
-					} else {
-						let val = self.read_pc_advance();
-						self.push_output_stack(val);
-						self.count += 1;
 					}
 				}
 				RlpOpcode::StrPrefix => {
@@ -180,9 +183,9 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 					// the next item to be encoded if is_last is false. otherwise halt
 					// if we're not at the top level, return up a level
 					if self.depth == 0 {
-						// push encoded output len (count) to stack
+						// push encoded output len (count) to output stack
 						self.push_output_stack(F::from_canonical_u64(self.count as u64));
-						// push op_id to the stack
+						// push op_id to the output stack
 						self.push_output_stack(F::from_canonical_u64(self.op_id as u64));
 
 						self.op_id += 1;
