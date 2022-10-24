@@ -5,6 +5,7 @@
 #![feature(array_windows)]
 #![feature(exclusive_range_pattern)]
 #![feature(array_zip)]
+#![feature(is_sorted)]
 
 pub mod config;
 pub mod constraint_consumer;
