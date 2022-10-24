@@ -3,8 +3,8 @@ use rlp::{Encodable, RlpStream};
 use super::layout::*;
 use crate::starky2lib::stack::generation::StackOp;
 
-pub struct RlpStarkGenerator<F: PrimeField64, const NUM_CHANNELS: usize> {
-	pub stark_trace: Vec<RlpRow<F, NUM_CHANNELS>>,
+pub struct RlpStarkGenerator<F: PrimeField64> {
+	pub stark_trace: Vec<RlpRow<F>>,
 
 	pub output_stack: Vec<F>,
 	pub output_stack_trace: Vec<StackOp<F>>,
@@ -22,10 +22,10 @@ pub struct RlpStarkGenerator<F: PrimeField64, const NUM_CHANNELS: usize> {
 	depth: usize,
 	next: usize,
 	is_last: bool,
-	state: RlpSMState
+	opcode: RlpOpcode
 }
 
-enum RlpSMState {
+enum RlpOpcode {
 	NewEntry,
 	List,
 	Recurse,
@@ -37,7 +37,7 @@ enum RlpSMState {
 	Halt,
 }
 
-impl<F: PrimeField64, const NUM_CHANNELS: usize> RlpStarkGenerator<F, NUM_CHANNELS> {
+impl<F: PrimeField64> RlpStarkGenerator<F> {
 	pub fn new() -> Self {
 		Self {
 			stark_trace: Vec::new(),
@@ -54,7 +54,7 @@ impl<F: PrimeField64, const NUM_CHANNELS: usize> RlpStarkGenerator<F, NUM_CHANNE
 			next: 0,
 			depth: 0,
 			is_last: false,
-			state: RlpSMState::NewEntry
+			opcode: RlpOpcode::NewEntry
 		}
 	}
 
@@ -94,8 +94,8 @@ impl<F: PrimeField64, const NUM_CHANNELS: usize> RlpStarkGenerator<F, NUM_CHANNE
 
 	fn gen_state_machine(&mut self) {
 		loop {
-			match self.state {
-				RlpSMState::NewEntry => {
+			match self.opcode {
+				RlpOpcode::NewEntry => {
 					let next = self.read_pc_advance();
 					let is_last = self.read_pc_advance();
 					if self.depth == 0 {
@@ -108,19 +108,15 @@ impl<F: PrimeField64, const NUM_CHANNELS: usize> RlpStarkGenerator<F, NUM_CHANNE
 						}
 					}
 
-					println!("next: {:?}, is_last: {:?}", self.next, self.is_last);
-
 					let is_list = match self.read_pc_advance().to_canonical_u64() {
 						// convert to u64 since associated consts not allowed in patterns yet
 						0 => false,
 						1 => true,
 						_ => panic!("is_list must be 0 or 1")
 					};
-					println!("is_list: {:?}", is_list);
 
 					let op_id_read = self.read_pc_advance().to_canonical_u64();
 					assert!(op_id_read == self.op_id);
-
 
 					self.content_len = self.read_pc_advance().to_canonical_u64() as usize;
 					self.count = 0;
@@ -129,37 +125,37 @@ impl<F: PrimeField64, const NUM_CHANNELS: usize> RlpStarkGenerator<F, NUM_CHANNE
 					match is_list {
 						true => {
 							if self.content_len == 0 {
-								self.state = RlpSMState::ListPrefix;
+								self.opcode = RlpOpcode::ListPrefix;
 							} else {
-								self.state = RlpSMState::List;	
+								self.opcode = RlpOpcode::List;	
 							}
 						},
 						false => {
-							self.state = RlpSMState::StrPush;
+							self.opcode = RlpOpcode::StrPush;
 						}
 					}
 				}
-				RlpSMState::StrPush => {
+				RlpOpcode::StrPush => {
 					if self.content_len == self.count {
-						self.state = RlpSMState::StrPrefix;
+						self.opcode = RlpOpcode::StrPrefix;
 					} else {
 						let val = self.read_pc_advance();
 						self.push_output_stack(val);
 						self.count += 1;
 					}
 				}
-				RlpSMState::StrPrefix => {
+				RlpOpcode::StrPrefix => {
 					// in the STARK, output_stack.last() is accessed via the "previous" row
 					let first_val = self.output_stack.last().unwrap();
 					let first_val = first_val.to_canonical_u64() as u8;
-					let prefix = self.compute_str_prefix(self.content_len, first_val);
+					let prefix = self.compute_str_prefix(self.count, first_val);
 					for b in prefix.into_iter().rev() {
 						self.push_output_stack(F::from_canonical_u64(b as u64));
 						self.count += 1;
 					}
-					self.state = RlpSMState::EndEntry;
+					self.opcode = RlpOpcode::EndEntry;
 				}
-				RlpSMState::List => {
+				RlpOpcode::List => {
 					// push current list count onto the stack. This is used so the returning state can
 					// tell when to stop recursing
 					self.push_call_stack(F::from_canonical_u64(self.list_count as u64));
@@ -168,18 +164,18 @@ impl<F: PrimeField64, const NUM_CHANNELS: usize> RlpStarkGenerator<F, NUM_CHANNE
 					self.push_call_stack(inner_addr);
 					self.list_count += 1; // ! bug warning
 					if self.list_count == self.content_len {
-						self.state = RlpSMState::Recurse;
+						self.opcode = RlpOpcode::Recurse;
 					}
 				}
-				RlpSMState::ListPrefix => {
+				RlpOpcode::ListPrefix => {
 					let prefix = self.compute_list_prefix(self.count);
 					for b in prefix.into_iter().rev() {
 						self.push_output_stack(F::from_canonical_u64(b as u64));
 						self.count += 1;
 					}
-					self.state = RlpSMState::EndEntry;
+					self.opcode = RlpOpcode::EndEntry;
 				}
-				RlpSMState::EndEntry => {
+				RlpOpcode::EndEntry => {
 					// if we're at the top level, finalize the entry's output and proceed to
 					// the next item to be encoded if is_last is false. otherwise halt
 					// if we're not at the top level, return up a level
@@ -191,16 +187,16 @@ impl<F: PrimeField64, const NUM_CHANNELS: usize> RlpStarkGenerator<F, NUM_CHANNE
 
 						self.op_id += 1;
 						if self.is_last {
-							self.state = RlpSMState::Halt;
+							self.opcode = RlpOpcode::Halt;
 						} else {
 							self.pc = self.next;
-							self.state = RlpSMState::NewEntry;
+							self.opcode = RlpOpcode::NewEntry;
 						}
 					} else {
-						self.state = RlpSMState::Return;
+						self.opcode = RlpOpcode::Return;
 					}
 				}
-				RlpSMState::Recurse => {
+				RlpOpcode::Recurse => {
 					// pop addr from call stack
 					// before: [prev_list_count, prev_list_addr, list_count, list_addr]
 					// after: [prev_list_count, prev_list_addr, list_count]
@@ -217,9 +213,9 @@ impl<F: PrimeField64, const NUM_CHANNELS: usize> RlpStarkGenerator<F, NUM_CHANNE
 					// increment depth
 					self.depth += 1;
 					// set new state to NewEntry
-					self.state = RlpSMState::NewEntry;
+					self.opcode = RlpOpcode::NewEntry;
 				}
-				RlpSMState::Return => {
+				RlpOpcode::Return => {
 					// before: [prev_list_count, prev_list_addr, list_count, count, pc]
 					let old_pc = self.pop_call_stack();
 					// before: [prev_list_count, prev_list_addr, list_count, count]
@@ -236,12 +232,12 @@ impl<F: PrimeField64, const NUM_CHANNELS: usize> RlpStarkGenerator<F, NUM_CHANNE
 
 					// bug warning
 					if self.list_count == 0 {
-						self.state = RlpSMState::ListPrefix;
+						self.opcode = RlpOpcode::ListPrefix;
 					} else {
-						self.state = RlpSMState::Recurse;
+						self.opcode = RlpOpcode::Recurse;
 					}
 				}
-				RlpSMState::Halt => {
+				RlpOpcode::Halt => {
 					return;
 				}
 			}
@@ -617,7 +613,6 @@ mod tests {
 
 	#[test]
 	fn test_state_machine() {
-		const NUM_CHANNELS: usize = 1;
 		let input = vec![
 			RlpItem::Str(b"Relax".to_vec()),
 			RlpItem::Str(b"Here we go, part two".to_vec()),
@@ -643,20 +638,21 @@ mod tests {
 					RlpItem::Str(b"So let's rap, we'll catch up to par, what's the haps?".to_vec()),
 				]
 			),
-			RlpItem::Str(b"C'est la vie, as they say L.O.V.E evidently".to_vec())
+			RlpItem::Str(b"C'est la vie, as they say L.O.V.E evidently".to_vec()),
+			// special cases
+			RlpItem::List(vec![]),
+			RlpItem::Str(vec![]),
+			RlpItem::Str(vec![0x08])
 		];
 
-		let mut generator = RlpStarkGenerator::<F, NUM_CHANNELS>::new();
-		println!("generating...");
+		let mut generator = RlpStarkGenerator::<F>::new();
 		generator.generate(&input);
 		let mut output_stack = generator.output_stack().into_iter().map(|v| v.to_canonical_u64()).collect::<Vec<_>>();
 
-		println!("\nchecking...");
 		let mut outputs = Vec::new();
 		while output_stack.len() >= 2 {
 			let op_id = output_stack.pop().unwrap();
 			let len = output_stack.pop().unwrap();
-			println!("op_id: {:?}, len: {:?}", op_id, len);
 			assert!(len as usize <= output_stack.len());
 			let mut output = Vec::new();
 			for _ in 0..len {
