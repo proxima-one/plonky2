@@ -20,12 +20,33 @@ where
     trace: Vec<[F; STACK_NUM_COLS_BASE + NUM_CHANNELS]>,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum StackOp<F: Field> {
+	Push(F),
+	Pop(F)
+}
+
 impl<F: PrimeField64, const NUM_CHANNELS: usize> StackGenerator<F, NUM_CHANNELS>
 where
     [(); STACK_NUM_COLS_BASE + NUM_CHANNELS]:,
 {
 	pub fn new() -> Self {
 		Self { timestamp: 1, trace: Vec::new(), stack: Vec::new() }
+	}
+
+	// TODO: don't panic, define error type instead
+	pub fn gen_ops(&mut self, ops: &[StackOp<F>], channels: &[usize]) {
+		for &op in ops {
+			match op {
+				StackOp::Push(val) => {
+					self.gen_push(val, channels);
+				},
+				StackOp::Pop(val) => {
+					let correct_val = self.gen_pop(channels);
+					assert_eq!(correct_val, val);
+				}
+			}
+		}	
 	}
 
 	pub fn gen_push(&mut self, value: F, channels: &[usize]) {
@@ -46,7 +67,7 @@ where
 		self.timestamp += 1;
 	}
 
-	pub fn gen_pop(&mut self, channels: &[usize]) {
+	pub fn gen_pop(&mut self, channels: &[usize]) -> F {
 		let mut row = StackRow::<F, NUM_CHANNELS>::new();
 		let sp = self.stack.len() as u64;
 		let value = self.stack.pop().expect("stack underflow");
@@ -63,6 +84,7 @@ where
 
 		self.trace.push(row.into());
 		self.timestamp += 1;
+		value
 	}
 
 	fn gen_channel_filters(row: &mut StackRow<F, NUM_CHANNELS>, channels: &[usize])  {

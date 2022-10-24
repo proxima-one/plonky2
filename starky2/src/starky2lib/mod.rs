@@ -7,4 +7,4 @@ pub mod xor;
 // pub mod ecgfp5_to_curve;
 pub mod ro_memory;
 pub mod stack;
-// pub mod rlp;
+pub mod rlp;
