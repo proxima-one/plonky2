@@ -51,11 +51,11 @@ pub(crate) fn lookup_permutation_sets() -> Vec<(usize, usize, usize, usize)>{
     ]
 }
 
-/// [is_pop, timestamp, value] for each channel
+/// [is_pop, value, timestamp] for each channel
 pub fn ctl_cols<const NUM_CHANNELS: usize>(tid: TableID) -> impl Iterator<Item = CtlColSet> {
     (0..NUM_CHANNELS).map(move |i| CtlColSet::new(
         tid,
-        vec![12, 1, 2],
+        vec![12, 2, 1],
         Some(STACK_NUM_COLS_BASE - (NUM_CHANNELS - i))
     ))
 }
