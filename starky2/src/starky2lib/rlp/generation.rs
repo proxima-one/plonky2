@@ -115,14 +115,14 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 
 		row.opcode = match self.opcode {
 			RlpOpcode::NewEntry => [F::ZERO; 8],
-			RlpOpcode::List => [F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ONE],
-			RlpOpcode::Recurse => [F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ONE, F::ZERO],
-			RlpOpcode::Return => [F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ONE, F::ZERO, F::ZERO],
-			RlpOpcode::StrPush => [F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ONE, F::ZERO, F::ZERO, F::ZERO],
-			RlpOpcode::StrPrefix => [F::ZERO, F::ZERO, F::ZERO, F::ONE, F::ZERO, F::ZERO, F::ZERO, F::ZERO],
-			RlpOpcode::ListPrefix => [F::ZERO, F::ZERO, F::ONE, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO],
-			RlpOpcode::EndEntry => [F::ZERO, F::ONE, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO],
-			RlpOpcode::Halt => [F::ONE, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO],
+			RlpOpcode::List => [F::ONE, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO],
+			RlpOpcode::Recurse => [F::ZERO, F::ONE, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO],
+			RlpOpcode::Return => [F::ZERO, F::ZERO, F::ONE, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO],
+			RlpOpcode::StrPush => [F::ZERO, F::ZERO, F::ZERO, F::ONE, F::ZERO, F::ZERO, F::ZERO, F::ZERO],
+			RlpOpcode::StrPrefix => [F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ONE, F::ZERO, F::ZERO, F::ZERO],
+			RlpOpcode::ListPrefix => [F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ONE, F::ZERO, F::ZERO],
+			RlpOpcode::EndEntry => [F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ONE, F::ZERO],
+			RlpOpcode::Halt => [F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ZERO, F::ONE],
 		};
 
 		// advice
@@ -135,11 +135,11 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 		row.list_count_is_zero = F::from_bool(self.list_count == 0);
 		row.list_count_inv = if self.list_count == 0 { F::ZERO } else { row.list_count.inverse() };
 
-		row.content_len_minus_count_is_zero = F::from_bool(self.content_len - self.count == 0);
-		row.content_len_minus_count_inv = if self.content_len - self.count == 0 { F::ZERO } else { (row.content_len - row.count).inverse() };
+		row.content_len_minus_count_is_zero = F::from_bool(self.content_len == self.count);
+		row.content_len_minus_count_inv = if self.content_len == self.count { F::ZERO } else { (row.content_len - row.count).inverse() };
 
-		row.content_len_minus_list_count_is_zero = F::from_bool(self.content_len - self.list_count == 0);
-		row.content_len_minus_list_count_inv = if self.content_len - self.list_count == 0 { F::ZERO } else { (row.content_len - row.list_count).inverse() };
+		row.content_len_minus_list_count_is_zero = F::from_bool(self.content_len == self.list_count);
+		row.content_len_minus_list_count_inv = if self.content_len == self.list_count { F::ZERO } else { (row.content_len - row.list_count).inverse() };
 
 		// prefix flags
 		let mut own_encoding_case = false;
@@ -151,16 +151,16 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 					own_encoding_case = true;
 					[F::ZERO; 4]
 				} else {
-					[F::ZERO, F::ZERO, F::ZERO, F::ONE]
+					[F::ONE, F::ZERO, F::ZERO, F::ZERO]
 				}
 			}
-			(RlpOpcode::StrPrefix, 0..=55) => [F::ZERO, F::ZERO, F::ZERO, F::ONE],
-			(RlpOpcode::StrPrefix, _) => [F::ZERO, F::ZERO, F::ONE, F::ZERO],
-			(RlpOpcode::ListPrefix, 0..=55) => [F::ZERO, F::ONE, F::ZERO, F::ZERO],
-			(RlpOpcode::ListPrefix, _) => [F::ZERO, F::ONE, F::ONE, F::ZERO],
+			(RlpOpcode::StrPrefix, 0..=55) => [F::ONE, F::ZERO, F::ZERO, F::ZERO],
+			(RlpOpcode::StrPrefix, _) => [F::ZERO, F::ONE, F::ZERO, F::ZERO],
+			(RlpOpcode::ListPrefix, 0..=55) => [F::ZERO, F::ZERO, F::ONE, F::ZERO],
+			(RlpOpcode::ListPrefix, _) => [F::ZERO, F::ZERO, F::ZERO, F::ONE],
 			_ => [F::ZERO; 4],
 		};
-		
+
 		// byte decomp
 		let mut count = self.count as u64;
 		for i in 1..5 {
@@ -181,17 +181,22 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 		row.count_in_range = F::from_bool(upper_limb_sum == F::ZERO);
 
 		// log256 flag
-		let bits = log2_ceil(self.count);
-		let bytes = (bits + 7) / 8;
-		row.log256_flags = match bytes {
-			0 => [F::ZERO; 4],
-			1 => [F::ZERO, F::ZERO, F::ZERO, F::ONE],
-			2 => [F::ZERO, F::ZERO, F::ONE, F::ZERO],
-			3 => [F::ZERO, F::ONE, F::ZERO, F::ZERO],
-			4 => [F::ONE, F::ZERO, F::ZERO, F::ZERO],
+		let bytes = if self.count == 1 {
+			1
+		} else {
+			(log2_ceil(self.count) + 7) / 8
 		};
 
-		let top_byte_idx = if bytes == 0 { 0 } else { bytes - 1 };
+		row.log256_flags = match bytes {
+			0 => [F::ZERO; 4],
+			1 => [F::ONE, F::ZERO, F::ZERO, F::ZERO],
+			2 => [F::ZERO, F::ONE, F::ZERO, F::ZERO],
+			3 => [F::ZERO, F::ZERO, F::ONE, F::ZERO],
+			4 => [F::ZERO, F::ZERO, F::ZERO, F::ONE],
+			_ => unreachable!(),
+		};
+
+		let top_byte_idx = if bytes == 0 { 1 } else { bytes };
 		row.top_byte_inv = if row.rc_u8s[top_byte_idx] == F::ZERO { F::ZERO } else { row.rc_u8s[top_byte_idx].inverse() };
 	
 		row.count_is_one = F::from_bool(self.count == 1);
@@ -206,13 +211,13 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 		row.count_u8 = F::from_canonical_u64(row_idx % 256);
 		row.count_55 = F::from_canonical_u64(row_idx % 55);
 
-		row.count_127_minus_127_inv = if row.count_127 == F::ZERO { F::ZERO } else { (row.count_127 - F::from_canonical_u64(127)).inverse() };
+		row.count_127_minus_127_inv = if row.count_127 == F::from_canonical_u64(127) { F::ZERO } else { (row.count_127 - F::from_canonical_u64(127)).inverse() };
 		row.count_127_is_127 = F::from_bool(row.count_127 == F::from_canonical_u64(127));
 
-		row.count_u8_minus_255_inv = if row.count_u8 == F::ZERO { F::ZERO } else { (row.count_u8 - F::from_canonical_u64(255)).inverse() };
+		row.count_u8_minus_255_inv = if row.count_u8 == F::from_canonical_u64(255) { F::ZERO } else { (row.count_u8 - F::from_canonical_u64(255)).inverse() };
 		row.count_u8_is_255 = F::from_bool(row.count_u8 == F::from_canonical_u64(255));
 
-		row.count_55_minus_55_inv = if row.count_55 == F::ZERO { F::ZERO } else { (row.count_55 - F::from_canonical_u64(55)).inverse() };
+		row.count_55_minus_55_inv = if row.count_55 == F::from_canonical_u64(55) { F::ZERO } else { (row.count_55 - F::from_canonical_u64(55)).inverse() };
 		row.count_55_is_55 = F::from_bool(row.count_55 == F::from_canonical_u64(55));
 
 		row
@@ -223,7 +228,9 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 		
 		let target_len = (1 << log2_target_len).max(self.stark_trace.len().next_power_of_two());
 		while self.stark_trace.len() < target_len {
-			self.stark_trace.push(self.gen_row());
+			let mut row = self.gen_row();
+			self.gen_stack_timestamps(&mut row);
+			self.stark_trace.push(row);
 		}
 	}
 
@@ -235,16 +242,28 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 		let pairs = pairs.chain(std::iter::once(
 			(rc_127_col(), lut_127_col())
 		));
-		for (i, j) in pairs {
-			let (input, table) = permuted_cols(&values[i].values, &values[j].values);
-			values[i] = PolynomialValues::new(input);
-			values[j] = PolynomialValues::new(table);
+
+		let pairs_permuted = rc_55_permuted_cols().zip(lut_55_permuted_cols());
+		let pairs_permuted = pairs_permuted.chain(
+			rc_u8_permuted_cols().zip(lut_u8_permuted_cols())
+		);
+		let pairs_permuted = pairs_permuted.chain(std::iter::once(
+			(rc_127_permuted_col(), lut_127_permuted_col())
+		));
+
+		for ((input_col, table_col), (input_col_permuted, table_col_permuted)) in pairs.zip(pairs_permuted) {
+			let (input, table) = permuted_cols(&values[input_col].values, &values[table_col].values);
+			values[input_col_permuted] = PolynomialValues::new(input);
+			values[table_col_permuted] = PolynomialValues::new(table);
 		}
 	}
 
 	pub fn gen_trace(&mut self, log2_target_len: Option<usize>) {
 		self.gen_state_machine();
 		self.gen_padding(log2_target_len.unwrap_or(0));
+		for row in self.stark_trace.iter().filter(|r| r.opcode[3] == F::ONE) {
+			assert_eq!(row.rc_u8s[0], row.input_memory[0][1]);
+		}
 	}
 
 	pub fn into_polynomial_values(self) -> Vec<PolynomialValues<F>> {
@@ -256,11 +275,10 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 
 	fn gen_state_machine(&mut self) {
 		loop {
-			let row = match self.opcode {
+			let mut row = self.gen_row();
+			match self.opcode {
 				RlpOpcode::NewEntry => {
-					let mut row = self.gen_row();
 					let next = self.read_pc_advance(&mut row, 0);
-
 					let is_last = self.read_pc_advance(&mut row, 1);
 					if self.depth == 0 {
 						self.next = next.to_canonical_u64() as usize;
@@ -302,33 +320,32 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 							}
 						}
 					}
-					row
 				}
 				RlpOpcode::StrPush => {
-					let mut row = self.gen_row();
 					let val = self.read_pc_advance(&mut row, 0);
+					row.rc_u8s[0] = val;
 					self.push_output_stack(val, &mut row, 0);
 					self.count += 1;
 					if self.content_len == self.count {
 						self.opcode = RlpOpcode::StrPrefix;
 					}
-					row
 				}
 				RlpOpcode::StrPrefix => {
-					let mut row = self.gen_row();
 					// in the STARK, output_stack.last() is accessed via the "previous" row
 					let first_val = self.output_stack.last().unwrap();
 					let first_val = first_val.to_canonical_u64() as u8;
 					let prefix = self.compute_str_prefix(self.count, first_val);
+					if prefix.len() == 0 {
+						row.rc_127 = F::from_canonical_u8(first_val);
+					}
+
 					for (channel, b) in prefix.into_iter().rev().enumerate() {
 						self.push_output_stack(F::from_canonical_u64(b as u64), &mut row, channel);
 						self.count += 1;
 					}
 					self.opcode = RlpOpcode::EndEntry;
-					row
 				}
 				RlpOpcode::List => {
-					let mut row = self.gen_row();
 					// push current list count onto the stack. This is used so the returning state can
 					// tell when to stop recursing
 					self.push_call_stack(F::from_canonical_u64(self.list_count as u64), &mut row, 0);
@@ -339,20 +356,16 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 					if self.list_count == self.content_len {
 						self.opcode = RlpOpcode::Recurse;
 					}
-					row
 				}
 				RlpOpcode::ListPrefix => {
-					let mut row = self.gen_row();
 					let prefix = self.compute_list_prefix(self.count);
 					for (channel, b) in prefix.into_iter().rev().enumerate() {
 						self.push_output_stack(F::from_canonical_u64(b as u64), &mut row, channel);
 						self.count += 1;
 					}
 					self.opcode = RlpOpcode::EndEntry;
-					row
 				}
 				RlpOpcode::EndEntry => {
-					let mut row = self.gen_row();
 					// if we're at the top level, finalize the entry's output and proceed to
 					// the next item to be encoded if is_last is false. otherwise halt
 					// if we're not at the top level, return up a level
@@ -372,10 +385,8 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 					} else {
 						self.opcode = RlpOpcode::Return;
 					}
-					row
 				}
 				RlpOpcode::Recurse => {
-					let mut row = self.gen_row();
 					// pop addr from call stack
 					// before: [prev_list_count, prev_list_addr, list_count, list_addr]
 					// after: [prev_list_count, prev_list_addr, list_count]
@@ -393,10 +404,8 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 					self.depth += 1;
 					// set new state to NewEntry
 					self.opcode = RlpOpcode::NewEntry;
-					row
 				}
 				RlpOpcode::Return => {
-					let mut row = self.gen_row();
 					// before: [prev_list_count, prev_list_addr, list_count, count, pc]
 					let old_pc = self.pop_call_stack(&mut row, 0);
 					// before: [prev_list_count, prev_list_addr, list_count, count]
@@ -417,13 +426,31 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 					} else {
 						self.opcode = RlpOpcode::Recurse;
 					}
-					row
 				}
 				RlpOpcode::Halt => {
 					return;
 				}
 			};
+			self.gen_stack_timestamps(&mut row);
 			self.stark_trace.push(row);
+		}
+	}
+
+	fn gen_stack_timestamps(&mut self, row: &mut RlpRow<F>) {
+		if self.stark_trace.len() == 0 {
+			row.call_stack[0][2] = F::ONE;
+			row.output_stack[0][2] = F::ONE;
+		} else {
+			let prev_row = self.stark_trace.last().unwrap();
+			row.call_stack[0][2] = if row.call_stack_filters[0] == F::ONE { prev_row.call_stack[2][2] + F::ONE } else { prev_row.call_stack[2][2] };
+			row.output_stack[0][2] = if row.output_stack_filters[0] == F::ONE { prev_row.output_stack[4][2] + F::ONE } else { prev_row.output_stack[4][2] };
+		}
+		for i in 1..3 {
+			row.call_stack[i][2] = if row.call_stack_filters[i] == F::ONE { row.call_stack[i - 1][2] + F::ONE } else { row.call_stack[i - 1][2] };
+		}
+
+		for i in 1..5 {
+			row.output_stack[i][2] = if row.output_stack_filters[i] == F::ONE { row.output_stack[i - 1][2] + F::ONE } else { row.output_stack[i - 1][2] };
 		}
 	}
 
@@ -476,36 +503,30 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 	}
 
 	fn push_call_stack(&mut self, val: F, row: &mut RlpRow<F>, channel: usize) {
-		let timestamp = self.call_stack_trace.len();
 		self.call_stack.push(val);
 		self.call_stack_trace.push(StackOp::Push(val));
 
 		row.call_stack[channel][0] = F::from_bool(false);
 		row.call_stack[channel][1] = val;
-		row.call_stack[channel][2] = F::from_canonical_u64(timestamp as u64);
 		row.call_stack_filters[channel] = F::from_bool(true);
 	}
 
 	fn pop_call_stack(&mut self, row: &mut RlpRow<F>, channel: usize) -> F {
-		let timestamp = self.call_stack_trace.len();
 		let val = self.call_stack.pop().unwrap();
 		self.call_stack_trace.push(StackOp::Pop(val));
 
 		row.call_stack[channel][0] = F::from_bool(true);
 		row.call_stack[channel][1] = val;
-		row.call_stack[channel][2] = F::from_canonical_u64(timestamp as u64);
 		row.call_stack_filters[channel] = F::from_bool(true);
 		val
 	}
 
 	fn push_output_stack(&mut self, val: F, row: &mut RlpRow<F>, channel: usize) {
-		let timestamp = self.call_stack_trace.len();
 		self.output_stack.push(val);
 		self.output_stack_trace.push(StackOp::Push(val));
 
 		row.output_stack[channel][0] = F::from_bool(false);
 		row.output_stack[channel][1] = val;
-		row.output_stack[channel][2] = F::from_canonical_u64(timestamp as u64);
 		row.output_stack_filters[channel] = F::from_bool(true);
 	}
 
