@@ -458,16 +458,16 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for RlpStark<F, D
 		// push prefix to output stack
 		// TODO: timestamps for stack ops
 		let first_byte = len_len_is_1 * FE::from_canonical_u8(0xB8) + len_len_is_2 * FE::from_canonical_u8(0xB9) + len_len_is_3 * FE::from_canonical_u8(0xBA) + len_len_is_4 * FE::from_canonical_u8(0xBB);
-		yield_constr.constraint_filtered(curr_row.output_stack[4][0] - stack_push, opcode_is_str_prefix * prefix_string_out_of_range_case);
-		yield_constr.constraint_filtered(curr_row.output_stack[4][1] - curr_row.rc_u8s[0], opcode_is_str_prefix * prefix_string_out_of_range_case);
-		yield_constr.constraint_filtered(curr_row.output_stack[3][0] - stack_push, opcode_is_str_prefix * prefix_string_out_of_range_case);
-		yield_constr.constraint_filtered(curr_row.output_stack[3][1] - curr_row.rc_u8s[1], opcode_is_str_prefix * prefix_string_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[0][0] - stack_push, opcode_is_str_prefix * prefix_string_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[0][1] - curr_row.rc_u8s[0], opcode_is_str_prefix * prefix_string_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[1][0] - stack_push, opcode_is_str_prefix * prefix_string_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[1][1] - curr_row.rc_u8s[1], opcode_is_str_prefix * prefix_string_out_of_range_case);
 		yield_constr.constraint_filtered(curr_row.output_stack[2][0] - stack_push, opcode_is_str_prefix * prefix_string_out_of_range_case);
 		yield_constr.constraint_filtered(curr_row.output_stack[2][1] - curr_row.rc_u8s[2], opcode_is_str_prefix * prefix_string_out_of_range_case);
-		yield_constr.constraint_filtered(curr_row.output_stack[1][0] - stack_push, opcode_is_str_prefix * prefix_string_out_of_range_case);
-		yield_constr.constraint_filtered(curr_row.output_stack[1][1] - curr_row.rc_u8s[3], opcode_is_str_prefix * prefix_string_out_of_range_case);
-		yield_constr.constraint_filtered(curr_row.output_stack[0][0] - stack_push, opcode_is_str_prefix * prefix_string_out_of_range_case);
-		yield_constr.constraint_filtered(curr_row.output_stack[0][1] - first_byte, opcode_is_str_prefix * prefix_string_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[3][0] - stack_push, opcode_is_str_prefix * prefix_string_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[3][1] - curr_row.rc_u8s[3], opcode_is_str_prefix * prefix_string_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[4][0] - stack_push, opcode_is_str_prefix * prefix_string_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[4][1] - first_byte, opcode_is_str_prefix * prefix_string_out_of_range_case);
 
 		// increment count by number of bytes in prefix
 		let prefix_len = len_len_is_1 * FE::from_canonical_u8(1) + len_len_is_2 * FE::from_canonical_u8(2) + len_len_is_3 * FE::from_canonical_u8(3) + len_len_is_4 * FE::from_canonical_u8(4);
@@ -502,16 +502,16 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for RlpStark<F, D
 		yield_constr.constraint_filtered(curr_row.output_stack_filters[4] - len_len_is_4, opcode_is_list_prefix * prefix_list_out_of_range_case);
 		// push prefix to output stack
 		let first_byte = len_len_is_1 * FE::from_canonical_u8(0xF8) + len_len_is_2 * FE::from_canonical_u8(0xF9) + len_len_is_3 * FE::from_canonical_u8(0xFA) + len_len_is_4 * FE::from_canonical_u8(0xFB);
-		yield_constr.constraint_filtered(curr_row.output_stack[4][0] - stack_push, opcode_is_list_prefix * prefix_list_out_of_range_case);
-		yield_constr.constraint_filtered(curr_row.output_stack[4][1] - curr_row.rc_u8s[0], opcode_is_list_prefix * prefix_list_out_of_range_case);
-		yield_constr.constraint_filtered(curr_row.output_stack[3][0] - stack_push, opcode_is_list_prefix * prefix_list_out_of_range_case);
-		yield_constr.constraint_filtered(curr_row.output_stack[3][1] - curr_row.rc_u8s[1], opcode_is_list_prefix * prefix_list_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[0][0] - stack_push, opcode_is_list_prefix * prefix_list_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[0][1] - curr_row.rc_u8s[0], opcode_is_list_prefix * prefix_list_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[1][0] - stack_push, opcode_is_list_prefix * prefix_list_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[1][1] - curr_row.rc_u8s[1], opcode_is_list_prefix * prefix_list_out_of_range_case);
 		yield_constr.constraint_filtered(curr_row.output_stack[2][0] - stack_push, opcode_is_list_prefix * prefix_list_out_of_range_case);
 		yield_constr.constraint_filtered(curr_row.output_stack[2][1] - curr_row.rc_u8s[2], opcode_is_list_prefix * prefix_list_out_of_range_case);
-		yield_constr.constraint_filtered(curr_row.output_stack[1][0] - stack_push, opcode_is_list_prefix * prefix_list_out_of_range_case);
-		yield_constr.constraint_filtered(curr_row.output_stack[1][1] - curr_row.rc_u8s[3], opcode_is_list_prefix * prefix_list_out_of_range_case);
-		yield_constr.constraint_filtered(curr_row.output_stack[0][0] - stack_push, opcode_is_list_prefix * prefix_list_out_of_range_case);
-		yield_constr.constraint_filtered(curr_row.output_stack[0][1] - first_byte, opcode_is_list_prefix * prefix_list_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[3][0] - stack_push, opcode_is_list_prefix * prefix_list_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[3][1] - curr_row.rc_u8s[3], opcode_is_list_prefix * prefix_list_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[4][0] - stack_push, opcode_is_list_prefix * prefix_list_out_of_range_case);
+		yield_constr.constraint_filtered(curr_row.output_stack[4][1] - first_byte, opcode_is_list_prefix * prefix_list_out_of_range_case);
 
 		// increment count by number of bytes in prefix
 		let prefix_len = len_len_is_1 + len_len_is_2 * FE::from_canonical_u8(2) + len_len_is_3 * FE::from_canonical_u8(3) + len_len_is_4 * FE::from_canonical_u8(4);
@@ -565,16 +565,71 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for RlpStark<F, D
 		// base-55 decomp
 		let recomp = (0..6).rev().fold(P::ZEROS, |acc, i| acc * FE::from_canonical_u8(55) + curr_row.rc_55_limbs[i]);
 		yield_constr.constraint(curr_row.count - recomp);
-		for i in 0..6 {
-			eval_lookups(&vars, yield_constr, RC_55_LIMBS_PERMUTED_START + i, LUT_55_LIMBS_PERMUTED_START + i);
+		for (i, j) in rc_55_permuted_cols().zip(lut_55_permuted_cols()) {
+			eval_lookups(&vars, yield_constr, i, j);
 		}
 		
 		// byte decomp
 		let recomp = (0..4).map(|i| curr_row.rc_u8s[i + 1] * FE::from_canonical_u64(1 << i * 8)).sum::<P>();
 		yield_constr.constraint(curr_row.count - recomp);
-		for i in 0..4 {
-			eval_lookups(&vars, yield_constr, RC_U8_PERMUTED_START + i, LUT_U8_PERMUTED_START + i);
+		for (i, j) in rc_u8_permuted_cols().zip(lut_u8_permuted_cols()) {
+			eval_lookups(&vars, yield_constr, i, j);
 		}
+
+		// 7-bit (127) lookup
+		eval_lookups(&vars, yield_constr, rc_127_permuted_col(), lut_127_permuted_col());
+
+		// build luts
+
+		// counters start at 0
+		yield_constr.constraint_first_row(curr_row.count_127);
+		yield_constr.constraint_first_row(curr_row.count_u8);
+		yield_constr.constraint_first_row(curr_row.count_55);
+
+		// if count_127_is_127, set it to 0, otherwise increment it
+		yield_constr.constraint_transition_filtered(next_row.count_127, curr_row.count_127_is_127);
+		yield_constr.constraint_transition_filtered(next_row.count_127 - P::ONES, P::ONES - curr_row.count_127_is_127);
+		
+		// if count_u8_is_255, set it to 0, otherwise increment it
+		yield_constr.constraint_transition_filtered(next_row.count_u8, curr_row.count_u8_is_255);
+		yield_constr.constraint_transition_filtered(next_row.count_u8 - P::ONES, P::ONES - curr_row.count_u8_is_255);
+
+		// if count_55_is_55, set it to 0, otherwise increment it
+		yield_constr.constraint_transition_filtered(next_row.count_55, curr_row.count_55_is_55);
+		yield_constr.constraint_transition_filtered(next_row.count_55 - P::ONES, P::ONES - curr_row.count_55_is_55);
+
+		// check count_127_is_127 via inv
+		let count_127_minus_127 = curr_row.count_127 - FE::from_canonical_u8(127);
+		let prod = count_127_minus_127 * curr_row.count_127_minus_127_inv;
+		// binary check prod
+		yield_constr.constraint((P::ONES - prod) * prod);
+		// if count_127_is_127 is set, then both count_127_minus_127 and its inv must be zero
+		yield_constr.constraint_filtered(count_127_minus_127, curr_row.count_127_is_127);
+		yield_constr.constraint_filtered(curr_row.count_127_minus_127_inv, curr_row.count_127_is_127);
+		// otherwise, prod must be one
+		yield_constr.constraint_filtered(P::ONES - prod, P::ONES - curr_row.count_127_is_127);
+
+		// check count_u8_is_255 via inv
+		let count_u8_minus_255 = curr_row.count_u8 - FE::from_canonical_u8(255);
+		let prod = count_u8_minus_255 * curr_row.count_u8_minus_255_inv;
+		// binary check prod
+		yield_constr.constraint((P::ONES - prod) * prod);
+		// if count_u8_is_255 is set, then both count_u8_minus_255 and its inv must be zero
+		yield_constr.constraint_filtered(count_u8_minus_255, curr_row.count_u8_is_255);
+		yield_constr.constraint_filtered(curr_row.count_u8_minus_255_inv, curr_row.count_u8_is_255);
+		// otherwise, prod must be one
+		yield_constr.constraint_filtered(P::ONES - prod, P::ONES - curr_row.count_u8_is_255);
+
+		// check count_55_is_55 via inv
+		let count_55_minus_55 = curr_row.count_55 - FE::from_canonical_u8(55);
+		let prod = count_55_minus_55 * curr_row.count_55_minus_55_inv;
+		// binary check prod
+		yield_constr.constraint((P::ONES - prod) * prod);
+		// if count_55_is_55 is set, then both count_55_minus_55 and its inv must be zero
+		yield_constr.constraint_filtered(count_55_minus_55, curr_row.count_55_is_55);
+		yield_constr.constraint_filtered(curr_row.count_55_minus_55_inv, curr_row.count_55_is_55);
+		// otherwise, prod must be one
+		yield_constr.constraint_filtered(P::ONES - prod, P::ONES - curr_row.count_55_is_55);
 
 		// ensure things that shouldn't change stay the same
 		yield_constr.constraint_transition_filtered(next_row.depth - (curr_row.depth + P::ONES), opcode_is_recurse);

@@ -25,6 +25,7 @@ tiny-keccak = "2.0.2"
 jemallocator = "0.3.2"
 ecgfp5 = { git = "https://github.com/proxima-one/ecgfp5.git" }
 ethereum-rlp = "0.2.3"
+memoffset = "0.7"
 
 [dev-dependencies]
 criterion = "0.3.5"
