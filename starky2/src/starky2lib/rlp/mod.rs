@@ -150,6 +150,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for RlpStark<F, D
 		let set_filter_1 = is_end_entry_and_depth_is_zero;
 		yield_constr.constraint_filtered(P::ONES - curr_row.output_stack_filters[0], set_filter_0);
 		yield_constr.constraint_filtered(P::ONES - curr_row.output_stack_filters[1], set_filter_1);
+		// turn off other output stack filters for all non-prefix opcodes
+		let opcode_is_not_prefix = P::ONES - opcode_is_str_prefix - opcode_is_list_prefix;
+		yield_constr.constraint_filtered(curr_row.output_stack_filters[2], opcode_is_not_prefix);
+		yield_constr.constraint_filtered(curr_row.output_stack_filters[3], opcode_is_not_prefix);
+		yield_constr.constraint_filtered(curr_row.output_stack_filters[4], opcode_is_not_prefix);
 
 		// check output stack timestamps increment properly
 		yield_constr.constraint_transition_filtered(next_row.output_stack[0][2] - curr_row.output_stack[4][2] - P::ONES, next_row.output_stack_filters[0]);
@@ -179,6 +184,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for RlpStark<F, D
 		yield_constr.constraint_filtered(curr_row.input_memory[2][0] - (curr_row.pc + offset), opcode_is_new_entry);
 		let is_list = curr_row.input_memory[2][1];
 		// next op_id = [pc + 3]
+		// note that we *also* check op_id doesn't change here below. This amounts to checking that the op_id read from memory is the one the state machine expects
 		offset += P::ONES;
 		yield_constr.constraint_transition_filtered(curr_row.input_memory[3][0] - (curr_row.pc + offset), opcode_is_new_entry);
 		yield_constr.constraint_transition_filtered(curr_row.input_memory[3][1] - next_row.op_id, opcode_is_new_entry);
@@ -545,6 +551,8 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for RlpStark<F, D
 		yield_constr.constraint_filtered(curr_row.output_stack[1][1] - curr_row.op_id, is_end_entry_and_depth_is_zero);
 		// increment op_id
 		yield_constr.constraint_transition_filtered(next_row.op_id - (curr_row.op_id + P::ONES), is_end_entry_and_depth_is_zero);
+		// otherwisem, op_id should stay the same
+		yield_constr.constraint_transition_filtered(next_row.op_id - curr_row.op_id, P::ONES - is_end_entry_and_depth_is_zero);
 		// binary check is_last
 		yield_constr.constraint((P::ONES - curr_row.is_last) * curr_row.is_last);
 
@@ -640,10 +648,94 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for RlpStark<F, D
 		// otherwise, prod must be one
 		yield_constr.constraint_filtered(P::ONES - prod, P::ONES - curr_row.count_56_is_55);
 
-		// // ensure things that shouldn't change stay the same
-		// yield_constr.constraint_transition_filtered(next_row.depth - (curr_row.depth + P::ONES), opcode_is_recurse);
-		// // keep depth the same when not recursing
-		// yield_constr.constraint_transition_filtered(next_row.depth - curr_row.depth, P::ONES - opcode_is_recurse);
+		// ensure things that shouldn't change stay the same
+		// NewEntry	
+		// depth should stay the same
+		yield_constr.constraint_filtered(curr_row.depth - next_row.depth, opcode_is_new_entry);
+
+		// List
+		// count should stay the same
+		yield_constr.constraint_filtered(curr_row.count - next_row.count, opcode_is_list);
+		// content_len should stay the same
+		yield_constr.constraint_filtered(curr_row.content_len - next_row.content_len, opcode_is_list);
+		// depth should stay the same
+		yield_constr.constraint_filtered(curr_row.depth - next_row.depth, opcode_is_list);
+		// next should stay the same
+		yield_constr.constraint_filtered(curr_row.next - next_row.next, opcode_is_list);
+		// is_last should stay the same
+		yield_constr.constraint_filtered(curr_row.is_last - next_row.is_last, opcode_is_list);
+
+		// StrPush
+		// content_len should tsay the same
+		yield_constr.constraint_filtered(curr_row.content_len - next_row.content_len, opcode_is_str_push);
+		// depth should stay the same
+		yield_constr.constraint_filtered(curr_row.depth - next_row.depth, opcode_is_str_push);
+		// list_count should stay the same
+		yield_constr.constraint_filtered(curr_row.list_count - next_row.list_count, opcode_is_str_push);
+		// next should stay the same
+		yield_constr.constraint_filtered(curr_row.next - next_row.next, opcode_is_str_push);
+		// is_last should stay the same
+		yield_constr.constraint_filtered(curr_row.is_last - next_row.is_last, opcode_is_str_push);
+
+		// ListPrefix
+		// pc should stay the same
+		yield_constr.constraint_filtered(curr_row.pc - next_row.pc, opcode_is_list_prefix);
+		// content_len should stay the same
+		yield_constr.constraint_filtered(curr_row.content_len - next_row.content_len, opcode_is_list_prefix);
+		// depth should stay the same
+		yield_constr.constraint_filtered(curr_row.depth - next_row.depth, opcode_is_list_prefix);
+		// next should stay the same
+		yield_constr.constraint_filtered(curr_row.next - next_row.next, opcode_is_list_prefix);
+		// is_last should stay the same
+		yield_constr.constraint_filtered(curr_row.is_last - next_row.is_last, opcode_is_list_prefix);
+		// list_count should stay the same
+		yield_constr.constraint_filtered(curr_row.list_count - next_row.list_count, opcode_is_list_prefix);	
+
+		// StrPrefix
+		// pc should stay the same
+		yield_constr.constraint_filtered(curr_row.pc - next_row.pc, opcode_is_str_prefix);
+		// content_len should stay the same
+		yield_constr.constraint_filtered(curr_row.content_len - next_row.content_len, opcode_is_str_prefix);
+		// depth should stay the same
+		yield_constr.constraint_filtered(curr_row.depth - next_row.depth, opcode_is_str_prefix);
+		// next should stay the same
+		yield_constr.constraint_filtered(curr_row.next - next_row.next, opcode_is_str_prefix);
+		// is_last should stay the same
+		yield_constr.constraint_filtered(curr_row.is_last - next_row.is_last, opcode_is_str_prefix);
+		// list_count should stay the same
+		yield_constr.constraint_filtered(curr_row.list_count - next_row.list_count, opcode_is_str_prefix);
+
+		// Recurse
+		// content_len should stay the same
+		yield_constr.constraint_filtered(curr_row.content_len - next_row.content_len, opcode_is_recurse);
+		// list_count should stay the same
+		yield_constr.constraint_filtered(curr_row.list_count - next_row.list_count, opcode_is_recurse);
+		// next should stay the same
+		yield_constr.constraint_filtered(curr_row.next - next_row.next, opcode_is_recurse);
+		// is_last should stay the same
+		yield_constr.constraint_filtered(curr_row.is_last - next_row.is_last, opcode_is_recurse);
+
+		// Return
+		// content_len should stay the same
+		yield_constr.constraint_filtered(curr_row.content_len - next_row.content_len, opcode_is_return);
+		// next should stay the same
+		yield_constr.constraint_filtered(curr_row.next - next_row.next, opcode_is_return);
+		// is_last should stay the same
+		yield_constr.constraint_filtered(curr_row.is_last - next_row.is_last, opcode_is_return);
+
+		// EndEntry
+		// content_len should stay the same
+		yield_constr.constraint_filtered(curr_row.content_len - next_row.content_len, opcode_is_end_entry);
+		// count should stay the same
+		yield_constr.constraint_filtered(curr_row.count - next_row.count, opcode_is_end_entry);
+		// next should stay the same
+		yield_constr.constraint_filtered(curr_row.next - next_row.next, opcode_is_end_entry);
+		// is_last should stay the same
+		yield_constr.constraint_filtered(curr_row.is_last - next_row.is_last, opcode_is_end_entry);
+		// depth should stay the same
+		yield_constr.constraint_filtered(curr_row.depth - next_row.depth, opcode_is_end_entry);
+		// list_count should stay the same
+		yield_constr.constraint_filtered(curr_row.list_count - next_row.list_count, opcode_is_end_entry);
 	}
 
 	fn eval_ext_circuit(

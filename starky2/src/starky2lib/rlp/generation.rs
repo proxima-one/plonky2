@@ -355,7 +355,7 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 					// read pointer from the table and push it onto the stack
 					let inner_addr = self.read_pc_advance(&mut row, 0);
 					self.push_call_stack(inner_addr, &mut row, 1);
-					self.list_count += 1; // ! bug warning
+					self.list_count += 1; 
 					if self.list_count == self.content_len {
 						self.opcode = RlpOpcode::Recurse;
 					}
@@ -423,7 +423,6 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 					self.pc = old_pc.to_canonical_u64() as usize;
 					self.depth -= 1;
 
-					// bug warning
 					if self.list_count == 0 {
 						self.opcode = RlpOpcode::ListPrefix;
 					} else {
@@ -462,7 +461,6 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 			(1, 0x00..=0x7F) => vec![],
 			(0..=55, _) => vec![0x80 + len as u8],
 			_ => {
-				// bug warning
 				let mut len_bytes = len.to_be_bytes().to_vec();
 				let mut i = 0;
 				while len_bytes[i] == 0 {
@@ -482,7 +480,6 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 				vec![0xC0 + len as u8]
 			},
 			_ => {
-				// bug warning
 				let mut len_bytes = len.to_be_bytes().to_vec();
 				let mut i = 0;
 				while len_bytes[i] == 0 {
