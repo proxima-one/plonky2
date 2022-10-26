@@ -9,7 +9,7 @@ use crate::{util::transmute_no_compile_time_size_checks, permutation::Permutatio
 #[repr(C)]
 #[derive(Eq, PartialEq, Debug)]
 pub struct RlpRow<T: Copy> {
-    // register state: 8 cols (off 0)
+    // register state
 	pub(crate) op_id: T,
     pub(crate) pc: T,
     pub(crate) count: T,
@@ -19,7 +19,7 @@ pub struct RlpRow<T: Copy> {
 	pub(crate) next: T,
     pub(crate) is_last: T,
 
-    // opcode: 8 cols (off 8)
+    // opcode
     // 00000000: NewEntry
     // 00000001: List
     // 00000010: Recurse
@@ -33,7 +33,6 @@ pub struct RlpRow<T: Copy> {
 
 
     // advice columns for checking register state / transitions
-    // 14 cols (off 16)
     // for checking if depth is 0
     pub(crate) depth_is_zero: T,
     pub(crate) depth_inv: T,
@@ -50,7 +49,7 @@ pub struct RlpRow<T: Copy> {
     pub(crate) content_len_minus_list_count_is_zero: T,
     pub(crate) content_len_minus_list_count_inv: T,
 
-    // for checking prefix cases: 4 cols (off 30)
+    // for checking prefix cases
     // 0000: single byte in [0x00..0x7F]
     // 0001: string <=55 bytes long
     // 0010: string >55 bytes long
@@ -59,7 +58,6 @@ pub struct RlpRow<T: Copy> {
     pub(crate) prefix_case_flags: [T; 4],
 
     // byte range checks via LUT
-    // 15 cols (off 34)
     // there are 5 rc'd cells - one is for
     // bytes read from input memory
     // the other are for the byte decomposition of count
@@ -69,12 +67,11 @@ pub struct RlpRow<T: Copy> {
     pub(crate) lut_u8_permuteds: [T; 5],
 
     // range checking for prefix calculation
-    // 18 cols (off 49)
-    pub(crate) rc_55_limbs: [T; 6],
-    pub(crate) rc_55_limbs_permuted: [T; 6],
-    pub(crate) lut_55_permuted_limbs: [T; 6],
+    pub(crate) rc_56_limbs: [T; 6],
+    pub(crate) rc_56_limbs_permuted: [T; 6],
+    pub(crate) lut_56_permuted_limbs: [T; 6],
 
-    // range checking for special case where: 3 cols (off 67)
+    // range checking for special case where
     // it's a single-byte string in 0x00..0x7F
     pub(crate) rc_127_permuted: T,
     pub(crate) lut_127_permuted: T,
@@ -82,10 +79,9 @@ pub struct RlpRow<T: Copy> {
 
     // advice for checks applied when the prover claims
     // count is greater than 55
-    // 2 cols (off 70)
     pub(crate) upper_limbs_sum_inv: T,
     pub(crate) count_in_range: T,
-    // advice for counting length of length in bytes: 5 cols (off 72)
+    // advice for counting length of length in bytes
     // 0000: 0,
     // 0001: 1,
     // 0010: 2,
@@ -94,42 +90,47 @@ pub struct RlpRow<T: Copy> {
     pub(crate) log256_flags: [T; 4],
     pub(crate) top_byte_inv: T,
 
-    // other bytes for prefix calculation: 4 cols (off 77)
+    // other bytes for prefix calculation
     pub(crate) count_is_one: T,
     pub(crate) count_minus_one_inv: T,
+
+    // can probably loose 1-2 of these
     pub(crate) prefix_case_tmp: T,
     pub(crate) prefix_case_tmp_2: T,
+    pub(crate) prefix_case_tmp_3: T,
+    pub(crate) prefix_case_tmp_4: T,
+    pub(crate) end_entry_tmp: T,
 
     
-    // advice for checking LUT contents: 9 (off 81)
+    // advice for checking LUT contents
     pub(crate) count_127: T,
     pub(crate) count_127_minus_127_inv: T,
     pub(crate) count_127_is_127: T,
     pub(crate) count_u8: T,
     pub(crate) count_u8_minus_255_inv: T,
     pub(crate) count_u8_is_255: T,
-    pub(crate) count_55: T,
-    pub(crate) count_55_minus_55_inv: T,
-    pub(crate) count_55_is_55: T, 
+    pub(crate) count_56: T,
+    pub(crate) count_56_minus_55_inv: T,
+    pub(crate) count_56_is_55: T, 
 
-    // 5-channel CTL to the input memory: 15 cols
+    // 5-channel CTL to the input memory
     // each represented as [addr, val]
     pub(crate) input_memory: [[T; 2]; 5],
     pub(crate) input_memory_filters: [T; 5],
-    // 3-channel CTL to the call stack: 9 cols
+    // 3-channel CTL to the call stack
     // each represented as [is_pop, val]
     pub(crate) call_stack: [[T; 3]; 3],
     pub(crate) call_stack_filters: [T; 3],
-    // 5-channel CTL to the output stack: 20 cols
+    // 5-channel CTL to the output stack
     // each represented as [is_pop, val]
     pub(crate) output_stack: [[T; 3]; 5],
     pub(crate) output_stack_filters: [T; 5],
 }
 
-pub fn rc_55_cols() -> Range<usize> { span_of!(RlpRow<u8>, rc_55_limbs) }
-pub fn lut_55_col() -> usize { offset_of!(RlpRow<u8>, count_55) }
-pub fn rc_55_permuted_cols() -> Range<usize> { span_of!(RlpRow<u8>, rc_55_limbs_permuted) }
-pub fn lut_55_permuted_cols() -> Range<usize> { span_of!(RlpRow<u8>, lut_55_permuted_limbs) }
+pub fn rc_56_cols() -> Range<usize> { span_of!(RlpRow<u8>, rc_56_limbs) }
+pub fn lut_56_col() -> usize { offset_of!(RlpRow<u8>, count_56) }
+pub fn rc_56_permuted_cols() -> Range<usize> { span_of!(RlpRow<u8>, rc_56_limbs_permuted) }
+pub fn lut_56_permuted_cols() -> Range<usize> { span_of!(RlpRow<u8>, lut_56_permuted_limbs) }
 
 pub fn rc_u8_cols() -> Range<usize> { span_of!(RlpRow<u8>, rc_u8s) }
 pub fn lut_u8_col() -> usize { offset_of!(RlpRow<u8>, count_u8) }
@@ -139,7 +140,7 @@ pub fn lut_u8_permuted_cols() -> Range<usize> { span_of!(RlpRow<u8>, lut_u8_perm
 pub fn rc_127_col() -> usize { offset_of!(RlpRow<u8>, rc_127) }
 pub fn lut_127_col() -> usize { offset_of!(RlpRow<u8>, count_127) }
 pub fn rc_127_permuted_col() -> usize { offset_of!(RlpRow<u8>, rc_127_permuted) }
-pub fn lut_127_permuted_col() -> usize { offset_of!(RlpRow<u8>, count_127_minus_127_inv) }
+pub fn lut_127_permuted_col() -> usize { offset_of!(RlpRow<u8>, lut_127_permuted) }
 
 pub(crate) const RLP_NUM_COLS: usize = size_of::<RlpRow<u8>>();
 

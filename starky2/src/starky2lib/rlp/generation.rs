@@ -168,15 +168,15 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 			count >>= 8;
 		}
 
-		// base-55 decomp
+		// base-56 decomp
 		let mut count = self.count as u64;
 		for i in 0..6 {
-			row.rc_55_limbs[i] = F::from_canonical_u64(count % 55);
-			count /= 55;
+			row.rc_56_limbs[i] = F::from_canonical_u64(count % 56);
+			count /= 56;
 		}
 
 		// inv check for upper limb sum
-		let upper_limb_sum = (1..6).map(|i| row.rc_55_limbs[i]).sum::<F>();
+		let upper_limb_sum = (1..6).map(|i| row.rc_56_limbs[i]).sum::<F>();
 		row.upper_limbs_sum_inv = if upper_limb_sum == F::ZERO { F::ZERO } else { upper_limb_sum.inverse() };
 		row.count_in_range = F::from_bool(upper_limb_sum == F::ZERO);
 
@@ -204,12 +204,15 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 
 		row.prefix_case_tmp = F::from_bool(matches!(self.opcode, RlpOpcode::StrPrefix) && row.prefix_case_flags[0] == F::ONE && self.count == 1);
 		row.prefix_case_tmp_2 = F::from_bool(matches!(self.opcode, RlpOpcode::StrPrefix) && !own_encoding_case && row.prefix_case_flags[0] == F::ZERO);
+		row.prefix_case_tmp_3 = F::from_bool(matches!(self.opcode, RlpOpcode::StrPrefix)) * row.prefix_case_flags[1];
+		row.prefix_case_tmp_4 = F::from_bool(matches!(self.opcode, RlpOpcode::ListPrefix)) * row.prefix_case_flags[3];
+		row.end_entry_tmp = F::from_bool(self.opcode == RlpOpcode::EndEntry && self.depth == 0);
 
 		// LUT counts
 		let row_idx = self.stark_trace.len() as u64;
 		row.count_127 = F::from_canonical_u64(row_idx % 128);
 		row.count_u8 = F::from_canonical_u64(row_idx % 256);
-		row.count_55 = F::from_canonical_u64(row_idx % 55);
+		row.count_56 = F::from_canonical_u64(row_idx % 56);
 
 		row.count_127_minus_127_inv = if row.count_127 == F::from_canonical_u64(127) { F::ZERO } else { (row.count_127 - F::from_canonical_u64(127)).inverse() };
 		row.count_127_is_127 = F::from_bool(row.count_127 == F::from_canonical_u64(127));
@@ -217,8 +220,8 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 		row.count_u8_minus_255_inv = if row.count_u8 == F::from_canonical_u64(255) { F::ZERO } else { (row.count_u8 - F::from_canonical_u64(255)).inverse() };
 		row.count_u8_is_255 = F::from_bool(row.count_u8 == F::from_canonical_u64(255));
 
-		row.count_55_minus_55_inv = if row.count_55 == F::from_canonical_u64(55) { F::ZERO } else { (row.count_55 - F::from_canonical_u64(55)).inverse() };
-		row.count_55_is_55 = F::from_bool(row.count_55 == F::from_canonical_u64(55));
+		row.count_56_minus_55_inv = if row.count_56 == F::from_canonical_u64(55) { F::ZERO } else { (row.count_56 - F::from_canonical_u64(55)).inverse() };
+		row.count_56_is_55 = F::from_bool(row.count_56 == F::from_canonical_u64(55));
 
 		row
 	}
@@ -235,7 +238,7 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 	}
 
 	fn gen_luts(values: &mut [PolynomialValues<F>]) {
-		let pairs = rc_55_cols().zip(std::iter::repeat(lut_55_col()));
+		let pairs = rc_56_cols().zip(std::iter::repeat(lut_56_col()));
 		let pairs = pairs.chain(
 			rc_u8_cols().zip(std::iter::repeat(lut_u8_col()))
 		);
@@ -243,7 +246,7 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 			(rc_127_col(), lut_127_col())
 		));
 
-		let pairs_permuted = rc_55_permuted_cols().zip(lut_55_permuted_cols());
+		let pairs_permuted = rc_56_permuted_cols().zip(lut_56_permuted_cols());
 		let pairs_permuted = pairs_permuted.chain(
 			rc_u8_permuted_cols().zip(lut_u8_permuted_cols())
 		);
@@ -339,8 +342,8 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 						row.rc_127 = F::from_canonical_u8(first_val);
 					}
 
-					for (channel, b) in prefix.into_iter().rev().enumerate() {
-						self.push_output_stack(F::from_canonical_u64(b as u64), &mut row, channel);
+					for (channel, b) in prefix.into_iter().enumerate().rev() {
+						self.push_output_stack(F::from_canonical_u64(b as u64), &mut row, 4 - channel);
 						self.count += 1;
 					}
 					self.opcode = RlpOpcode::EndEntry;
@@ -359,8 +362,8 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 				}
 				RlpOpcode::ListPrefix => {
 					let prefix = self.compute_list_prefix(self.count);
-					for (channel, b) in prefix.into_iter().rev().enumerate() {
-						self.push_output_stack(F::from_canonical_u64(b as u64), &mut row, channel);
+					for (channel, b) in prefix.into_iter().enumerate().rev() {
+						self.push_output_stack(F::from_canonical_u64(b as u64), &mut row, 4 - channel);
 						self.count += 1;
 					}
 					self.opcode = RlpOpcode::EndEntry;
@@ -863,7 +866,10 @@ mod tests {
 					RlpItem::Str(b"So let's rap, we'll catch up to par, what's the haps?".to_vec()),
 				]
 			),
-			RlpItem::Str(b"C'est la vie, as they say L.O.V.E evidently".to_vec()),
+			RlpItem::Str(b"C'est la vie, as they say L.O.V.E evidently, see every song has a sequel
+Never same, everything but the name, all fresh just like back then, how we do everyday
+C'est la vie, as they say L.O.V.E eloquently, see every dream has a part two
+Never same, you got to keep it tight, all fresh just like back then, now hear me out".to_vec()),
 			// special cases
 			RlpItem::List(vec![]),
 			RlpItem::Str(vec![]),
