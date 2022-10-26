@@ -1,13 +1,17 @@
-# RLP STARK Design
+# RLP State Machine
+
+The RLP STARK is designed as a state machine utilizing CTLs to three memory starks, two of which are stacks. This document describes the state machine, not the STARK. The STARK uses 136 columns total.
 
 ## Memories
 
-This stark is built via CTLs to three memories:
+This state machine built using three memories:
 1. The "input" memory, which contains lists and strings to decode
 2. A call stack
-3. the "strstack", which is a stack containing the RLP-encoded results which may be read by popping the entire stack
+3. the "output stack", which is a stack containing the RLP-encoded results which may be read by popping the entire stack
 
 The "input" memory is an instance of the `ro_memory` STARK. Both stacks are instances of the "ro_stack" STARK. Note that, by convention, the "ro_stack" STARK grows "up" - i.e. the top of the stack starts at address 0 and, as items are pushed, the address of the top of the stack increases.
+
+> Potential Optimization: In hindsight the output stack doesn't need to be a stack because we never pop from it. It can absolutely be a RO memory with a continuous address space, and an RO memory is probably slightly cheaper (though probably not by much). We can also lose 5 columns from the state machine due to not needing a timestamp column.
 
 ### input memory layout
 
@@ -22,7 +26,7 @@ The decoded memory is a series of entries, where, abstractly, each entry represe
 	* if `is_list` is `0`, then `content` is a possibly-empty byte string stored in reverse order (i.e. the last byte of the string comes first).
 		* This to avoid having to re-reverse the string on the output stack
 
-### strstack layout
+### output stack layout
 
 The "complete" strstack is sequence of entries, where the `i`th entry from the bottom of the stack is represented as the following fields, in order from least to greatest address:
 * res: result rlp-encoding of item `i`
@@ -33,4 +37,99 @@ The "complete" strstack is sequence of entries, where the `i`th entry from the b
 
 Call stack semantics are specified below in the state machine definition below
 
+## State Machine
+
+THe goal of the state machine is to read entries from the input memory and produce the correct RLP encodings on the output stack in a manner such that the consumer may read them by popping the entire output from the stack.
+
+The state machine exists in one of the following "states", each associated with a single "opcode":
+* `NewEntry`: read a new entry's metadata into the state machine and prepare to encode it
+* `List`: for a list item, push the child pointers onto the call stack so that they may recursively be encoded
+* `Recurse`: recurse backwards through the children of a list item. We recurse backwards because we push the results onto a stack, which will be in reverse order when popped by the consumer
+* `Return`: "return" up a level after recursing through children of a list item and accumulate the the length count of the child encodings.
+* `StrPrefix`: calculate the prefix for a string entry and push it to the output stack
+* `ListPrefix`: calculate the prefix for a list entry and push it to the output stack
+* `EndEntry`: Finish processing an entry and either return to the outer (recursive) list entry or proceed to the next top-level entry
+* `Halt`: do nothing once the last entry has been fully processed
+
+The state machine keeps the following state variables:
+* `op_id`: a monotonically-increasing identifier for a top-level item to be RLP-encoded
+* `pc`: a pointer into the input memory
+* `count`: a counter used to compute the total length of an RLP item and its children
+* `content_len`: length of the `content` field of the entry currently being processed
+* `list_count`: an auxilliary counter used when setting up the call stack for recursion so the state machine knows when to stop recursing
+* `depth`: the current recursion depth of the state machine
+* `next`: pointer to the next top-level entry to encode. ignored if `is_last` is set to `1`
+* `is_last`: a boolean flag indicating whether or not the current top-level entry is the last to be processed.
+
+Execution begins in the `NewEntry` state. The following describes what happens during each state. (notation: `[x]` denotes the value in the input memory at the address given by `x`). This can also be seen in the function `gen_state_machine` in [`generation.rs`](./generation.rs):
+* `NewEntry`:
+	* `next <- [pc]`
+	* `is_last <- [pc + 1]`
+	* `is_list <- [pc + 2]`
+	* `assert op_id = [pc + 3]`
+	* `content_len <- [pc + 4]`
+	* `pc <- pc + 5`
+	* `count <- 0`
+	* `list_count <- 0`
+	* then:
+		* if `is_list = 1` AND `content_len = 0`, then transition to `ListPrefix`
+		* if `is_list = 1` AND `content_len != 0`, then transition to `List`
+		* if `is_list = 0` AND `content_len = 0`, then transition to `StrPrefix`
+		* if `is_list = 0` AND `content_len != 0`, then transition to `StrPush`
+* `StrPush`:
+	* `output_stack.push([pc])
+	* `pc <- pc + 1`
+	* `count <- count + 1`
+	* then:
+		* if `content_len = count`, then transition to `StrPrefix`
+		* otherwise stay at `StrPush`
+* `StrPrefix`:
+	* let `prefix` be the RLP prefix for a byte-string with length `count`
+		* note that `prefix` can be 0 bytes long thanks to the brilliant idea of making a single byte in the range `0x00..=0x7F` its own encoding to sometimes shave a byte.
+	* `output_stack.push(prefix)`
+	* `count <- count + prefix.len()`
+	* then:
+		* transition to `EndEntry`
+* `List`:
+	* `output_stack.push(list_count)`
+	* `output_stack.push([pc])`
+	* `pc <- pc + 1`
+	* `list_count <- list_count + 1`
+	* then:
+		* if `list_count == content_len`, then transition to `Recurse`
+		* otherwise stay at `List`
+* `ListPrefix`:
+	* let `prefix` be the RLP prefix for the list whose total payload (RLP encodings of its children) has length `count`
+	* `output_stack.push(prefix)`
+	* `count <- count + prefix.len()`
+	* then:
+		* transition to `EndEntry`
+* `Recurse`:
+	* let `dst` be the result of `pop_call_stack()`
+	* `push_call_stack(count)`
+	* `push_call_stack(pc)`
+	* `pc <- dst`
+	* `depth <- depth + 1`
+	* then:
+		* transition to `NewEntry`
+* `Return`:
+	* `pc <- pop_call_stack()`
+	* `count <- count + pop_call_stack()`
+	* `list_count <- pop_call_stack()`
+	* `depth <- depth - 1`
+	* then
+		* if `list_count = 0`, then transition to `ListPrefix`
+		* otherwise stay at `Recurse`	
+* `EndEntry`:
+	* if `depth = 0`, then:
+		* `push_output_stack(count)`
+		* `push_output_stack(op_id)`
+		* `op_id  <- op_id + 1`
+		* if `is_last = 1`, then transition to `Halt`
+		* otherwise, then:
+			* `pc <- next`
+			* transition to `NewEntry`
+	* otherwise, simply transition to `Return`
+* `Halt:
+	* all state stays exactly the same.
 
