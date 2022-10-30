@@ -335,6 +335,7 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 				}
 				RlpOpcode::StrPrefix => {
 					// in the STARK, output_stack.last() is accessed via the "previous" row
+					// this still works for empty string as len != 1 in that case, so first_val doesn't matter
 					let first_val = self.output_stack.last().unwrap();
 					let first_val = first_val.to_canonical_u64() as u8;
 					let prefix = compute_str_prefix(self.count, first_val);
@@ -631,6 +632,24 @@ impl RlpItem {
 			}
 		}
 		is_last_addr
+	}
+
+	pub fn try_as_byte_str(&self) -> Result<Vec<u8>, &'static str> {
+		match self {
+			RlpItem::Str(s) => {
+				Ok(s.clone())
+			},
+			_ => Err(&"not a byte string")
+		}
+	}
+
+	pub fn try_as_list(&self) -> Result<Vec<RlpItem>, &'static str> {
+		match self {
+			RlpItem::List(l) => {
+				Ok(l.iter().map(|x| *x.clone()).collect())
+			},
+			_ => Err(&"not a list")
+		}
 	}
 }
 
