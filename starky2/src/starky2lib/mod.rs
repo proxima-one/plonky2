@@ -8,3 +8,4 @@ pub mod xor;
 pub mod ro_memory;
 pub mod stack;
 pub mod rlp;
+pub mod idx_keyed_trie;

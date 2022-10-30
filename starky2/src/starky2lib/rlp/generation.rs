@@ -337,7 +337,7 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 					// in the STARK, output_stack.last() is accessed via the "previous" row
 					let first_val = self.output_stack.last().unwrap();
 					let first_val = first_val.to_canonical_u64() as u8;
-					let prefix = self.compute_str_prefix(self.count, first_val);
+					let prefix = compute_str_prefix(self.count, first_val);
 					if prefix.len() == 0 {
 						row.rc_127 = F::from_canonical_u8(first_val);
 					}
@@ -361,7 +361,7 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 					}
 				}
 				RlpOpcode::ListPrefix => {
-					let prefix = self.compute_list_prefix(self.count);
+					let prefix = compute_list_prefix(self.count);
 					for (channel, b) in prefix.into_iter().enumerate().rev() {
 						self.push_output_stack(F::from_canonical_u64(b as u64), &mut row, 4 - channel);
 						self.count += 1;
@@ -456,42 +456,7 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 		}
 	}
 
-	fn compute_str_prefix(&mut self, len: usize, first_val: u8) -> Vec<u8> {
-		match (len, first_val) {
-			(1, 0x00..=0x7F) => vec![],
-			(0..=55, _) => vec![0x80 + len as u8],
-			_ => {
-				let mut len_bytes = len.to_be_bytes().to_vec();
-				let mut i = 0;
-				while len_bytes[i] == 0 {
-					i += 1;
-				}
-				len_bytes = len_bytes[i..].to_vec();
-				let mut prefix = vec![0xB7 + len_bytes.len() as u8];
-				prefix.append(&mut len_bytes);
-				prefix
-			}
-		}
-	}
 
-	fn compute_list_prefix(&mut self, len: usize) -> Vec<u8> {
-		match len {
-			0..=55 => {
-				vec![0xC0 + len as u8]
-			},
-			_ => {
-				let mut len_bytes = len.to_be_bytes().to_vec();
-				let mut i = 0;
-				while len_bytes[i] == 0 {
-					i += 1;
-				}
-				len_bytes = len_bytes[i..].to_vec();
-				let mut prefix = vec![0xF7 + len_bytes.len() as u8];
-				prefix.append(&mut len_bytes);
-				prefix
-			}
-		}
-	}
 
 	fn read_pc_advance(&mut self, row: &mut RlpRow<F>, channel: usize) -> F {
 		let val = self.input_memory[self.pc];
@@ -529,7 +494,43 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 		row.output_stack[channel][1] = val;
 		row.output_stack_filters[channel] = F::from_bool(true);
 	}
+}
 
+pub fn compute_str_prefix(len: usize, first_val: u8) -> Vec<u8> {
+	match (len, first_val) {
+		(1, 0x00..=0x7F) => vec![],
+		(0..=55, _) => vec![0x80 + len as u8],
+		_ => {
+			let mut len_bytes = len.to_be_bytes().to_vec();
+			let mut i = 0;
+			while len_bytes[i] == 0 {
+				i += 1;
+			}
+			len_bytes = len_bytes[i..].to_vec();
+			let mut prefix = vec![0xB7 + len_bytes.len() as u8];
+			prefix.append(&mut len_bytes);
+			prefix
+		}
+	}
+}
+
+pub fn compute_list_prefix(len: usize) -> Vec<u8> {
+	match len {
+		0..=55 => {
+			vec![0xC0 + len as u8]
+		},
+		_ => {
+			let mut len_bytes = len.to_be_bytes().to_vec();
+			let mut i = 0;
+			while len_bytes[i] == 0 {
+				i += 1;
+			}
+			len_bytes = len_bytes[i..].to_vec();
+			let mut prefix = vec![0xF7 + len_bytes.len() as u8];
+			prefix.append(&mut len_bytes);
+			prefix
+		}
+	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

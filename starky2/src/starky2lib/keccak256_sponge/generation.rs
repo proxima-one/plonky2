@@ -144,7 +144,7 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
     }
 
     /// adds a keccak256 hash to the trace, returning the `hash_idx` (for lookup usage) and the resulting hash
-    /// applies padding and breaks down into blockso of `u32`s
+    /// applies padding and breaks down into block of `u32`s
     pub fn gen_hash(&mut self, data: &[u8]) -> (u16, [u8; 32]) {
         let data = to_le_blocks(&pad101(data));
         let (id, hash_u32s, _, _) = self.gen_hash_nopad(&data, false);

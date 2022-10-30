@@ -3,6 +3,7 @@
 #![allow(clippy::type_complexity)]
 #![feature(generic_const_exprs)]
 #![feature(array_windows)]
+#![feature(array_chunks)]
 #![feature(exclusive_range_pattern)]
 #![feature(array_zip)]
 #![feature(is_sorted)]
