@@ -1,6 +1,7 @@
 pub mod depth_5_merkle_tree;
 pub mod ecgfp5_vartime;
 pub mod keccak256_sponge;
+pub mod keccak256_stack;
 pub mod keccak_f;
 pub mod sha2_compression;
 pub mod xor;
@@ -10,3 +11,4 @@ pub mod rw_memory;
 pub mod stack;
 pub mod rlp;
 pub mod idx_keyed_trie;
+pub mod util;
