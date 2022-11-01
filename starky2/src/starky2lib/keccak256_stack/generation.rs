@@ -7,9 +7,10 @@ use tiny_keccak::keccakf;
 
 use super::layout::*;
 use crate::{
-    util::{to_u32_array_le, trace_rows_to_poly_values},
+    lookup::permuted_cols,
+    starky2lib::keccak256_sponge::generation::keccakf_u32s,
     starky2lib::{stack::generation::StackOp, util::u32_byte_recomp_field_le},
-    starky2lib::keccak256_sponge::generation::keccakf_u32s, lookup::permuted_cols
+    util::{to_u32_array_le, trace_rows_to_poly_values},
 };
 
 // minimum number of rows for this table. This is necessary because it uses a size 136 lookup table, and the next power of two is 256
@@ -54,10 +55,7 @@ impl<F: PrimeField64> Keccak256InputStack<F> {
         }
         stack[0] = F::from_canonical_usize(stack.len() - 1);
 
-        Self {
-            stack,
-            sp: 0
-        }
+        Self { stack, sp: 0 }
     }
 
     pub fn load_sp(&mut self) {
@@ -95,7 +93,7 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
         row.len = len;
 
         self.state = [0; KECCAK_WIDTH_U32S];
-        
+
         self.op_id = op_id.to_canonical_u64() as usize;
         self.len = len.to_canonical_u64() as usize;
     }
@@ -126,11 +124,21 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
 
         row.lut_136 = F::from_canonical_usize(self.trace.len() % 136);
         row.lut_136_is_135 = F::from_bool(self.trace.len() % 136 == 135);
-        row.lut_136_minus_135_inv = if self.trace.len() % 136 == 135 { F::ZERO } else { (row.lut_136 - F::from_canonical_u64(135)).inverse() };
+        row.lut_136_minus_135_inv = if self.trace.len() % 136 == 135 {
+            F::ZERO
+        } else {
+            (row.lut_136 - F::from_canonical_u64(135)).inverse()
+        };
     }
 
     fn xor_in_input(&mut self, row: &mut Keccak256StackRow<F>) {
-        for (i, (word, input)) in self.state.iter_mut().take(KECCAK_RATE_U32S).zip(row.input_block).enumerate() {
+        for (i, (word, input)) in self
+            .state
+            .iter_mut()
+            .take(KECCAK_RATE_U32S)
+            .zip(row.input_block)
+            .enumerate()
+        {
             let input = input.to_canonical_u64() as u32;
             *word ^= input;
             row.xored_state_rate[i] = F::from_canonical_u32(*word);
@@ -147,11 +155,11 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
         keccakf_u32s(&mut self.state);
         row.new_state = self.state.map(F::from_canonical_u32);
     }
-    
 
     fn gen_decomps(&self, row: &mut Keccak256StackRow<F>) {
         for i in 0..KECCAK_RATE_U32S {
-            row.input_block[i] = u32_byte_recomp_field_le(*array_ref![row.input_block_bytes, 4 * i, 4]);
+            row.input_block[i] =
+                u32_byte_recomp_field_le(*array_ref![row.input_block_bytes, 4 * i, 4]);
         }
     }
 
@@ -187,7 +195,7 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
                     self.gen_padding_bytes(row, self.len);
                     row.rc_136 = F::from_canonical_usize(self.len);
                 }
-            },
+            }
             _ => {}
         }
     }
@@ -195,7 +203,10 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
     fn gen_output(&mut self, row: &mut Keccak256StackRow<F>) -> [u8; 32] {
         let mut res = [0u8; 32];
         let hash_u32s = *array_ref![self.state, 0, 8];
-        for (o, chunk) in res.chunks_exact_mut(4).zip(hash_u32s.into_iter().map(|x| x.to_le_bytes())) {
+        for (o, chunk) in res
+            .chunks_exact_mut(4)
+            .zip(hash_u32s.into_iter().map(|x| x.to_le_bytes()))
+        {
             o.copy_from_slice(&chunk);
         }
 
@@ -218,7 +229,8 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
 
     fn gen_luts(trace_values: &mut [PolynomialValues<F>]) {
         for ((input, input_permuted), (table, table_permuted)) in lookup_pairs() {
-            let (input_values_permuted, table_values_permuted) = permuted_cols(&trace_values[input].values, &trace_values[table].values);
+            let (input_values_permuted, table_values_permuted) =
+                permuted_cols(&trace_values[input].values, &trace_values[table].values);
             trace_values[input_permuted] = PolynomialValues::new(input_values_permuted);
             trace_values[table_permuted] = PolynomialValues::new(table_values_permuted);
         }
@@ -251,7 +263,7 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
                     } else {
                         self.opcode = Keccak256StackOpcode::ABSORB;
                     }
-                },
+                }
                 Keccak256StackOpcode::SQUEEZE => {
                     let mut row = Keccak256StackRow::new();
                     self.gen_row(&mut row);
@@ -259,21 +271,21 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
                     self.gen_output(&mut row);
                     self.gen_invoke_permutation(&mut row);
                     self.trace.push(row);
-                    
+
                     if self.op_id == 0 {
                         self.opcode = Keccak256StackOpcode::HALT;
                     } else {
                         self.opcode = Keccak256StackOpcode::ABSORB;
                         is_new_item = true;
                     }
-                },
+                }
                 Keccak256StackOpcode::HALT => {
                     let mut row = Keccak256StackRow::new();
                     self.gen_row(&mut row);
                     self.trace.push(row);
                     break;
                 }
-            } 
+            }
         }
     }
 
@@ -293,8 +305,9 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
     }
 
     pub fn into_polynomial_values(self) -> Vec<PolynomialValues<F>> {
-		let rows: Vec<[F; KECCAK_256_STACK_NUM_COLS]> = self.trace.into_iter().map(|row| row.into()).collect();
-		let mut values = trace_rows_to_poly_values(rows);
+        let rows: Vec<[F; KECCAK_256_STACK_NUM_COLS]> =
+            self.trace.into_iter().map(|row| row.into()).collect();
+        let mut values = trace_rows_to_poly_values(rows);
         Self::gen_luts(&mut values);
         values
     }
@@ -317,7 +330,10 @@ mod tests {
         generator.generate();
 
         let output_mem = generator.output_memory;
-        let computed_hash = output_mem[0..32].into_iter().map(|x| x.to_canonical_u64() as u8).collect::<Vec<u8>>();
+        let computed_hash = output_mem[0..32]
+            .into_iter()
+            .map(|x| x.to_canonical_u64() as u8)
+            .collect::<Vec<u8>>();
 
         let mut correct_hash = [0u8; 32];
         let mut hasher = Keccak::v256();
@@ -337,13 +353,17 @@ mod tests {
             Dead right, if the head right, Biggie there e'ry night
             Poppa been smooth since days of Underoos
             Never lose, never choose to, bruise crews who
-            Do somethin' to us (come on), talk go through us (through us)".to_vec()];
+            Do somethin' to us (come on), talk go through us (through us)"
+            .to_vec()];
         let stack = Keccak256InputStack::from_items(&items);
         let mut generator = Keccak256StackGenerator::<F>::new(stack);
         generator.generate();
 
         let output_mem = generator.output_memory;
-        let computed_hash = output_mem[0..32].into_iter().map(|x| x.to_canonical_u64() as u8).collect::<Vec<u8>>();
+        let computed_hash = output_mem[0..32]
+            .into_iter()
+            .map(|x| x.to_canonical_u64() as u8)
+            .collect::<Vec<u8>>();
 
         let mut correct_hash = [0u8; 32];
         let mut hasher = Keccak::v256();
@@ -363,7 +383,7 @@ mod tests {
             b"I can fill ya wit' real millionaire shit (I can fill ya)".to_vec(),
             b"Escargot, my car go one-sixty, swiftly (come on)".to_vec(),
             b"Wreck it, buy a new one".to_vec(),
-            b"Your crew run-run-run, your crew run-run".to_vec()
+            b"Your crew run-run-run, your crew run-run".to_vec(),
         ];
         let stack = Keccak256InputStack::from_items(&items);
         let mut generator = Keccak256StackGenerator::<F>::new(stack);
@@ -371,7 +391,10 @@ mod tests {
 
         let output_mem = generator.output_memory;
         for i in 0..items.len() {
-            let computed_hash = output_mem[i*32..(i+1)*32].into_iter().map(|x| x.to_canonical_u64() as u8).collect::<Vec<u8>>();
+            let computed_hash = output_mem[i * 32..(i + 1) * 32]
+                .into_iter()
+                .map(|x| x.to_canonical_u64() as u8)
+                .collect::<Vec<u8>>();
 
             let mut correct_hash = [0u8; 32];
             let mut hasher = Keccak::v256();

@@ -72,7 +72,7 @@ mod tests {
     use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
     use plonky2::util::timing::TimingTree;
 
-    use super::generation::{Keccak256StackGenerator, Keccak256InputStack};
+    use super::generation::{Keccak256InputStack, Keccak256StackGenerator};
     use super::*;
     use crate::config::StarkConfig;
     use crate::prover::prove_no_ctl;

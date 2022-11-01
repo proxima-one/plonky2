@@ -160,30 +160,33 @@ pub const fn input_block_encoded_start_col() -> usize {
 }
 
 pub fn xor_ctl_cols_a(tid: TableID) -> impl Iterator<Item = CtlColSet> {
-    (0..KECCAK_RATE_U32S)
-        .map(move |i| CtlColSet::new(
+    (0..KECCAK_RATE_U32S).map(move |i| {
+        CtlColSet::new(
             tid,
             vec![input_block_start_col() + i],
-            Some(mode_bits_start_col())
-        ))
+            Some(mode_bits_start_col()),
+        )
+    })
 }
 
 pub fn xor_ctl_cols_b(tid: TableID) -> impl Iterator<Item = CtlColSet> {
-    (0..KECCAK_RATE_U32S)
-        .map(move |i| CtlColSet::new(
+    (0..KECCAK_RATE_U32S).map(move |i| {
+        CtlColSet::new(
             tid,
             vec![curr_state_rate_start_col() + i],
-            Some(mode_bits_start_col())
-        ))
+            Some(mode_bits_start_col()),
+        )
+    })
 }
 
 pub fn xor_ctl_cols_output(tid: TableID) -> impl Iterator<Item = CtlColSet> {
-    (0..KECCAK_RATE_U32S)
-        .map(move |i| CtlColSet::new(
+    (0..KECCAK_RATE_U32S).map(move |i| {
+        CtlColSet::new(
             tid,
             vec![xored_state_rate_start_col() + i],
-            Some(mode_bits_start_col())
-        ))
+            Some(mode_bits_start_col()),
+        )
+    })
 }
 
 pub fn keccak_ctl_col_input(tid: TableID) -> impl Iterator<Item = CtlColSet> {

@@ -2,9 +2,9 @@ use std::{
     borrow::{Borrow, BorrowMut},
     mem::{size_of, transmute},
 };
-use memoffset::{offset_of, span_of};
 
 use itertools::Itertools;
+use memoffset::{offset_of, span_of};
 
 use crate::cross_table_lookup::CtlColSet;
 use crate::{cross_table_lookup::TableID, util::transmute_no_compile_time_size_checks};
@@ -19,19 +19,19 @@ pub const KECCAK_CAPACITY_U32S: usize = KECCAK_CAPACITY_BYTES / 4;
 #[repr(C)]
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Keccak256StackRow<T: Copy> {
-    /// 00: halt 
+    /// 00: halt
     /// 01: absorb
-    /// 10: squeeze 
+    /// 10: squeeze
     /// we start a new sponge whenever we go from squeeze to absorb mode
     pub(crate) opcode: [T; 2],
 
     /// binary flag indicating when to "invoke" the permutation STARK
     pub(crate) invoke_permutation_filter: T,
 
-    /// id of the current hash being absorbed or squeezed 
+    /// id of the current hash being absorbed or squeezed
     /// this is used by the stack to ensure there's a 1-1 mapping between preimages and hashes.
     /// it starts at the number of items to be hashed minus 1, and it decrements by one for each preimage
-    /// when it reaches zero, that's the last item. 
+    /// when it reaches zero, that's the last item.
     pub(crate) op_id: T,
 
     pub(crate) is_last_block: T,
@@ -95,12 +95,10 @@ pub struct Keccak256StackRow<T: Copy> {
 }
 
 pub(crate) fn lookup_pairs() -> Vec<((usize, usize), (usize, usize))> {
-    vec![
-        (
-            (offset_of!(R, rc_136), offset_of!(R, rc_136_permuted)),
-            (offset_of!(R, lut_136), offset_of!(R, lut_136_permuted))
-        )
-    ]
+    vec![(
+        (offset_of!(R, rc_136), offset_of!(R, rc_136_permuted)),
+        (offset_of!(R, lut_136), offset_of!(R, lut_136_permuted)),
+    )]
 }
 
 impl<T: Copy + Default> Keccak256StackRow<T> {
@@ -109,32 +107,18 @@ impl<T: Copy + Default> Keccak256StackRow<T> {
     }
 }
 
-
 pub fn xor_ctl_cols_a(tid: TableID) -> impl Iterator<Item = CtlColSet> {
-    span_of!(R, input_block)
-        .map(move |i| CtlColSet::new(
-            tid,
-            vec![i],
-            Some(offset_of!(R, opcode))
-        ))
+    span_of!(R, input_block).map(move |i| CtlColSet::new(tid, vec![i], Some(offset_of!(R, opcode))))
 }
 
 pub fn xor_ctl_cols_b(tid: TableID) -> impl Iterator<Item = CtlColSet> {
     span_of!(R, curr_state_rate)
-        .map(move |i| CtlColSet::new(
-            tid,
-            vec![i],
-            Some(offset_of!(R, opcode))
-        ))
+        .map(move |i| CtlColSet::new(tid, vec![i], Some(offset_of!(R, opcode))))
 }
 
 pub fn xor_ctl_cols_output(tid: TableID) -> impl Iterator<Item = CtlColSet> {
     span_of!(R, xored_state_rate)
-        .map(move |i| CtlColSet::new(
-            tid,
-            vec![i],
-            Some(offset_of!(R, opcode))
-        ))
+        .map(move |i| CtlColSet::new(tid, vec![i], Some(offset_of!(R, opcode))))
 }
 
 pub fn keccak_ctl_col_input(tid: TableID) -> impl Iterator<Item = CtlColSet> {
