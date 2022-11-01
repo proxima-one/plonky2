@@ -1,6 +1,6 @@
 # RLP State Machine
 
-The RLP STARK is designed as a state machine utilizing CTLs to three memory starks, two of which are stacks. This document describes the state machine, not the STARK. The STARK uses 136 columns total.
+The RLP STARK is designed as a state machine utilizing CTLs to three memory starks, two of which are stacks. This document describes the state machine, not the STARK. 
 
 ## Memories
 
