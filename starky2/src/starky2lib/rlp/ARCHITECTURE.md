@@ -11,8 +11,6 @@ This state machine built using three memories:
 
 The "input" memory is an instance of the `ro_memory` STARK. The call stack is an instance of the "stack" STARK. the "output stack" is an instance of the "ro_memory" stark. By convention, we say stacks grow "up" - i.e. the top of the stack starts at some base address (0 for the call stack, 1 for the output "stack") and, as items are pushed, the address of the top of the stack increases.
 
-> Potential Optimization: In hindsight the output stack doesn't need to be a stack because we never pop from it. It can absolutely be a RO memory with a continuous address space, and an RO memory is probably slightly cheaper (though probably not by much). We can also lose 5 columns from the state machine due to not needing a timestamp column.
-
 ### input memory layout
 
 The decoded memory is a series of entries, where, abstractly, each entry represents a string if the input is a string, or a table offsets to other entries (which may represent lists or strings) if the input is a list. Each entry is represented as the following fields, in order from least to greatest address:
