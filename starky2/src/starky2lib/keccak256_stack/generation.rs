@@ -34,30 +34,17 @@ enum Keccak256StackOpcode {
 
 pub struct Keccak256InputStack<F: PrimeField64> {
     stack: Vec<F>,
-    trace: Vec<StackOp<F>>,
+    sp: usize,
 }
 
 impl<F: PrimeField64> Keccak256InputStack<F> {
-    fn new() -> Self {
-        Self {
-            stack: vec![],
-            trace: vec![]
-        }
-    }
-
-    fn push(&mut self, val: F) {
-        self.stack.push(val);
-        self.trace.push(StackOp::Push(val));
-    }
-
     pub(crate) fn pop(&mut self) -> F {
         let val = self.stack.pop().unwrap();
-        self.trace.push(StackOp::Pop(val));
         val
     }
 
     pub fn from_items(vals: &[Vec<u8>]) -> Self {
-        let mut stack = Self::new();
+        let mut stack = vec![F::ZERO];
         for (i, val) in vals.iter().enumerate() {
             for byte in val.iter().rev() {
                 stack.push(F::from_canonical_u64(*byte as u64));
@@ -65,11 +52,20 @@ impl<F: PrimeField64> Keccak256InputStack<F> {
             stack.push(F::from_canonical_u64(val.len() as u64));
             stack.push(F::from_canonical_u64(i as u64));
         }
-        stack
+        stack[0] = F::from_canonical_usize(stack.len() - 1);
+
+        Self {
+            stack,
+            sp: 0
+        }
     }
 
-    fn timestamp(&self) -> usize {
-        self.trace.len()
+    pub fn load_sp(&mut self) {
+        self.sp = self.stack[0].to_canonical_u64() as usize;
+    }
+
+    fn sp(&self) -> usize {
+        self.sp
     }
 }
 
@@ -89,15 +85,17 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
 
     fn gen_new_item(&mut self, row: &mut Keccak256StackRow<F>) {
         row.op_id_stack_filter = F::ONE;
-        row.op_id_stack_timestamp = F::from_canonical_u64(self.stack.timestamp() as u64);
+        row.op_id_addr = F::from_canonical_u64(self.stack.sp() as u64);
         let op_id = self.stack.pop();
         row.op_id = op_id;
 
         row.len_stack_filter = F::ONE;
-        row.op_id_stack_timestamp = F::from_canonical_u64(self.stack.timestamp() as u64);
+        row.len_addr = F::from_canonical_u64(self.stack.sp() as u64);
         let len = self.stack.pop();
         row.len = len;
 
+        self.state = [0; KECCAK_WIDTH_U32S];
+        
         self.op_id = op_id.to_canonical_u64() as usize;
         self.len = len.to_canonical_u64() as usize;
     }
@@ -139,6 +137,12 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
         }
     }
 
+    fn load_first_sp(&mut self, row: &mut Keccak256StackRow<F>) {
+        self.stack.load_sp();
+        row.sp_init = F::from_canonical_u64(self.stack.sp() as u64);
+        row.sp_init_stack_filter = F::ONE;
+    }
+
     fn gen_invoke_permutation(&mut self, row: &mut Keccak256StackRow<F>) {
         keccakf_u32s(&mut self.state);
         row.new_state = self.state.map(F::from_canonical_u32);
@@ -152,10 +156,9 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
     }
 
     fn gen_pop_n_bytes(&mut self, row: &mut Keccak256StackRow<F>, n: usize) {
-        row.stack_is_pop = F::ONE;
         for i in 0..n {
             row.stack_filters[i] = F::ONE;
-            row.timestamps[i] = F::from_canonical_usize(self.stack.timestamp());
+            row.input_block_addrs[i] = F::from_canonical_usize(self.stack.sp());
             row.input_block_bytes[i] = self.stack.pop();
         }
     }
@@ -164,8 +167,8 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
         if start_idx == KECCAK_RATE_BYTES - 1 {
             row.input_block_bytes[start_idx] = F::from_canonical_u8(0b1000_0001);
         } else {
-            row.input_block_bytes[start_idx] = F::from_canonical_u8(0b1000_0000);
-            row.input_block_bytes[KECCAK_RATE_BYTES - 1] = F::from_canonical_u8(0b0000_0001);
+            row.input_block_bytes[start_idx] = F::from_canonical_u8(0b0000_0001);
+            row.input_block_bytes[KECCAK_RATE_BYTES - 1] = F::from_canonical_u8(0b1000_0000);
             for i in start_idx + 1..KECCAK_RATE_BYTES - 1 {
                 row.input_block_bytes[i] = F::ZERO;
             }
@@ -181,7 +184,7 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
                 } else {
                     self.is_last_block = true;
                     self.gen_pop_n_bytes(row, self.len);
-                    self.gen_padding_bytes(row, KECCAK_RATE_U32S - self.len);
+                    self.gen_padding_bytes(row, self.len);
                     row.rc_136 = F::from_canonical_usize(self.len);
                 }
             },
@@ -197,7 +200,7 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
         }
 
         if self.op_id * 32 >= self.output_memory.len() {
-            self.output_memory.resize((self.op_id + 1 ) * 32 , F::ZERO);
+            self.output_memory.resize((self.op_id + 1) * 32, F::ZERO);
         }
 
         for i in 0..32 {
@@ -228,6 +231,10 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
             match self.opcode {
                 Keccak256StackOpcode::ABSORB => {
                     let mut row = Keccak256StackRow::new();
+                    if self.trace.len() == 0 {
+                        self.load_first_sp(&mut row);
+                    }
+
                     if is_new_item {
                         self.gen_new_item(&mut row);
                         is_new_item = false;
@@ -249,8 +256,8 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
                     let mut row = Keccak256StackRow::new();
                     self.gen_row(&mut row);
                     row.xored_state_rate = row.curr_state_rate;
-                    self.gen_invoke_permutation(&mut row);
                     self.gen_output(&mut row);
+                    self.gen_invoke_permutation(&mut row);
                     self.trace.push(row);
                     
                     if self.op_id == 0 {
@@ -295,8 +302,6 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
-
     use plonky2::field::goldilocks_field::GoldilocksField;
     use tiny_keccak::{Hasher, Keccak};
 
@@ -324,26 +329,58 @@ mod tests {
         assert_eq!(&computed_hash, &correct_hash);
     }
 
-    // #[test]
-    // fn test_gen_hash_multi_block() {
-    //     type F = GoldilocksField;
+    #[test]
+    fn test_gen_hash_multi_block() {
+        type F = GoldilocksField;
 
-    //     let mut generator = Keccak256SpongeGenerator::<F>::new();
-    //     let data = b"Timbs for my hooligans in Brooklyn (that's right)
-    //         Dead right, if the head right, Biggie there e'ry night
-    //         Poppa been smooth since days of Underoos
-    //         Never lose, never choose to, bruise crews who
-    //         Do somethin' to us (come on), talk go through us (through us)";
+        let items = vec![b"Timbs for my hooligans in Brooklyn (that's right)
+            Dead right, if the head right, Biggie there e'ry night
+            Poppa been smooth since days of Underoos
+            Never lose, never choose to, bruise crews who
+            Do somethin' to us (come on), talk go through us (through us)".to_vec()];
+        let stack = Keccak256InputStack::from_items(&items);
+        let mut generator = Keccak256StackGenerator::<F>::new(stack);
+        generator.generate();
 
-    //     let (_id, computed_hash) = generator.gen_hash(data);
+        let output_mem = generator.output_memory;
+        let computed_hash = output_mem[0..32].into_iter().map(|x| x.to_canonical_u64() as u8).collect::<Vec<u8>>();
 
-    //     let mut correct_hash = [0u8; 32];
-    //     let mut hasher = Keccak::v256();
-    //     hasher.update(data);
-    //     hasher.finalize(&mut correct_hash);
+        let mut correct_hash = [0u8; 32];
+        let mut hasher = Keccak::v256();
+        hasher.update(&items[0]);
+        hasher.finalize(&mut correct_hash);
 
-    //     println!("computed hash: {:x?}", computed_hash);
-    //     println!("correct hash: {:x?}", correct_hash);
-    //     assert_eq!(&computed_hash, &correct_hash);
-    // }
+        println!("computed hash: {:x?}", computed_hash);
+        println!("correct hash: {:x?}", correct_hash);
+        assert_eq!(&computed_hash, &correct_hash);
+    }
+
+    #[test]
+    fn test_gen_multiple_hashes() {
+        type F = GoldilocksField;
+
+        let items = vec![
+            b"I can fill ya wit' real millionaire shit (I can fill ya)".to_vec(),
+            b"Escargot, my car go one-sixty, swiftly (come on)".to_vec(),
+            b"Wreck it, buy a new one".to_vec(),
+            b"Your crew run-run-run, your crew run-run".to_vec()
+        ];
+        let stack = Keccak256InputStack::from_items(&items);
+        let mut generator = Keccak256StackGenerator::<F>::new(stack);
+        generator.generate();
+
+        let output_mem = generator.output_memory;
+        for i in 0..items.len() {
+            let computed_hash = output_mem[i*32..(i+1)*32].into_iter().map(|x| x.to_canonical_u64() as u8).collect::<Vec<u8>>();
+
+            let mut correct_hash = [0u8; 32];
+            let mut hasher = Keccak::v256();
+            hasher.update(&items[i]);
+            hasher.finalize(&mut correct_hash);
+
+            println!("computed hash: {:x?}", computed_hash);
+            println!("correct hash: {:x?}", correct_hash);
+            assert_eq!(&computed_hash, &correct_hash);
+        }
+    }
 }

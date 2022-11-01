@@ -42,25 +42,29 @@ pub struct Keccak256StackRow<T: Copy> {
 
     /// next bytes to be popped off of the stack - in other words, this is a 136-channel stack lookup
     pub(crate) input_block_bytes: [T; KECCAK_RATE_BYTES],
-    /// only need one of these because it's always pop!
-    pub(crate) stack_is_pop: T,
+    // addresses of the bytes we are reading from the memory,
+    pub(crate) input_block_addrs: [T; KECCAK_RATE_BYTES],
     /// filters for when we are and aren't popping from the stack - unfortunately we need 136 of these because sometimes
     /// we will stop early
     pub(crate) stack_filters: [T; KECCAK_RATE_BYTES],
-    /// ditto for timestamps. 
-    pub(crate) timestamps: [T; KECCAK_RATE_BYTES],
 
     /// we also have two more stack channels for reading the current op_id and len from the stack containing payloads to be hashed
     /// these are used to determine / check hash_idx
+    pub(crate) op_id_addr: T,
     pub(crate) op_id_stack_filter: T,
-    pub(crate) op_id_stack_timestamp: T,
 
     /// len of the current item being hashed, in bytes
     /// this is popped off of the input stack and is assumed to be correct
     /// that is, we assume here that the input stack was "produced" by another STARK
     pub(crate) len: T,
+    pub(crate) len_addr: T,
     pub(crate) len_stack_filter: T,
-    pub(crate) len_stack_timestamp: T,
+
+    /// one more memory lookup used to set the intiial address we read off of the "stack" from
+    /// this is aways read from address 0
+    /// since the first state is always absorb or halt, we use the more significant opcode bit for the address
+    pub(crate) sp_init: T,
+    pub(crate) sp_init_stack_filter: T,
 
     /// rate words of the current sponge state as u32s
     pub(crate) curr_state_rate: [T; KECCAK_RATE_U32S],
