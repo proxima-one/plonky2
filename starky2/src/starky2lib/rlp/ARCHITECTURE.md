@@ -9,7 +9,7 @@ This state machine built using three memories:
 2. A call stack
 3. the "output stack"`, which is a read-only memory we use in a "stack-like" manner containing the RLP-encoded results which may be read by "popping" the entire "stack". We can get away with a read-only memory because we only ever "write" to an address once.
 
-The "input" memory is an instance of the `ro_memory` STARK. Both stacks are instances of the "ro_stack" STARK. Note that, by convention, the "ro_stack" STARK grows "up" - i.e. the top of the stack starts at address 0 and, as items are pushed, the address of the top of the stack increases.
+The "input" memory is an instance of the `ro_memory` STARK. The call stack is an instance of the "stack" STARK. the "output stack" is an instance of the "ro_memory" stark. By convention, we say stacks grow "up" - i.e. the top of the stack starts at some base address (0 for the call stack, 1 for the output "stack") and, as items are pushed, the address of the top of the stack increases.
 
 > Potential Optimization: In hindsight the output stack doesn't need to be a stack because we never pop from it. It can absolutely be a RO memory with a continuous address space, and an RO memory is probably slightly cheaper (though probably not by much). We can also lose 5 columns from the state machine due to not needing a timestamp column.
 
@@ -28,14 +28,16 @@ The decoded memory is a series of entries, where, abstractly, each entry represe
 
 ### output stack layout
 
-The "complete" strstack is sequence of entries, where the `i`th entry from the bottom of the stack is represented as the following fields, in order from least to greatest address:
+The "output stack" is actually a read-only memory. But, semantically, we're using it to "push" the output backwards onto the stack and the consumer reads it by "popping" off of the stack. The layout is a single cell containing a pointer to the "top" of the stack followed by a sequence of entries, where the `i`th entry from the bottom of the stack is represented as the following fields, in order from least to greatest address:
 * res: result rlp-encoding of item `i`
 * len: len of rlp-encoded string (number of elements to pop)
 * op_id: `i`
 
+The entry at the top of the stack has the highest `1op_id` and the entry at the bottom should have `op_id = 0`.
+
 ### call stack layout
 
-Call stack semantics are specified below in the state machine definition below
+Call stack is a stack whose base adress is zero. See the state machine definition below to see how it is used and what goes on it.
 
 ## State Machine
 
@@ -59,7 +61,6 @@ The state machine keeps the following state variables:
 * `list_count`: an auxilliary counter used when setting up the call stack for recursion so the state machine knows when to stop recursing
 * `depth`: the current recursion depth of the state machine
 * `next`: pointer to the next top-level entry to encode. ignored if `is_last` is set to `1`
-* `is_last`: a boolean flag indicating whether or not the current top-level entry is the last to be processed.
 
 Execution begins in the `NewEntry` state. The following describes what happens during each state. (notation: `[x]` denotes the value in the input memory at the address given by `x`). This can also be seen in the function `gen_state_machine` in [`generation.rs`](./generation.rs):
 * `NewEntry`:
