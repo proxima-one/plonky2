@@ -1,22 +1,28 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    mem::{size_of, transmute}, ops::Range,
+    mem::{size_of, transmute},
+    ops::Range,
 };
+
 use memoffset::{offset_of, span_of};
 
-use crate::{util::transmute_no_compile_time_size_checks, permutation::PermutationPair, cross_table_lookup::{TableID, CtlColSet}};
+use crate::{
+    cross_table_lookup::{CtlColSet, TableID},
+    permutation::PermutationPair,
+    util::transmute_no_compile_time_size_checks,
+};
 
 #[repr(C)]
 #[derive(Eq, PartialEq, Debug)]
 pub struct RlpRow<T: Copy> {
     // register state
-	pub(crate) op_id: T,
+    pub(crate) op_id: T,
     pub(crate) pc: T,
     pub(crate) count: T,
     pub(crate) content_len: T,
     pub(crate) list_count: T,
     pub(crate) depth: T,
-	pub(crate) next: T,
+    pub(crate) next: T,
     pub(crate) is_last: T,
 
     // opcode
@@ -30,7 +36,6 @@ pub struct RlpRow<T: Copy> {
     // 01000000: EndEntry
     // 10000000: Halt
     pub(crate) opcode: [T; 8],
-
 
     // advice columns for checking register state / transitions
     // for checking if depth is 0
@@ -101,7 +106,6 @@ pub struct RlpRow<T: Copy> {
     pub(crate) prefix_case_tmp_4: T,
     pub(crate) end_entry_tmp: T,
 
-    
     // advice for checking LUT contents
     pub(crate) count_127: T,
     pub(crate) count_127_minus_127_inv: T,
@@ -111,7 +115,7 @@ pub struct RlpRow<T: Copy> {
     pub(crate) count_u8_is_255: T,
     pub(crate) count_56: T,
     pub(crate) count_56_minus_55_inv: T,
-    pub(crate) count_56_is_55: T, 
+    pub(crate) count_56_is_55: T,
 
     // 5-channel CTL to the input memory
     // each represented as [addr, val]
@@ -127,73 +131,84 @@ pub struct RlpRow<T: Copy> {
     pub(crate) output_stack_filters: [T; 5],
 }
 
-pub fn rc_56_cols() -> Range<usize> { span_of!(RlpRow<u8>, rc_56_limbs) }
-pub fn lut_56_col() -> usize { offset_of!(RlpRow<u8>, count_56) }
-pub fn rc_56_permuted_cols() -> Range<usize> { span_of!(RlpRow<u8>, rc_56_limbs_permuted) }
-pub fn lut_56_permuted_cols() -> Range<usize> { span_of!(RlpRow<u8>, lut_56_permuted_limbs) }
+pub fn rc_56_cols() -> Range<usize> {
+    span_of!(RlpRow<u8>, rc_56_limbs)
+}
+pub fn lut_56_col() -> usize {
+    offset_of!(RlpRow<u8>, count_56)
+}
+pub fn rc_56_permuted_cols() -> Range<usize> {
+    span_of!(RlpRow<u8>, rc_56_limbs_permuted)
+}
+pub fn lut_56_permuted_cols() -> Range<usize> {
+    span_of!(RlpRow<u8>, lut_56_permuted_limbs)
+}
 
-pub fn rc_u8_cols() -> Range<usize> { span_of!(RlpRow<u8>, rc_u8s) }
-pub fn lut_u8_col() -> usize { offset_of!(RlpRow<u8>, count_u8) }
-pub fn rc_u8_permuted_cols() -> Range<usize> { span_of!(RlpRow<u8>, rc_u8_permuted) }
-pub fn lut_u8_permuted_cols() -> Range<usize> { span_of!(RlpRow<u8>, lut_u8_permuteds) }
+pub fn rc_u8_cols() -> Range<usize> {
+    span_of!(RlpRow<u8>, rc_u8s)
+}
+pub fn lut_u8_col() -> usize {
+    offset_of!(RlpRow<u8>, count_u8)
+}
+pub fn rc_u8_permuted_cols() -> Range<usize> {
+    span_of!(RlpRow<u8>, rc_u8_permuted)
+}
+pub fn lut_u8_permuted_cols() -> Range<usize> {
+    span_of!(RlpRow<u8>, lut_u8_permuteds)
+}
 
-pub fn rc_127_col() -> usize { offset_of!(RlpRow<u8>, rc_127) }
-pub fn lut_127_col() -> usize { offset_of!(RlpRow<u8>, count_127) }
-pub fn rc_127_permuted_col() -> usize { offset_of!(RlpRow<u8>, rc_127_permuted) }
-pub fn lut_127_permuted_col() -> usize { offset_of!(RlpRow<u8>, lut_127_permuted) }
+pub fn rc_127_col() -> usize {
+    offset_of!(RlpRow<u8>, rc_127)
+}
+pub fn lut_127_col() -> usize {
+    offset_of!(RlpRow<u8>, count_127)
+}
+pub fn rc_127_permuted_col() -> usize {
+    offset_of!(RlpRow<u8>, rc_127_permuted)
+}
+pub fn lut_127_permuted_col() -> usize {
+    offset_of!(RlpRow<u8>, lut_127_permuted)
+}
 
 pub(crate) const RLP_NUM_COLS: usize = size_of::<RlpRow<u8>>();
 
-impl<T: Copy + Default> RlpRow<T>
-{
+impl<T: Copy + Default> RlpRow<T> {
     pub fn new() -> Self {
         [T::default(); RLP_NUM_COLS].into()
     }
 }
 
-impl<T: Copy> From<[T; RLP_NUM_COLS]>
-    for RlpRow<T>
-{
+impl<T: Copy> From<[T; RLP_NUM_COLS]> for RlpRow<T> {
     fn from(value: [T; RLP_NUM_COLS]) -> Self {
         unsafe { transmute_no_compile_time_size_checks(value) }
     }
 }
 
-impl<T: Copy> From<RlpRow<T>>
-    for [T; RLP_NUM_COLS]
-{
+impl<T: Copy> From<RlpRow<T>> for [T; RLP_NUM_COLS] {
     fn from(value: RlpRow<T>) -> Self {
         unsafe { transmute_no_compile_time_size_checks(value) }
     }
 }
 
-impl<T: Copy> Borrow<RlpRow<T>>
-    for [T; RLP_NUM_COLS]
-{
+impl<T: Copy> Borrow<RlpRow<T>> for [T; RLP_NUM_COLS] {
     fn borrow(&self) -> &RlpRow<T> {
         unsafe { transmute(self) }
     }
 }
 
-impl<T: Copy> BorrowMut<RlpRow<T>>
-    for [T; RLP_NUM_COLS]
-{
+impl<T: Copy> BorrowMut<RlpRow<T>> for [T; RLP_NUM_COLS] {
     fn borrow_mut(&mut self) -> &mut RlpRow<T> {
         unsafe { transmute(self) }
     }
 }
 
-impl<T: Copy> Borrow<[T; RLP_NUM_COLS]>
-    for RlpRow<T>
-{
+impl<T: Copy> Borrow<[T; RLP_NUM_COLS]> for RlpRow<T> {
     fn borrow(&self) -> &[T; RLP_NUM_COLS] {
         unsafe { transmute(self) }
     }
 }
 
-impl<T: Copy> BorrowMut<[T; RLP_NUM_COLS]>
-    for RlpRow<T>
-{
+impl<T: Copy> BorrowMut<[T; RLP_NUM_COLS]> for RlpRow<T> {
     fn borrow_mut(&mut self) -> &mut [T; RLP_NUM_COLS] {
         unsafe { transmute(self) }
     }

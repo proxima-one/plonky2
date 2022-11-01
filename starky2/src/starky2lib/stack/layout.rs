@@ -3,48 +3,47 @@ use std::{
     mem::{size_of, transmute},
 };
 
-use crate::{util::transmute_no_compile_time_size_checks, permutation::PermutationPair, cross_table_lookup::{TableID, CtlColSet}};
+use crate::{
+    cross_table_lookup::{CtlColSet, TableID},
+    permutation::PermutationPair,
+    util::transmute_no_compile_time_size_checks,
+};
 
 #[repr(C)]
 #[derive(Eq, PartialEq, Debug)]
 pub struct StackRow<T: Copy, const NUM_CHANNELS: usize> {
-	// memory cols 
+    // memory cols
     pub(crate) addr: T,
-	pub(crate) timestamp: T,
+    pub(crate) timestamp: T,
     pub(crate) value: T,
-	pub(crate) is_write: T,
+    pub(crate) is_write: T,
 
     pub(crate) addr_sorted: T,
-	pub(crate) timestamp_sorted: T,
+    pub(crate) timestamp_sorted: T,
     pub(crate) value_sorted: T,
-	pub(crate) is_write_sorted: T,
+    pub(crate) is_write_sorted: T,
 
     // used for checking timestamp ordering via range check
     pub(crate) timestamp_sorted_diff: T,
     pub(crate) timestamp_sorted_diff_permuted: T,
 
-	pub(crate) sp: T,
-	// 1 if the current operation is a pop, 0 if it's a push
-	pub(crate) is_pop: T,
+    pub(crate) sp: T,
+    // 1 if the current operation is a pop, 0 if it's a push
+    pub(crate) is_pop: T,
 
     // used to range check addresses and timestamp differenes
     pub(crate) timestamp_permuted: T,
-    
+
     // fitler cols for each lookup channel
     // >1 channel can be helpful when a STARK only wants to read part of the memory
     pub(crate) filter_cols: [T; NUM_CHANNELS],
 }
 
-pub(crate) fn sorted_access_permutation_pairs() -> Vec<(usize, usize)>{
-    vec![
-        (0, 4),
-        (1, 5),
-        (2, 6),
-        (3, 7),
-    ]
+pub(crate) fn sorted_access_permutation_pairs() -> Vec<(usize, usize)> {
+    vec![(0, 4), (1, 5), (2, 6), (3, 7)]
 }
 
-pub(crate) fn lookup_permutation_sets() -> Vec<(usize, usize, usize, usize)>{
+pub(crate) fn lookup_permutation_sets() -> Vec<(usize, usize, usize, usize)> {
     vec![
         // (timestamp_sorted_diff, timestamp, timestamp_sorted_diff_permuted, timestamp_permuted)
         (8, 1, 9, 12),
@@ -53,11 +52,13 @@ pub(crate) fn lookup_permutation_sets() -> Vec<(usize, usize, usize, usize)>{
 
 /// [is_pop, value, timestamp] for each channel
 pub fn ctl_cols<const NUM_CHANNELS: usize>(tid: TableID) -> impl Iterator<Item = CtlColSet> {
-    (0..NUM_CHANNELS).map(move |i| CtlColSet::new(
-        tid,
-        vec![12, 2, 1],
-        Some(STACK_NUM_COLS_BASE - (NUM_CHANNELS - i))
-    ))
+    (0..NUM_CHANNELS).map(move |i| {
+        CtlColSet::new(
+            tid,
+            vec![12, 2, 1],
+            Some(STACK_NUM_COLS_BASE - (NUM_CHANNELS - i)),
+        )
+    })
 }
 
 pub(crate) const STACK_NUM_COLS_BASE: usize = size_of::<StackRow<u8, 0>>();

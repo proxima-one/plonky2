@@ -1,32 +1,33 @@
+use std::borrow::Borrow;
+use std::marker::PhantomData;
+
 /// STARK that checks rlp encodings using two memories
 use plonky2::field::{
-	extension::{Extendable, FieldExtension},
-	packed::PackedField
+    extension::{Extendable, FieldExtension},
+    packed::PackedField,
 };
 use plonky2::hash::hash_types::RichField;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 
-use std::marker::PhantomData;
-use std::borrow::Borrow;
-use crate::{stark::Stark, lookup::eval_lookups};
-use crate::vars::{StarkEvaluationVars, StarkEvaluationTargets};
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
+use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
+use crate::{lookup::eval_lookups, stark::Stark};
 
-pub mod layout;
 pub mod generation;
+pub mod layout;
 
 use layout::*;
 
 pub struct RlpStark<F: RichField + Extendable<D>, const D: usize> {
-	_phantom: PhantomData<F>,
+    _phantom: PhantomData<F>,
 }
 
 impl<F: RichField + Extendable<D>, const D: usize> RlpStark<F, D> {
-	pub fn new() -> Self {
-		Self {
-			_phantom: PhantomData,
-		}
-	}
+    pub fn new() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
 }
 
 impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for RlpStark<F, D> {
@@ -758,45 +759,42 @@ mod tests {
     use crate::config::StarkConfig;
     use crate::prover::prove_no_ctl;
     use crate::stark_testing::test_stark_low_degree;
-    use crate::starky2lib::rlp::generation::{RlpStarkGenerator, RlpItem};
+    use crate::starky2lib::rlp::generation::{RlpItem, RlpStarkGenerator};
     use crate::verifier::verify_stark_proof_no_ctl;
 
-	fn test_rlp_items() -> Vec<RlpItem> {
-		vec![
-			RlpItem::List(vec![]),
-			RlpItem::Str(vec![]),
-			RlpItem::Str(vec![0x08]),
-			RlpItem::list_from_vec(
-				vec![
-					RlpItem::list_from_vec(vec![
-						RlpItem::Str(b"let everything happen to you".to_vec()),
-						RlpItem::Str(b"beauty and terror".to_vec()),
-						RlpItem::Str(b"just keep going".to_vec()),
-						RlpItem::Str(b"no feeling is final".to_vec()),
-					]),
-					RlpItem::Str(b"Rainer Maria Rilke".to_vec()),
-				],
-			),
-			RlpItem::list_from_vec(
-				vec![
-					RlpItem::list_from_vec(vec![
-						RlpItem::Str(b"If I send this void away".to_vec()),
-						RlpItem::Str(b"Have I lost a part of me?".to_vec()),
-						RlpItem::Str(b"When you wake you're bargaining".to_vec()),
-						RlpItem::Str(b"For the promise to come back".to_vec()),
-				]),
-					RlpItem::list_from_vec(vec![
-						RlpItem::Str(b"'Cause getting made you want more".to_vec()),
-						RlpItem::Str(b"And hoping made you hurt more".to_vec()),
-						RlpItem::Str(b"Oh there must be".to_vec()),
-						RlpItem::Str(b"Something wrong with me".to_vec()),
-						RlpItem::Str(b"And getting made you want more".to_vec()),
-						RlpItem::Str(b"And hoping made you hurt more".to_vec()),
-						RlpItem::Str(b"Someone tell me".to_vec()),
-						RlpItem::Str(b"Something comforting".to_vec()),
-				]),
-					RlpItem::Str(
-						b"Something comforting
+    fn test_rlp_items() -> Vec<RlpItem> {
+        vec![
+            RlpItem::List(vec![]),
+            RlpItem::Str(vec![]),
+            RlpItem::Str(vec![0x08]),
+            RlpItem::list_from_vec(vec![
+                RlpItem::list_from_vec(vec![
+                    RlpItem::Str(b"let everything happen to you".to_vec()),
+                    RlpItem::Str(b"beauty and terror".to_vec()),
+                    RlpItem::Str(b"just keep going".to_vec()),
+                    RlpItem::Str(b"no feeling is final".to_vec()),
+                ]),
+                RlpItem::Str(b"Rainer Maria Rilke".to_vec()),
+            ]),
+            RlpItem::list_from_vec(vec![
+                RlpItem::list_from_vec(vec![
+                    RlpItem::Str(b"If I send this void away".to_vec()),
+                    RlpItem::Str(b"Have I lost a part of me?".to_vec()),
+                    RlpItem::Str(b"When you wake you're bargaining".to_vec()),
+                    RlpItem::Str(b"For the promise to come back".to_vec()),
+                ]),
+                RlpItem::list_from_vec(vec![
+                    RlpItem::Str(b"'Cause getting made you want more".to_vec()),
+                    RlpItem::Str(b"And hoping made you hurt more".to_vec()),
+                    RlpItem::Str(b"Oh there must be".to_vec()),
+                    RlpItem::Str(b"Something wrong with me".to_vec()),
+                    RlpItem::Str(b"And getting made you want more".to_vec()),
+                    RlpItem::Str(b"And hoping made you hurt more".to_vec()),
+                    RlpItem::Str(b"Someone tell me".to_vec()),
+                    RlpItem::Str(b"Something comforting".to_vec()),
+                ]),
+                RlpItem::Str(
+                    b"Something comforting
 						Something comforting
 						Something comforting
 						Something comforting
@@ -804,12 +802,11 @@ mod tests {
 						Something comforting
 						Something comforting
 						Something comforting"
-						.to_vec()
-					)
-				],
-			),
-		]
-	}
+                        .to_vec(),
+                ),
+            ]),
+        ]
+    }
 
     #[test]
     fn test_stark_degree() -> Result<()> {
@@ -817,28 +814,28 @@ mod tests {
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
         type S = RlpStark<F, D>;
-        
+
         let stark = S::new();
         test_stark_low_degree(stark)
     }
 
-	#[test]
-	fn test_rlp_stark() -> Result<()> {
+    #[test]
+    fn test_rlp_stark() -> Result<()> {
         const D: usize = 2;
         type C = PoseidonGoldilocksConfig;
         type F = <C as GenericConfig<D>>::F;
         type S = RlpStark<F, D>;
 
-		let mut generator = RlpStarkGenerator::new();
-		let items = test_rlp_items();
-		generator.generate(&items);
-		
-		let config = StarkConfig::standard_fast_config();
-		let stark = S::new();
-		let trace = generator.into_polynomial_values();
-		let mut timing = TimingTree::default();
-		let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing)?;
+        let mut generator = RlpStarkGenerator::new();
+        let items = test_rlp_items();
+        generator.generate(&items);
+
+        let config = StarkConfig::standard_fast_config();
+        let stark = S::new();
+        let trace = generator.into_polynomial_values();
+        let mut timing = TimingTree::default();
+        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing)?;
         verify_stark_proof_no_ctl(&stark, &proof, &config)?;
         Ok(())
-	}
+    }
 }

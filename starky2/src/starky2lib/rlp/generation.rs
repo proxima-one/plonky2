@@ -1,42 +1,45 @@
-use plonky2::field::types::PrimeField64;
 use plonky2::field::polynomial::PolynomialValues;
+use plonky2::field::types::PrimeField64;
 use plonky2_util::log2_ceil;
 use rlp::{Encodable, RlpStream};
+
 use super::layout::*;
-use crate::{starky2lib::stack::generation::StackOp, lookup::permuted_cols, util::trace_rows_to_poly_values};
+use crate::{
+    lookup::permuted_cols, starky2lib::stack::generation::StackOp, util::trace_rows_to_poly_values,
+};
 
 pub struct RlpStarkGenerator<F: PrimeField64> {
-	pub stark_trace: Vec<RlpRow<F>>,
+    pub stark_trace: Vec<RlpRow<F>>,
 
 	pub output_stack: Vec<F>,
 
-	pub call_stack: Vec<F>,
-	pub call_stack_trace: Vec<StackOp<F>>,
+    pub call_stack: Vec<F>,
+    pub call_stack_trace: Vec<StackOp<F>>,
 
-	pub input_memory: Vec<F>,
+    pub input_memory: Vec<F>,
 
-	op_id: u64,
-	pc: usize,
-	count: usize,
-	content_len: usize,
-	list_count: usize,
-	depth: usize,
-	next: usize,
-	is_last: bool,
-	opcode: RlpOpcode
+    op_id: u64,
+    pc: usize,
+    count: usize,
+    content_len: usize,
+    list_count: usize,
+    depth: usize,
+    next: usize,
+    is_last: bool,
+    opcode: RlpOpcode,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum RlpOpcode {
-	NewEntry,
-	List,
-	Recurse,
-	Return,
-	StrPush,
-	StrPrefix,
-	ListPrefix,
-	EndEntry,
-	Halt,
+    NewEntry,
+    List,
+    Recurse,
+    Return,
+    StrPush,
+    StrPrefix,
+    ListPrefix,
+    EndEntry,
+    Halt,
 }
 
 impl<F: PrimeField64> RlpStarkGenerator<F> {
@@ -513,392 +516,403 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 }
 
 pub fn compute_str_prefix(len: usize, first_val: u8) -> Vec<u8> {
-	match (len, first_val) {
-		(1, 0x00..=0x7F) => vec![],
-		(0..=55, _) => vec![0x80 + len as u8],
-		_ => {
-			let mut len_bytes = len.to_be_bytes().to_vec();
-			let mut i = 0;
-			while len_bytes[i] == 0 {
-				i += 1;
-			}
-			len_bytes = len_bytes[i..].to_vec();
-			let mut prefix = vec![0xB7 + len_bytes.len() as u8];
-			prefix.append(&mut len_bytes);
-			prefix
-		}
-	}
+    match (len, first_val) {
+        (1, 0x00..=0x7F) => vec![],
+        (0..=55, _) => vec![0x80 + len as u8],
+        _ => {
+            let mut len_bytes = len.to_be_bytes().to_vec();
+            let mut i = 0;
+            while len_bytes[i] == 0 {
+                i += 1;
+            }
+            len_bytes = len_bytes[i..].to_vec();
+            let mut prefix = vec![0xB7 + len_bytes.len() as u8];
+            prefix.append(&mut len_bytes);
+            prefix
+        }
+    }
 }
 
 pub fn compute_list_prefix(len: usize) -> Vec<u8> {
-	match len {
-		0..=55 => {
-			vec![0xC0 + len as u8]
-		},
-		_ => {
-			let mut len_bytes = len.to_be_bytes().to_vec();
-			let mut i = 0;
-			while len_bytes[i] == 0 {
-				i += 1;
-			}
-			len_bytes = len_bytes[i..].to_vec();
-			let mut prefix = vec![0xF7 + len_bytes.len() as u8];
-			prefix.append(&mut len_bytes);
-			prefix
-		}
-	}
+    match len {
+        0..=55 => {
+            vec![0xC0 + len as u8]
+        }
+        _ => {
+            let mut len_bytes = len.to_be_bytes().to_vec();
+            let mut i = 0;
+            while len_bytes[i] == 0 {
+                i += 1;
+            }
+            len_bytes = len_bytes[i..].to_vec();
+            let mut prefix = vec![0xF7 + len_bytes.len() as u8];
+            prefix.append(&mut len_bytes);
+            prefix
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RlpItem {
-	List(Vec<Box<RlpItem>>),
-	Str(Vec<u8>)
+    List(Vec<Box<RlpItem>>),
+    Str(Vec<u8>),
 }
 
 impl RlpItem {
-	pub fn list_from_vec(items: Vec<RlpItem>) -> RlpItem {
-		let mut list = Vec::new();
-		for item in items {
-			list.push(Box::new(item));
-		}
-		RlpItem::List(list)
-	}
-	// must call this all at once - cannot update this incrementally
-	// this panics if it is called with an empty list
-	// TODO: use an error instead.
-	pub fn items_to_memory_values<F: PrimeField64>(items: &[Self]) -> Vec<F> {
-		let mut trace = Vec::new();
-		let mut is_last_ptr_opt = None;
-		for (i, item) in items.iter().enumerate() {
-			let is_last_ptr = Self::item_to_memory_values(item, &mut trace, i as u64);
-			is_last_ptr_opt = Some(is_last_ptr);
-		}
+    pub fn list_from_vec(items: Vec<RlpItem>) -> RlpItem {
+        let mut list = Vec::new();
+        for item in items {
+            list.push(Box::new(item));
+        }
+        RlpItem::List(list)
+    }
+    // must call this all at once - cannot update this incrementally
+    // this panics if it is called with an empty list
+    // TODO: use an error instead.
+    pub fn items_to_memory_values<F: PrimeField64>(items: &[Self]) -> Vec<F> {
+        let mut trace = Vec::new();
+        let mut is_last_ptr_opt = None;
+        for (i, item) in items.iter().enumerate() {
+            let is_last_ptr = Self::item_to_memory_values(item, &mut trace, i as u64);
+            is_last_ptr_opt = Some(is_last_ptr);
+        }
 
-		if let Some(is_last_ptr) = is_last_ptr_opt {
-			trace[is_last_ptr] = F::ONE;
-		} else {
-			// this should not be called with an empty list
-			panic!("enmpty list!")
-		}
+        if let Some(is_last_ptr) = is_last_ptr_opt {
+            trace[is_last_ptr] = F::ONE;
+        } else {
+            // this should not be called with an empty list
+            panic!("enmpty list!")
+        }
 
-		trace
-	}
+        trace
+    }
 
-	// returns pointer to the cell containing is_last
-	fn item_to_memory_values<F: PrimeField64>(item: &Self, trace: &mut Vec<F>, op_id: u64) -> usize {
-		let next_item_ptr = trace.len();
-		// next_item
-		// set to zero (dummy), set it after we recurse
-		trace.push(F::ZERO);
-		// is_last
-		// set it to false, but return a pointer to it so the caller can set it
-		let is_last_addr = trace.len();
-		trace.push(F::ZERO);
+    // returns pointer to the cell containing is_last
+    fn item_to_memory_values<F: PrimeField64>(
+        item: &Self,
+        trace: &mut Vec<F>,
+        op_id: u64,
+    ) -> usize {
+        let next_item_ptr = trace.len();
+        // next_item
+        // set to zero (dummy), set it after we recurse
+        trace.push(F::ZERO);
+        // is_last
+        // set it to false, but return a pointer to it so the caller can set it
+        let is_last_addr = trace.len();
+        trace.push(F::ZERO);
 
-		match item {
-			RlpItem::List(items) => {
-				// is_list: true
-				trace.push(F::ONE);
+        match item {
+            RlpItem::List(items) => {
+                // is_list: true
+                trace.push(F::ONE);
 
-				// id: op_id
-				trace.push(F::from_canonical_u64(op_id));
+                // id: op_id
+                trace.push(F::from_canonical_u64(op_id));
 
-				// len: len of the *list*
-				trace.push(F::from_canonical_u64(items.len() as u64));
+                // len: len of the *list*
+                trace.push(F::from_canonical_u64(items.len() as u64));
 
+                // content:
+                // to populate this, we iterate over the list twice:
+                // first time is to initialize the empty table of ptrs to child entries
+                // the second time is to 1) add the children to the trace and 2) set table entries accordingly
+                let mut recursive_ptrs = Vec::new();
+                for _ in 0..items.len() {
+                    recursive_ptrs.push(trace.len());
+                    trace.push(F::ZERO);
+                }
 
-				// content:
-				// to populate this, we iterate over the list twice:
-				// first time is to initialize the empty table of ptrs to child entries
-				// the second time is to 1) add the children to the trace and 2) set table entries accordingly
-				let mut recursive_ptrs = Vec::new();
-				for _ in 0..items.len() {
-					recursive_ptrs.push(trace.len());
-					trace.push(F::ZERO);
-				}
+                for (item, ptr) in items.iter().zip(recursive_ptrs.into_iter()) {
+                    // set pointer to the next cell, which will start the next recursive entry
+                    trace[ptr] = F::from_canonical_u64(trace.len() as u64);
+                    // don't care about is_last_ptr for child entries - only for top-level
+                    Self::item_to_memory_values(item, trace, op_id);
+                }
 
-				for (item, ptr) in items.iter().zip(recursive_ptrs.into_iter()) {
-					// set pointer to the next cell, which will start the next recursive entry
-					trace[ptr] = F::from_canonical_u64(trace.len() as u64);
-					// don't care about is_last_ptr for child entries - only for top-level
-					Self::item_to_memory_values(item, trace, op_id);
-				}
+                // set next_item ptr
+                trace[next_item_ptr] = F::from_canonical_u64(trace.len() as u64);
+            }
+            RlpItem::Str(s) => {
+                // is_list: false
+                trace.push(F::ZERO);
 
-				// set next_item ptr
-				trace[next_item_ptr] = F::from_canonical_u64(trace.len() as u64);
-			},
-			RlpItem::Str(s) => {
-				// is_list: false
-				trace.push(F::ZERO);
+                // id: op_id
+                trace.push(F::from_canonical_u64(op_id));
 
-				// id: op_id
-				trace.push(F::from_canonical_u64(op_id));
+                // len: len of the *string*, in bytes
+                trace.push(F::from_canonical_u64(s.len() as u64));
 
-				// len: len of the *string*, in bytes
-				trace.push(F::from_canonical_u64(s.len() as u64));
+                // content: the string as bytes, reversed
+                for &b in s.iter().rev() {
+                    trace.push(F::from_canonical_u8(b));
+                }
 
-				// content: the string as bytes, reversed
-				for &b in s.iter().rev() {
-					trace.push(F::from_canonical_u8(b));
-				}
+                // set next item ptr
+                trace[next_item_ptr] = F::from_canonical_u64(trace.len() as u64);
+            }
+        }
+        is_last_addr
+    }
 
-				// set next item ptr
-				trace[next_item_ptr] = F::from_canonical_u64(trace.len() as u64);
-			}
-		}
-		is_last_addr
-	}
+    pub fn try_as_byte_str(&self) -> Result<Vec<u8>, &'static str> {
+        match self {
+            RlpItem::Str(s) => Ok(s.clone()),
+            _ => Err(&"not a byte string"),
+        }
+    }
 
-	pub fn try_as_byte_str(&self) -> Result<Vec<u8>, &'static str> {
-		match self {
-			RlpItem::Str(s) => {
-				Ok(s.clone())
-			},
-			_ => Err(&"not a byte string")
-		}
-	}
-
-	pub fn try_as_list(&self) -> Result<Vec<RlpItem>, &'static str> {
-		match self {
-			RlpItem::List(l) => {
-				Ok(l.iter().map(|x| *x.clone()).collect())
-			},
-			_ => Err(&"not a list")
-		}
-	}
+    pub fn try_as_list(&self) -> Result<Vec<RlpItem>, &'static str> {
+        match self {
+            RlpItem::List(l) => Ok(l.iter().map(|x| *x.clone()).collect()),
+            _ => Err(&"not a list"),
+        }
+    }
 }
 
 impl Encodable for RlpItem {
-	fn rlp_append(&self, s: &mut RlpStream) {
-		match self {
-			RlpItem::List(items) => {
-				s.append_list::<Self, Box<Self>>(&items);
-			},
-			RlpItem::Str(buf) => {
-				buf.rlp_append(s);
-			}
-		}
-	}
+    fn rlp_append(&self, s: &mut RlpStream) {
+        match self {
+            RlpItem::List(items) => {
+                s.append_list::<Self, Box<Self>>(&items);
+            }
+            RlpItem::Str(buf) => {
+                buf.rlp_append(s);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-	use std::cmp::Reverse;
-	use plonky2::field::goldilocks_field::GoldilocksField;
-	use rlp::encode;
-	use super::*;
+    use std::cmp::Reverse;
 
-	type F = GoldilocksField;
+    use plonky2::field::goldilocks_field::GoldilocksField;
+    use rlp::encode;
 
-	macro_rules! test_rlp_str_entry {
-		($s:expr, $mem:expr, $is_last:expr, $id:expr, $offset:expr) => {{
-			let (head, tail) = $mem.split_at(5);
+    use super::*;
 
-			// next_item
-			assert_eq!(head[0] as usize, $s.len() + 5 + $offset);
-			// is_last_item
-			assert_eq!(head[1], if $is_last { 1 } else { 0 });
-			// is_list
-			assert_eq!(head[2], 0);
-			// id
-			assert_eq!(head[3], $id);
-			// len
-			assert_eq!(head[4] as usize, $s.len());
-			
-			// check entry content is s reversed
-			assert!(tail.len() >= $s.len());
-			let content = &tail[..$s.len()];
-			for (b, b_expected) in content.iter().map(|x| u8::try_from(*x).unwrap()).zip($s.iter().copied().rev()) {
-				assert_eq!(b, b_expected)
-			}
+    type F = GoldilocksField;
 
-			$s.len() + 5
-		}}
-	}
+    macro_rules! test_rlp_str_entry {
+        ($s:expr, $mem:expr, $is_last:expr, $id:expr, $offset:expr) => {{
+            let (head, tail) = $mem.split_at(5);
 
-	#[test]
-	fn test_rlp_item_single_string() {
-		let s = b"I met a metaphorical girl in a metaphorical word";
-		let items = vec![
-			RlpItem::Str(s.to_vec())
-		];
-		let mem = RlpItem::items_to_memory_values::<F>(&items);
-		let mem = mem.into_iter().map(|v| v.to_canonical_u64()).collect::<Vec<_>>();
-		test_rlp_str_entry!(s, mem, true, 0, 0);
-	}
+            // next_item
+            assert_eq!(head[0] as usize, $s.len() + 5 + $offset);
+            // is_last_item
+            assert_eq!(head[1], if $is_last { 1 } else { 0 });
+            // is_list
+            assert_eq!(head[2], 0);
+            // id
+            assert_eq!(head[3], $id);
+            // len
+            assert_eq!(head[4] as usize, $s.len());
 
-	#[test]
-	fn test_rlp_item_multiple_strings() {
-		let ss = vec![
-			b"I used to rap like i had some marbles in my mouth".to_vec(),
-			b"But the stones turned precious when they all came out".to_vec(),
-			b"On a string of deep thought that could never be bought".to_vec(),
-		];
+            // check entry content is s reversed
+            assert!(tail.len() >= $s.len());
+            let content = &tail[..$s.len()];
+            for (b, b_expected) in content
+                .iter()
+                .map(|x| u8::try_from(*x).unwrap())
+                .zip($s.iter().copied().rev())
+            {
+                assert_eq!(b, b_expected)
+            }
 
-		let items = ss.iter().map(|v| RlpItem::Str(v.clone())).collect::<Vec<_>>();
-		let mem = RlpItem::items_to_memory_values::<F>(&items);
-		let mem = mem.into_iter().map(|v| v.to_canonical_u64()).collect::<Vec<_>>();
-		let mut m = &mem[..];
-		let mut offset = 0;
-		for i in 0..items.len() - 1 {
-			let len = test_rlp_str_entry!(&ss[i], m, false, i as u64, offset);
-			m = &m[len..];
-			offset += len;
-		}
-		test_rlp_str_entry!(ss.last().unwrap(), m, true, ss.len() as u64 - 1, offset);
-	}
+            $s.len() + 5
+        }};
+    }
 
-	#[test]
-	fn test_rlp_one_layer_list() {
-		let ss = vec![
-			b"I used to rap like i had some marbles in my mouth".to_vec(),
-			b"But the stones turned precious when they all came out".to_vec(),
-			b"On a string of deep thought that could never be bought".to_vec(),
-		];
+    #[test]
+    fn test_rlp_item_single_string() {
+        let s = b"I met a metaphorical girl in a metaphorical word";
+        let items = vec![RlpItem::Str(s.to_vec())];
+        let mem = RlpItem::items_to_memory_values::<F>(&items);
+        let mem = mem
+            .into_iter()
+            .map(|v| v.to_canonical_u64())
+            .collect::<Vec<_>>();
+        test_rlp_str_entry!(s, mem, true, 0, 0);
+    }
 
-		let item = RlpItem::list_from_vec(ss.iter().cloned().map(RlpItem::Str).collect());
-		let mem = RlpItem::items_to_memory_values::<F>(&[item]);
-		let mem = mem.into_iter().map(|v| v.to_canonical_u64()).collect::<Vec<_>>();
-		
-		let (head, tail) = mem.split_at(5);
-		// next item
-		assert_eq!(head[0] as usize, mem.len());
-		// is_last_item
-		assert_eq!(head[1], 1);
-		// is_list
-		assert_eq!(head[2], 1);
-		// id
-		assert_eq!(head[3], 0);
-		// len
-		assert_eq!(head[4], 3);
+    #[test]
+    fn test_rlp_item_multiple_strings() {
+        let ss = vec![
+            b"I used to rap like i had some marbles in my mouth".to_vec(),
+            b"But the stones turned precious when they all came out".to_vec(),
+            b"On a string of deep thought that could never be bought".to_vec(),
+        ];
 
-		for i in 0..3 {
-			let offset = tail[i] as usize;
-			let s_entry = &mem[offset..];
+        let items = ss
+            .iter()
+            .map(|v| RlpItem::Str(v.clone()))
+            .collect::<Vec<_>>();
+        let mem = RlpItem::items_to_memory_values::<F>(&items);
+        let mem = mem
+            .into_iter()
+            .map(|v| v.to_canonical_u64())
+            .collect::<Vec<_>>();
+        let mut m = &mem[..];
+        let mut offset = 0;
+        for i in 0..items.len() - 1 {
+            let len = test_rlp_str_entry!(&ss[i], m, false, i as u64, offset);
+            m = &m[len..];
+            offset += len;
+        }
+        test_rlp_str_entry!(ss.last().unwrap(), m, true, ss.len() as u64 - 1, offset);
+    }
 
-			// is_last set to false always for child values
-			// id the same for all child values
-			test_rlp_str_entry!(&ss[i], s_entry, false, 0, offset);
-		}
-	}
+    #[test]
+    fn test_rlp_one_layer_list() {
+        let ss = vec![
+            b"I used to rap like i had some marbles in my mouth".to_vec(),
+            b"But the stones turned precious when they all came out".to_vec(),
+            b"On a string of deep thought that could never be bought".to_vec(),
+        ];
 
-	#[test]
-	fn test_rlp_multi_layer_list() {
-		let items = vec![
-			RlpItem::Str(b"After six come seven and eight".to_vec()),
-			RlpItem::Str(b"Access code to the pearly gates".to_vec()),
-			RlpItem::List(
-				vec![
-					Box::new(RlpItem::Str(b"They say heaven can wait".to_vec())),
-					Box::new(RlpItem::Str(b"And you speak of fate".to_vec())),
-					Box::new(RlpItem::Str(b"A finale to a play for my mate".to_vec())),
-				]
-			),
-			RlpItem::Str(b"I see the angels draw the drapes".to_vec()),
-		];
+        let item = RlpItem::list_from_vec(ss.iter().cloned().map(RlpItem::Str).collect());
+        let mem = RlpItem::items_to_memory_values::<F>(&[item]);
+        let mem = mem
+            .into_iter()
+            .map(|v| v.to_canonical_u64())
+            .collect::<Vec<_>>();
 
-		let item = RlpItem::List(items.iter().cloned().map(Box::new).collect());
-		let mem = RlpItem::items_to_memory_values::<F>(&[item]);
-		let mem = mem.into_iter().map(|v| v.to_canonical_u64()).collect::<Vec<_>>();
-		let (head, tail) = mem.split_at(5);
+        let (head, tail) = mem.split_at(5);
+        // next item
+        assert_eq!(head[0] as usize, mem.len());
+        // is_last_item
+        assert_eq!(head[1], 1);
+        // is_list
+        assert_eq!(head[2], 1);
+        // id
+        assert_eq!(head[3], 0);
+        // len
+        assert_eq!(head[4], 3);
 
-		// check outer entry
-		// next_item
-		assert_eq!(head[0] as usize, mem.len());
-		// is_last_item
-		assert_eq!(head[1], 1);
-		// is_list
-		assert_eq!(head[2], 1);
-		// id
-		assert_eq!(head[3], 0);
-		// len
-		assert_eq!(head[4], 4);
+        for i in 0..3 {
+            let offset = tail[i] as usize;
+            let s_entry = &mem[offset..];
 
-		// check first two depth-1 entries
-		let s = match items[0] {
-			RlpItem::Str(ref s) => s,
-			_ => panic!("unexpected item type"),
-		};
-		let offset = tail[0] as usize;
-		let s_entry = &mem[offset..];
-		test_rlp_str_entry!(s, s_entry, false, 0, offset);
+            // is_last set to false always for child values
+            // id the same for all child values
+            test_rlp_str_entry!(&ss[i], s_entry, false, 0, offset);
+        }
+    }
 
-		let s = match items[1] {
-			RlpItem::Str(ref s) => s,
-			_ => panic!("unexpected item type"),
-		};
-		let offset = tail[1] as usize;
-		let s_entry = &mem[offset..];
-		test_rlp_str_entry!(s, s_entry, false, 0, offset);
+    #[test]
+    fn test_rlp_multi_layer_list() {
+        let items = vec![
+            RlpItem::Str(b"After six come seven and eight".to_vec()),
+            RlpItem::Str(b"Access code to the pearly gates".to_vec()),
+            RlpItem::List(vec![
+                Box::new(RlpItem::Str(b"They say heaven can wait".to_vec())),
+                Box::new(RlpItem::Str(b"And you speak of fate".to_vec())),
+                Box::new(RlpItem::Str(b"A finale to a play for my mate".to_vec())),
+            ]),
+            RlpItem::Str(b"I see the angels draw the drapes".to_vec()),
+        ];
 
-		// check depth-2 entry
-		let list = match items[2] {
-			RlpItem::List(ref list) => list,
-			_ => panic!("unexpected item type"),
-		};
-		let offset = tail[2] as usize;
-		let next_offset = tail[3] as usize;
-		let list_entry = &mem[offset..];
-		let (list_head, list_tail) = list_entry.split_at(5);
-		// next_item
-		assert_eq!(list_head[0] as usize, next_offset);
-		// is_last_item
-		assert_eq!(list_head[1], 0);
-		// is_list
-		assert_eq!(list_head[2], 1);
-		// id
-		assert_eq!(list_head[3], 0);
-		// len
-		assert_eq!(list_head[4], 3);
-		// check inner strings
-		for i in 0..3 {
-			let offset = list_tail[i] as usize;
-			let s_entry = &mem[offset..];
-			let s = match *list[i] {
-				RlpItem::Str(ref s) => s,
-				_ => panic!("unexpected item type"),
-			};
-			test_rlp_str_entry!(s, s_entry, false, 0, offset);
-		}
+        let item = RlpItem::List(items.iter().cloned().map(Box::new).collect());
+        let mem = RlpItem::items_to_memory_values::<F>(&[item]);
+        let mem = mem
+            .into_iter()
+            .map(|v| v.to_canonical_u64())
+            .collect::<Vec<_>>();
+        let (head, tail) = mem.split_at(5);
 
-		// check last depth-1 entry
-		let s = match items[3] {
-			RlpItem::Str(ref s) => s,
-			_ => panic!("unexpected item type"),
-		};
-		let offset = tail[3] as usize;
-		let s_entry = &mem[offset..];
-		test_rlp_str_entry!(s, s_entry, false, 0, offset);
-	}
+        // check outer entry
+        // next_item
+        assert_eq!(head[0] as usize, mem.len());
+        // is_last_item
+        assert_eq!(head[1], 1);
+        // is_list
+        assert_eq!(head[2], 1);
+        // id
+        assert_eq!(head[3], 0);
+        // len
+        assert_eq!(head[4], 4);
 
-	#[test]
-	fn test_state_machine() {
-		let input = vec![
-			RlpItem::Str(b"Relax".to_vec()),
-			RlpItem::Str(b"Here we go, part two".to_vec()),
-			RlpItem::Str(b"Checking out!".to_vec()),
-			RlpItem::list_from_vec(
-				vec![
-					RlpItem::list_from_vec(
-						vec![
-							RlpItem::Str(b"Once again, now where do I start, dear love".to_vec()),
-							RlpItem::Str(b"Dumb struck with the pure luck to find you here".to_vec()),
-							RlpItem::Str(b"Every morn' I awake from a cavernous night".to_vec()),
-							RlpItem::Str(b"Sometimes still pondering the previous plight".to_vec())
-						]
-					),
-					RlpItem::Str(b"Seems life done changed long time no speak".to_vec()),
-					RlpItem::Str(b"Nowadays I often forget the day of the week".to_vec())
-				]
-			),
-			RlpItem::list_from_vec(
-				vec![
-					RlpItem::Str(b"Taking it by stride if you know what I mean".to_vec()),
-					RlpItem::Str(b"No harm done, no offense taken by me".to_vec()),
-					RlpItem::Str(b"So let's rap, we'll catch up to par, what's the haps?".to_vec()),
-				]
-			),
-			RlpItem::Str(b"C'est la vie, as they say L.O.V.E evidently, see every song has a sequel
+        // check first two depth-1 entries
+        let s = match items[0] {
+            RlpItem::Str(ref s) => s,
+            _ => panic!("unexpected item type"),
+        };
+        let offset = tail[0] as usize;
+        let s_entry = &mem[offset..];
+        test_rlp_str_entry!(s, s_entry, false, 0, offset);
+
+        let s = match items[1] {
+            RlpItem::Str(ref s) => s,
+            _ => panic!("unexpected item type"),
+        };
+        let offset = tail[1] as usize;
+        let s_entry = &mem[offset..];
+        test_rlp_str_entry!(s, s_entry, false, 0, offset);
+
+        // check depth-2 entry
+        let list = match items[2] {
+            RlpItem::List(ref list) => list,
+            _ => panic!("unexpected item type"),
+        };
+        let offset = tail[2] as usize;
+        let next_offset = tail[3] as usize;
+        let list_entry = &mem[offset..];
+        let (list_head, list_tail) = list_entry.split_at(5);
+        // next_item
+        assert_eq!(list_head[0] as usize, next_offset);
+        // is_last_item
+        assert_eq!(list_head[1], 0);
+        // is_list
+        assert_eq!(list_head[2], 1);
+        // id
+        assert_eq!(list_head[3], 0);
+        // len
+        assert_eq!(list_head[4], 3);
+        // check inner strings
+        for i in 0..3 {
+            let offset = list_tail[i] as usize;
+            let s_entry = &mem[offset..];
+            let s = match *list[i] {
+                RlpItem::Str(ref s) => s,
+                _ => panic!("unexpected item type"),
+            };
+            test_rlp_str_entry!(s, s_entry, false, 0, offset);
+        }
+
+        // check last depth-1 entry
+        let s = match items[3] {
+            RlpItem::Str(ref s) => s,
+            _ => panic!("unexpected item type"),
+        };
+        let offset = tail[3] as usize;
+        let s_entry = &mem[offset..];
+        test_rlp_str_entry!(s, s_entry, false, 0, offset);
+    }
+
+    #[test]
+    fn test_state_machine() {
+        let input = vec![
+            RlpItem::Str(b"Relax".to_vec()),
+            RlpItem::Str(b"Here we go, part two".to_vec()),
+            RlpItem::Str(b"Checking out!".to_vec()),
+            RlpItem::list_from_vec(vec![
+                RlpItem::list_from_vec(vec![
+                    RlpItem::Str(b"Once again, now where do I start, dear love".to_vec()),
+                    RlpItem::Str(b"Dumb struck with the pure luck to find you here".to_vec()),
+                    RlpItem::Str(b"Every morn' I awake from a cavernous night".to_vec()),
+                    RlpItem::Str(b"Sometimes still pondering the previous plight".to_vec()),
+                ]),
+                RlpItem::Str(b"Seems life done changed long time no speak".to_vec()),
+                RlpItem::Str(b"Nowadays I often forget the day of the week".to_vec()),
+            ]),
+            RlpItem::list_from_vec(vec![
+                RlpItem::Str(b"Taking it by stride if you know what I mean".to_vec()),
+                RlpItem::Str(b"No harm done, no offense taken by me".to_vec()),
+                RlpItem::Str(b"So let's rap, we'll catch up to par, what's the haps?".to_vec()),
+            ]),
+            RlpItem::Str(
+                b"C'est la vie, as they say L.O.V.E evidently, see every song has a sequel
 Never same, everything but the name, all fresh just like back then, how we do everyday
 C'est la vie, as they say L.O.V.E eloquently, see every dream has a part two
 Never same, you got to keep it tight, all fresh just like back then, now hear me out".to_vec()),
