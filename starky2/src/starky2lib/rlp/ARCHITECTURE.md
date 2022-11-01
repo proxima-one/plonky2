@@ -7,7 +7,7 @@ The RLP STARK is designed as a state machine utilizing CTLs to three memory star
 This state machine built using three memories:
 1. The "input" memory, which contains lists and strings to decode
 2. A call stack
-3. the "output stack", which is a stack containing the RLP-encoded results which may be read by popping the entire stack
+3. the "output stack"`, which is a read-only memory we use in a "stack-like" manner containing the RLP-encoded results which may be read by "popping" the entire "stack". We can get away with a read-only memory because we only ever "write" to an address once.
 
 The "input" memory is an instance of the `ro_memory` STARK. Both stacks are instances of the "ro_stack" STARK. Note that, by convention, the "ro_stack" STARK grows "up" - i.e. the top of the stack starts at address 0 and, as items are pushed, the address of the top of the stack increases.
 
@@ -131,5 +131,5 @@ Execution begins in the `NewEntry` state. The following describes what happens d
 			* transition to `NewEntry`
 	* otherwise, simply transition to `Return`
 * `Halt:
-	* all state stays exactly the same.
-
+	* all registers stay exactly the same
+	* the "height" of the output "stack" is written to the 0th cell of the output memory. It will point to the last cell in the output memory.

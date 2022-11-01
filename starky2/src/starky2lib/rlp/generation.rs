@@ -9,7 +9,6 @@ pub struct RlpStarkGenerator<F: PrimeField64> {
 	pub stark_trace: Vec<RlpRow<F>>,
 
 	pub output_stack: Vec<F>,
-	pub output_stack_trace: Vec<StackOp<F>>,
 
 	pub call_stack: Vec<F>,
 	pub call_stack_trace: Vec<StackOp<F>>,
@@ -45,7 +44,6 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 		Self {
 			stark_trace: Vec::new(),
 			output_stack: Vec::new(),
-			output_stack_trace: Vec::new(),
 			call_stack: Vec::new(),
 			call_stack_trace: Vec::new(),
 			input_memory: Vec::new(),
@@ -78,12 +76,6 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 	// This is used to generate a stack STARK for it
 	pub fn call_stack_trace(&self) -> Vec<StackOp<F>> {
 		self.call_stack_trace.clone()
-	}
-
-	// returns a trace of stack operations for the RLP's output stack.
-	// This is used to generate a stack STARK for it
-	pub fn output_stack_trace(&self) -> Vec<StackOp<F>> {
-		self.output_stack_trace.clone()
 	}
 
 	pub fn output_stack(&self) -> &[F] {
@@ -431,33 +423,58 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 					}
 				}
 				RlpOpcode::Halt => {
+					self.prepend_stack_top(&mut row);
+					self.gen_stack_timestamps(&mut row);
+					self.gen_output_stack_incrs(&mut row);
+					self.stark_trace.push(row);
 					return;
 				}
 			};
 			self.gen_stack_timestamps(&mut row);
+			self.gen_output_stack_addrs(&mut row);
 			self.stark_trace.push(row);
 		}
+	}
+
+	fn prepend_stack_top(&mut self, row: &mut RlpRow<F>) {
+		let top =  F::from_canonical_u64(self.output_stack.len() as u64);
+		let prev_row = self.stark_trace.last().unwrap();
+		let top_prev_row = prev_row.output_stack[4][0];
+		assert_eq!(top, top_prev_row);
+
+		self.output_stack.insert(0, top);
+		row.output_stack_filters[0] = F::ONE;
+		row.output_stack[0][0] = F::ZERO;
+		row.output_stack[0][1] = top;
+	}
+
+	fn gen_output_stack_incrs(&mut self, row: &mut RlpRow<F>) {
+		for i in 1..5 {
+			row.output_stack[i][0] = if row.output_stack_filters[i] == F::ONE { row.output_stack[i - 1][0] + F::ONE } else { row.output_stack[i - 1][0] };
+		}
+	}
+
+	fn gen_output_stack_addrs(&mut self, row: &mut RlpRow<F>) {
+		if self.stark_trace.len() == 0 {
+			row.output_stack[0][0] = F::ZERO;
+		} else {
+			let prev_row = self.stark_trace.last().unwrap();
+			row.output_stack[0][0] = if row.output_stack_filters[0] == F::ONE { prev_row.output_stack[4][0] + F::ONE } else { prev_row.output_stack[4][0] };
+		}
+		self.gen_output_stack_incrs(row);
 	}
 
 	fn gen_stack_timestamps(&mut self, row: &mut RlpRow<F>) {
 		if self.stark_trace.len() == 0 {
 			row.call_stack[0][2] = F::ONE;
-			row.output_stack[0][2] = F::ONE;
 		} else {
 			let prev_row = self.stark_trace.last().unwrap();
 			row.call_stack[0][2] = if row.call_stack_filters[0] == F::ONE { prev_row.call_stack[2][2] + F::ONE } else { prev_row.call_stack[2][2] };
-			row.output_stack[0][2] = if row.output_stack_filters[0] == F::ONE { prev_row.output_stack[4][2] + F::ONE } else { prev_row.output_stack[4][2] };
 		}
 		for i in 1..3 {
 			row.call_stack[i][2] = if row.call_stack_filters[i] == F::ONE { row.call_stack[i - 1][2] + F::ONE } else { row.call_stack[i - 1][2] };
 		}
-
-		for i in 1..5 {
-			row.output_stack[i][2] = if row.output_stack_filters[i] == F::ONE { row.output_stack[i - 1][2] + F::ONE } else { row.output_stack[i - 1][2] };
-		}
 	}
-
-
 
 	fn read_pc_advance(&mut self, row: &mut RlpRow<F>, channel: usize) -> F {
 		let val = self.input_memory[self.pc];
@@ -489,9 +506,7 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 
 	fn push_output_stack(&mut self, val: F, row: &mut RlpRow<F>, channel: usize) {
 		self.output_stack.push(val);
-		self.output_stack_trace.push(StackOp::Push(val));
 
-		row.output_stack[channel][0] = F::from_bool(false);
 		row.output_stack[channel][1] = val;
 		row.output_stack_filters[channel] = F::from_bool(true);
 	}
@@ -895,16 +910,46 @@ Never same, you got to keep it tight, all fresh just like back then, now hear me
 
 		let mut generator = RlpStarkGenerator::<F>::new();
 		generator.generate(&input);
-		let mut output_stack = generator.output_stack().into_iter().map(|v| v.to_canonical_u64()).collect::<Vec<_>>();
+		let output = generator.output_stack().into_iter().map(|v| v.to_canonical_u64()).collect::<Vec<_>>();
+		assert!(output.len() > 0);
 
+		struct RlpReader {
+			sp: usize,
+			output_mem: Vec<u64>,
+		}
+
+		impl RlpReader {
+			fn new(output_mem: Vec<u64>) -> Self {
+				RlpReader {
+					sp: output_mem.len() - 1,
+					output_mem: output_mem,
+				}
+			}
+
+			fn pop(&mut self) -> u64 {
+				let v = self.output_mem[self.sp];
+				println!("sp: {}, v: {}", self.sp, v);
+				self.sp -= 1;
+				v
+			}
+
+			fn sp(&self) -> usize {
+				self.sp
+			}
+		}
+
+		let sp = output[0] as usize;
+		assert_eq!(output.len(), sp + 1);
+
+		let mut reader = RlpReader::new(output);
 		let mut outputs = Vec::new();
-		while output_stack.len() >= 2 {
-			let op_id = output_stack.pop().unwrap();
-			let len = output_stack.pop().unwrap();
-			assert!(len as usize <= output_stack.len());
+
+		while reader.sp() >= 3 {
+			let op_id = reader.pop();
+			let len = reader.pop();
 			let mut output = Vec::new();
 			for _ in 0..len {
-				let b = output_stack.pop().unwrap();
+				let b = reader.pop();
 				assert!(b < 256);
 				output.push(b as u8);
 			}

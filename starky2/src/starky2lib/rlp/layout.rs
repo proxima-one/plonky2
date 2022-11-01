@@ -118,12 +118,12 @@ pub struct RlpRow<T: Copy> {
     pub(crate) input_memory: [[T; 2]; 5],
     pub(crate) input_memory_filters: [T; 5],
     // 3-channel CTL to the call stack
-    // each represented as [is_pop, val]
+    // each represented as [is_pop, val, timestamp]
     pub(crate) call_stack: [[T; 3]; 3],
     pub(crate) call_stack_filters: [T; 3],
-    // 5-channel CTL to the output stack
-    // each represented as [is_pop, val]
-    pub(crate) output_stack: [[T; 3]; 5],
+    // 5-channel CTL to the output "stack" (actually a read-only memory)
+    // each represented as [addr, val]
+    pub(crate) output_stack: [[T; 2]; 5],
     pub(crate) output_stack_filters: [T; 5],
 }
 
