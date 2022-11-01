@@ -9,6 +9,8 @@ use crate::starky2lib::{
     stack::generation::StackOp,
 };
 
+
+// utility used for generation of the trace.
 pub enum TrieTemplate {
     NotLeaf {
         kind: NotLeafKind,

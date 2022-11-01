@@ -1,74 +1,99 @@
-# MPT State Machine
+# Indexed-Keyed MPT State Machine
 
-This state machine uses the following memories:
+This state machine computes the root hash of an index-keyed merkle patricia trie, as seen in the Ethereum receipt and transaction tries (in particular, it was designed with STARKing these tries in mind). In other words, the "key" for the `i`th leaf value is `RLP(varlen_be(i))`, `varlen_be(i)` returns the big-endian byte representation of `i` with the minimum possible length. Some examples:
+* `varlen_be(0) = ""`
+* `varlen_be(1) = 0x01`
+* `varlen_be(32767) = 0x7FFF`
+
+The state machine uses the following memories:
 1. leaf memory
 2. hash memory
 3. path RLP input memory
-4. path RLP output stackR
+4. path RLP output memory
 5. node RLP input memory
-6. node RLP output stack
-7. node map
+6. node RLP output memory
+7. call stack
+8. template memory
+
+uses CTLs to the following STARKs (9 total):
+1. one ro-memory STARK for the leaf memory
+5. one ro-memory STARK for the hash memory
+2. two instances of the RLP STARK - one for paths, the other for nodes
+3. two ro-memory STARKs to contain their input entries
+4. two ro-memory STARKs to contain the encoded outputs
+6. one instance of the `stack` STARK to serve as the call stack
+7. one instance of the `keccak256_stack` stark that reads input from the RLP input memory and "Writes" to the hash memory
+8. one instance of the read-write memory for the template
+
 
 has the following public inputs:
 1. the claimed root hash of the trie
-2. the "top" stack pointer of the path RLP output stack. The verifier checks this is the same as the one given by the path RLP stark proof
-3. the "top" stack pointer of the node RLP output stack. The verifier checks this is the same as the one given by the path RLP stark proof
 
 and the following limitations:
 1. the maximum number of leaves is 4096. In the future this could be made more generic, but for our purposes (ethereum TX and receipt tries) this is more than enough (for now)
-2. we assume every leaf value is at least 32 bytes. This significantly reduces the (already very high) complexity of the branching logic the state machine needs to express. Luckily for both transactions and receipts, this is guaranteed to be the case for known transaction and receipt types.
+2. we assume every leaf value is at least 32 bytes. This significantly reduces the (already very high) complexity of the branching logic the state machine needs to express. Luckily for both transactions and receipts, this is guaranteed to be the case for known transaction and receipt types beause they all include `logsBloom`, which is 256 bytes.
 
 ### Leaf Memory
 
-the leaf memory is a series of entries of the form
-1. length of value (in bytes)
-2. byte string containing the leaf values
+the leaf memory consists of three sections:
+1. at address 0, a single cell indicating the number of leaves
+2. starting at address 1, an array of pointers to leaf contents in the third section, each a single cell
+2. the concatenation of every leaf value
 
 ### Hash Memory
 
-A memory containing a contiguous array of 32-byte strings representing the keccak256 hash of a node in the trie.
+A memory containing a contiguous array of 32-byte strings representing the keccak256 hash of a node in the trie. This is "produced" by the keccak256_
 
-### path RLP input memory
+### RLP memories
 
-the path input RLP memory is an RLP input memory as defined in the [rlp module](../rlp/ARCHITECTURE.md). For this specific case, each entry is a byte string corresponding to the big-endian, varialble-length represetation of the index of the corresponding leaf. Note that this means the index `0` maps to the empty string (this is ethereum's choice, not mine).
+RLP memories are as described in the [rlp module](../rlp/ARCHITECTURE.md). For paths, every item is the big-endian representation of the current
 
-### path RLP output stack
+### Template Memory
 
-the output 
+The template memory is a read-write memory that holds the "template", an auxiliary data structre detailed below.
 
-### Node Map
+## State Machine
 
-The node map is a memory that is used to map (partial) paths to the RLP input memory entry and their hashes. It is a contiguous array of two-cell entries, where the cells are interpreted as follows:
-1. pointer to a node's list entry in the node RLP input memory
-2. pointer to the node's hash in the hash memory
+The state machine, at a high level, constructs the trie and computes the root in three phases:
+1. In the first phase, the state machine constructs the *uncompressed* trie structure in the template, which is described in greater detail lbelow.
+2. In the second phase, the state machine compresses the template into a patricia trie.
+3. In the third phase, the state machine traverses the template in reverse-depth-first order and, non-deterministically looking up hashes from the hash memory, constructs an RLP item for each node
 
-Given the a (partial) path, the corresponding index into the node map is calculated as follows:
-1. let `first_vals` be a length-6 constant array: `[0x0, 0x01, 0x818, 0x8180, 0x82010, 0x820100]`, where `first_vals[i]` represents the smallest number value of a path with length `i + 1`.
-2. let `offsets` be a length-5 constant array where:
-	* `offsets[0] = 1`, accounting for the fact that the 0th entry is for the empty partial path (i.e. the path to the root node)
-	* `offsets[1] = offsets[0] + 8` since there are 8 paths of length 1 and they're contiguous
-	* `offests[2] = offsets[1] + 130` since there are 130 paths of length 2 and they're contiguous
-	* `offsets[3] = offsets[2] + 9` since there are 9 paths of length 3 and they're contiguous
-	* `offsets[4] = offsets[3] + 144 + 1` since there are 144 paths of length 4 but they skip `0x8200`
-	* `offsets[5] = offsets[4] + 240` since there are 240 paths of length 5 and they're contiguous
-3. then the index is..
-	* `0` if the path is the empty string'
-	* `recomp(path) - first-vals[path.len() - 1] + offsets[path.len() - 1]` otherwise
-		* where `recomp` returns the numerical value of the path when interpreted as a big-endian sequence of *nibbles* (not bytes, as we can have odd number of nibbles) 
+The hash corresponding to the greatest `op_id` (i.e. the index of the last node constructed during traversal) is the root hash.
+
+### The Template
+
+The template is an auxiliary data structure used by the state machine to compute the structure of the trie, compress paths, and iterate over its nodes. This and the call stack are the two primary sources of control flow for the state machine.
+
+The template is laid out in the template memory as follows, starting from address zero in ascending order:
+1. a single cell that we don't care what it is - this address serves as the `NULL` pointer
+	* while `NULL` pointers are something we'd like to avoid, it allows us to differentiate between null and non-null child pointers with only a single memory cell.
+2. a series of "entries", which are represented as tagged unions (aka ADTs, disjoint unions, rust enums, etc) with two variants:
+	* MaybeLeaf, whose contents are:
+		* tag (1 cell): `0x0`
+		* kind (2 cells): two binary flags used to tell what kind of node this. Its values are interpreted as follows
+			* `00`: leaf
+			* `01`: branch
+			* `10`: extension
+			* other values are illegal
+		* plen (1 cell): the length of the "compressed path" for the leaf node, without the hex-prefix.
+		* path (6 cells): the "compressed path" for the leaf node, without the hex-prefix.
+		* has_val (1 cell): the 
+		* val_idx (1 cell): index into the value memory of the corresponding leaf value, if `has_val` is se
+		* num_children (1 cell): the number of children of this node
+		* children (16 cells): for each nibble in the range `0x0-0xF`, the address of the child entry if there is one, or `0` (pointing to the `NULL` address) otherwise.
+	* DefLeaf, whose contents are:
+		* tag (1 cell): `0x01`
+		* plen (1 cell): the length of the "compressed path" for the leaf node, without the hex-prefix.
+		* path (6 cells): the "compressed path" for the leaf node, without the hex-prefix.
 
 
-This works because we can have the following numbers of partial paths of each length, due to trie structure and RLP:
-* `1` path of length `0`, corresponding to the root node
-* `8` paths of length `1`, since all of the indexes are byte strings (not lists), which means the greatest first nibble we'll ever see from RLP is `0x8`
-* `130` paths of length `2`, because...
-	1. the bytes `0x01..=0x7F` are their own repr, and there are 127 of those
-	2. the index `0` maps to the empty string in ethereum's variable-length big-endian repr and RLP encoding of the empty string `0x80`, which brings us to 128.
-	3. We get another `2` possible length-2 paths because a 55-byte index is larger than any realistic trie to be constructed, so the index's byte repr is guaranteed to be <55 bytes. Therefore the remaining cases are `0x81` and `0x82`, as `4095` requires two bytes to express. This brings us to 130.
-* `9` paths of length `3` because all paths of length `3` start with either `0x81` or `0x82`, and...
-	1. The full paths starting from `0x81` range from `0x8180` to `0x81FF`, so the three-nibble prefixes are `0x818` to `0x81F`, a range consisting of 8 paths
-	2. There is only one length-three path starting with `0x82`- `0x820`, as `4095`, the greatest index we can have, has RLP encoding `0x820FFF`.
-* `144` paths of length `4`, because...
-	1. the indices `128..=255` map to length-4 full paths, and there are 128 of those (`0x8180..=0x81FF`)
-	2. the indices `256..=4095` map to paths `0x820100..=0x820FFF`, for which there are 16 possible length-4 prefixes (`0x8201..=0x820F`)
-* `240` paths of length `5`, because these are the 5-nibble prefixes of paths `0x820100..=0x820FFF`, namely `0x82010..=0x820FF`, of which there are 240.
-* `3840` paths of length `6`, because these correspond to the leaves at indexes `256..=4095`.
+### Potential improvements
+
+The vast majority of the STARK's cost comes from reading / writing from byte-oriented memories. There are a few things that can be done to reduce this significantly:
+	* Make a variant of the RLP STARK that performs CTLs against the value memory and has a different entry structure, where strings contain an index into the value memory. This is will avoid the trie STARK having to iterate over each value even though the RLP stark does that too.
+	* Read more / less bytes from the value memory in a single row. Reading `N` bytes at a time will come at a cost of `3N` columns (address, value, filter) but will significantly reduce the number of rows. 
+	* Make variants of memory STARKs with a given "stride" and use those to read many bytes at once with only one address column. This would be especially helpful for the hash memory, which always reads 32 bytes at a time, allowing us to save 32 columns.
+	* Just shooting the shit here, but there might be a way to make a CTL that allows one to deterministically "compute" some lookup columns from others in a determinstic manner known to the verifier, where the derived columns are not committed to in the trace. In particular, one column is the "start" address, and the "computed column' only appears in the lookup argument.
+
+Also, this is still a pretty rough prototype. There's probably more efficient ways to express the logic of the state machine and its transitions to shave off a fair amount of columns here and there. For instance, a lot of CTL filter columns can probably be de-duplicated, as typically the same channels are used during the same states.

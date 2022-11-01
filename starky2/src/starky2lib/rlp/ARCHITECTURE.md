@@ -132,3 +132,11 @@ Execution begins in the `NewEntry` state. The following describes what happens d
 * `Halt:
 	* all registers stay exactly the same
 	* the "height" of the output "stack" is written to the 0th cell of the output memory. It will point to the last cell in the output memory.
+
+## Potential Improvements
+
+Most of the cost from this STARK comes from reading bytes from the entry memory. We can potentially reduce this cost significantly with the following methods:
+	* Have this stark use a second input memory that contains only the string values, and change the entry structure for lists to contain a single index into that memory. This would greatly reduce the costs required for external STARKs to check the entries as they will be much shorter. However it will not reduce the cost for *this* STARK.
+	* Consider adding colums to the input/output memories to read and write `N` bytes at once. If RLP string items are long on average (e.g. receipts which are always > 256 bytes), then this will reduce the number rows drastically. However, this comes at the cost of `6N` columns to the trace naively, as each additional cell will require a CTL filter, address, and value column for both the input and output memory. That said, there's probaly a clever way to re-use the CTL filters and value columns, potentially reducing this to `4N`.
+
+Also, this is still a pretty rough prototype. There's probably more efficient ways to express the logic of the state machine and its transitions to shave off a fair amount of columns here and there. For instance, a lot of CTL filter columns can probably be de-duplicated, as typically the same channels are used during the same states.
