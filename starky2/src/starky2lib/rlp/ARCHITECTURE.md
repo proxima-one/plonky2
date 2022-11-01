@@ -118,7 +118,7 @@ Execution begins in the `NewEntry` state. The following describes what happens d
 	* `depth <- depth - 1`
 	* then
 		* if `list_count = 0`, then transition to `ListPrefix`
-		* otherwise stay at `Recurse`	
+		* otherwise go back to `Recurse`	
 * `EndEntry`:
 	* if `depth = 0`, then:
 		* `push_output_stack(count)`

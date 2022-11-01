@@ -54,10 +54,9 @@ The template memory is a read-write memory that holds the "template", an auxilia
 
 ## State Machine
 
-The state machine, at a high level, constructs the trie and computes the root in three phases:
+The state machine, at a high level, constructs the trie and computes the root in two phases
 1. In the first phase, the state machine constructs the *uncompressed* trie structure in the template, which is described in greater detail lbelow.
-2. In the second phase, the state machine compresses the template into a patricia trie.
-3. In the third phase, the state machine traverses the template in reverse-depth-first order and, non-deterministically looking up hashes from the hash memory, constructs an RLP item for each node
+2. In the second phase, the state machine traverses the template. At each node, if the node can be compressed, it does so. Then, it writes out the RLP input entry.
 
 The hash corresponding to the greatest `op_id` (i.e. the index of the last node constructed during traversal) is the root hash.
 
@@ -86,6 +85,7 @@ The template is laid out in the template memory as follows, starting from addres
 		* tag (1 cell): `0x01`
 		* plen (1 cell): the length of the "compressed path" for the leaf node, without the hex-prefix.
 		* path (6 cells): the "compressed path" for the leaf node, without the hex-prefix.
+		* val_idx (1 cell): index into the value memory of the corresponding leaf value
 
 
 ### Potential improvements

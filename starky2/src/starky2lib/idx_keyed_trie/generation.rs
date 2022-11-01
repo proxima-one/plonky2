@@ -8,9 +8,125 @@ use crate::starky2lib::{
     rlp::generation::{compute_str_prefix, RlpItem, RlpStarkGenerator},
     stack::generation::StackOp,
 };
+use super::layout::*;
+
+pub struct IdxKeyedTrieGenerator<F: RichField> {
+    trace: Vec<IdxKeyedTrieRow<F>>,
+    state: IdxKeyedTrieState,
+}
+
+enum IdxKeyedTrieState {
+    // PHASE 1: GENERATE TEMPLATE
+
+    // the state machine starts in this state
+    // set pc to 1, pointing to the root node in the template. then, if `path_op_id` is 0, then transition to PHASE_2_OBSERVE_ENTRY.
+    // otherwise, increment `path_op_id` and pop the `op_id` from the encoded path stack, check they match, pop the path length, and transition to PHASE_1_INIT_ENTRY if it's the first row, PHASE_1_OBSERVE_ENTRY otherwise
+    PHASE_1_NEXT_ENTRY,
+
+    // initialize an entry.
+    // if is_last_nibble is set, then we make a DefLeaf entry whose `plen = 0, path = "", value_idx = path_op_id` and transition to PHASE_1_NEXT_PATH
+    // otherwise, then we make a MaybeLeaf whose `plen = 0, path = "", has_val = 0, value_idx = NULL, num_children = 0, children = [NULL; 16]` and transition to PHASE_1_RECURSE
+    // then we increment node idx and jump to PHASE_1_RECURSE
+    PHASE_1_INIT_ENTRY,
+
+    // observe an entry and/or update it
+    // read the entry's metadata.
+    // if the `is_last_nibble` is set and the entry we're looking at is a branch, then set `has_val = 1. val_idx = path_op_id` and transition to PHASE_1_NEXT_PATH
+    // otherwise, if then `is_last_nibble` is false because we will never go to a DefLeaf twice during this phase
+    PHASE_1_OBSERVE_ENTRY,
+
+    // if `is_hi_nibble` is set, then "pop" one byte from the enhcoded path, set `hi_nibble` and `lo_nibble` accordingly, then set the child pointer for `hi_nibble` to sp and increment num_children if it's currently NULL
+    // otherwise, set the child pointer for `lo_nibble` to sp and increment `num_children` if its currently NULL
+    // toggle `is_hi_nibble`
+    // Then, jump to sp and transition to PHASE_1_INIT_ENTRY if the child pointer was NULL, otherwise jump to the child pointer and transition to PHASE_1_OBSERVE_ENTRY
+    PHASE_1_RECURSE,
 
 
-// utility used for generation of the trace.
+    // PHASE 2: GENERATE TEMPLATE
+
+    // let `compress` = `1` if the current entry is not a DefLeaf AND `num_children == 1` AND `has_val == 0`
+    // if `compress`, then:
+    //   push pc onto the stack
+    //   set `pp` to point to the plen field of the current entry. This sets the "compressed parent" to which the path is accumulated and child is reset
+    //   set `compressed_child_ptr` = the one non-null child pointer. Set non-deternimistically, and guaranteed to be the only one due to the manner in which
+    //   we constructed the template
+    //   transition to PHASE_2_COMPRESS
+    // otherwise if the current entry is not a leaf (entry is not DefLeaf and kind is not set to `00`):
+    //   initialize a child counter to 0
+    //   transition to PHASE_2_RECURSE_SETUP
+    // otherwise (in the case of a leaf):
+    //   transition to PHASE_2_WRITE_ENTRY
+    PHASE_2_OBSERVE_ENTRY,
+
+    // if the current entry is a `DefLeaf`:
+    //   use pp to calculate the offset of the parent's tag. Then, set the tag to `00`, indicating it's now a leaf
+    //   use the same method to set the paren'ts `has_val` to 1 and `val_idx` to the current leaf entry's `val_idx`.
+    //   transition to PHASE_2_RETURN
+    // otherwise:
+    //   let `compress` = `1` if the current entry is not a leaf AND `num_children == 1` AND `has_val == 0`
+    //   let `child_nibble` = the nibble of the one non-null child pointer. Set non-deternimistically, and guaranteed to be the only one due to the manner in which the we constructed the template
+    //   `[pp] += 1`
+    //   `path.append(child_nibble)`
+    //   if `compress = 0`, then 
+    //     [compressed_child_ptr] =  pc (set the compressed parent's child pointer to the current entry)
+    //     calculate the compressed parents pc using `pp` and jump all the way back to the parent
+    //     initialize child counter to 0
+    //     transition to PHASE_2_RECURSE_SETUP
+    //   otherise:
+    //     set pc to the `child_nibble`th child pointer in the entry
+    //     stay at PHASE_2_COMPRESS
+    PHASE_2_COMPRESS,
+
+    // push the counter to the stack
+    // then push the nibble for the next non-null child pointer onto the stack. The prover chooses this non-deterministically, and the ordering / deduplication is checked via a range check.
+    // increment the counter.
+    // 
+    // then, if the counter = num_children, transition to PHASE_2_RECURSE
+    // otherwise, stay at PHASE_2_RECURSE_SETUP
+    PHASE_2_RECURSE_SETUP,
+
+    // pop a child pointer off of the stack.
+    // push the current pc onto the stack
+    // increment depth by 1
+    // set pc to the child pointer and transition to PHASE_2_OBSERVE_ENTRY
+    PHASE_2_RECURSE,
+
+    // pop the old pc off of the stack
+    // pop the counter off of the stack
+    // set pc to the old pc
+    // decrement depth by 1
+    // then,
+    //   if both the counter and depth are 0, then transition to HALT
+    //   otherwise, if the counter is 0, then transition to PHASE_2_WRITE_ENTRY
+    //   otherwise, transition to PHASE_2_RECURSE
+    PHASE_2_RETURN,
+
+    // read the medata of the current template node and write out the outer RLP list entry for it
+    // write leaf list entry metadata according to the node kind;
+    //   leaf: 2 elements
+    //   extension: 2 elements
+    //   branch: 17 elements
+    // advance ep to start of the content
+    // push ep to the stack
+    // advance ep to after the end of the content
+    // if the node is a leaf or extension, then set counter to 0 and transition to PHASE_2_WRITE_ENCODED_PATH,
+    // otherwise, transition to PHASE_2_W
+    PHASE_2_WRITE_ENTRY,
+
+    // calculate the prefix to apply to the path given plen and the node kind.
+    // write the string RLP entry metadata given the prefix and path len
+    // write the `counter`th byte of the path into the content
+    // increment counter 
+    // if counter = path_len in bytes and the current node is a leaf, then transition to PHASE_2_WRITE_VALUE
+    // othrewise, if counter == path_len in bytes then set counter = 1 transition to PHASE_2_WRITE_HASH
+    PHASE_2_WRITE_ENCODED_PATH,
+
+    //! how do we get child's op ids???
+    PHASE_2_WRITE_HASH,
+
+    HALT,
+}
+
 pub enum TrieTemplate {
     NotLeaf {
         kind: NotLeafKind,
