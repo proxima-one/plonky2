@@ -101,7 +101,8 @@ impl<F: RichField + Extendable<D>, const D: usize> RecursiveStarky2ConstraintCon
 	}
 
 	fn eval_inv_check_inverted(&mut self, builder: &mut CircuitBuilder<F, D>, value: ExtensionTarget<D>, inv: ExtensionTarget<D>, binary_flag: ExtensionTarget<D>) {
-		self.inv_check(builder, value, inv, builder.add_const_extension(binary_flag, -F::ONE));
+		let inverted_flag = builder.add_const_extension(binary_flag, -F::ONE);
+		self.inv_check(builder, value, inv, inverted_flag);
 	}
 
 	fn binary_check(&mut self, builder: &mut CircuitBuilder<F, D>, value: ExtensionTarget<D>) {
