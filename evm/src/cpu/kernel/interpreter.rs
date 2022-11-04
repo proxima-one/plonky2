@@ -1,3 +1,5 @@
+//! An EVM interpreter for testing and debugging purposes.
+
 use std::collections::HashMap;
 
 use anyhow::{anyhow, bail, ensure};
@@ -7,6 +9,7 @@ use plonky2::field::goldilocks_field::GoldilocksField;
 
 use crate::cpu::kernel::aggregator::KERNEL;
 use crate::cpu::kernel::assembler::Kernel;
+use crate::cpu::kernel::constants::context_metadata::ContextMetadata;
 use crate::cpu::kernel::constants::global_metadata::GlobalMetadata;
 use crate::cpu::kernel::constants::txn_fields::NormalizedTxnField;
 use crate::generation::memory::{MemoryContextState, MemorySegmentState};
@@ -43,9 +46,7 @@ impl InterpreterMemory {
 
         mem
     }
-}
 
-impl InterpreterMemory {
     fn mload_general(&self, context: usize, segment: Segment, offset: usize) -> U256 {
         let value = self.context_memory[context].segments[segment as usize].get(offset);
         assert!(
@@ -70,11 +71,12 @@ pub struct Interpreter<'a> {
     kernel_mode: bool,
     jumpdests: Vec<usize>,
     pub(crate) offset: usize,
-    context: usize,
+    pub(crate) context: usize,
     pub(crate) memory: InterpreterMemory,
     pub(crate) generation_state: GenerationState<F>,
     prover_inputs_map: &'a HashMap<usize, ProverInputFn>,
     pub(crate) halt_offsets: Vec<usize>,
+    pub(crate) debug_offsets: Vec<usize>,
     running: bool,
 }
 
@@ -128,6 +130,7 @@ impl<'a> Interpreter<'a> {
             prover_inputs_map: prover_inputs,
             context: 0,
             halt_offsets: vec![DEFAULT_HALT_OFFSET],
+            debug_offsets: vec![],
             running: false,
         }
     }
@@ -168,8 +171,17 @@ impl<'a> Interpreter<'a> {
         self.memory.context_memory[0].segments[Segment::GlobalMetadata as usize].get(field as usize)
     }
 
+    pub(crate) fn set_global_metadata_field(&mut self, field: GlobalMetadata, value: U256) {
+        self.memory.context_memory[0].segments[Segment::GlobalMetadata as usize]
+            .set(field as usize, value)
+    }
+
     pub(crate) fn get_trie_data(&self) -> &[U256] {
         &self.memory.context_memory[0].segments[Segment::TrieData as usize].content
+    }
+
+    pub(crate) fn get_trie_data_mut(&mut self) -> &mut Vec<U256> {
+        &mut self.memory.context_memory[0].segments[Segment::TrieData as usize].content
     }
 
     pub(crate) fn get_rlp_memory(&self) -> Vec<u8> {
@@ -205,7 +217,7 @@ impl<'a> Interpreter<'a> {
         self.push(if x { U256::one() } else { U256::zero() });
     }
 
-    fn pop(&mut self) -> U256 {
+    pub(crate) fn pop(&mut self) -> U256 {
         self.stack_mut().pop().expect("Pop on empty stack.")
     }
 
@@ -225,6 +237,9 @@ impl<'a> Interpreter<'a> {
             0x09 => self.run_mulmod(),                                  // "MULMOD",
             0x0a => self.run_exp(),                                     // "EXP",
             0x0b => todo!(),                                            // "SIGNEXTEND",
+            0x0c => self.run_addfp254(),                                // "ADDFP254",
+            0x0d => self.run_mulfp254(),                                // "MULFP254",
+            0x0e => self.run_subfp254(),                                // "SUBFP254",
             0x10 => self.run_lt(),                                      // "LT",
             0x11 => self.run_gt(),                                      // "GT",
             0x12 => todo!(),                                            // "SLT",
@@ -274,7 +289,7 @@ impl<'a> Interpreter<'a> {
             0x55 => todo!(),                                            // "SSTORE",
             0x56 => self.run_jump(),                                    // "JUMP",
             0x57 => self.run_jumpi(),                                   // "JUMPI",
-            0x58 => todo!(),                                            // "GETPC",
+            0x58 => self.run_pc(),                                      // "PC",
             0x59 => self.run_msize(),                                   // "MSIZE",
             0x5a => todo!(),                                            // "GAS",
             0x5b => self.run_jumpdest(),                                // "JUMPDEST",
@@ -309,7 +324,28 @@ impl<'a> Interpreter<'a> {
             0xff => todo!(),                                            // "SELFDESTRUCT",
             _ => bail!("Unrecognized opcode {}.", opcode),
         };
+
+        if self.debug_offsets.contains(&self.offset) {
+            println!("At {}, stack={:?}", self.offset_name(), self.stack());
+        } else if let Some(label) = self.offset_label() {
+            println!("At {label}");
+        }
+
         Ok(())
+    }
+
+    /// Get a string representation of the current offset for debugging purposes.
+    fn offset_name(&self) -> String {
+        self.offset_label()
+            .unwrap_or_else(|| self.offset.to_string())
+    }
+
+    fn offset_label(&self) -> Option<String> {
+        // TODO: Not sure we should use KERNEL? Interpreter is more general in other places.
+        KERNEL
+            .global_labels
+            .iter()
+            .find_map(|(k, v)| (*v == self.offset).then(|| k.clone()))
     }
 
     fn run_stop(&mut self) {
@@ -332,6 +368,27 @@ impl<'a> Interpreter<'a> {
         let x = self.pop();
         let y = self.pop();
         self.push(x.overflowing_sub(y).0);
+    }
+
+    // TODO: 107 is hardcoded as a dummy prime for testing
+    // should be changed to the proper implementation prime
+
+    fn run_addfp254(&mut self) {
+        let x = self.pop();
+        let y = self.pop();
+        self.push((x + y) % 107);
+    }
+
+    fn run_mulfp254(&mut self) {
+        let x = self.pop();
+        let y = self.pop();
+        self.push(U256::try_from(x.full_mul(y) % 107).unwrap());
+    }
+
+    fn run_subfp254(&mut self) {
+        let x = self.pop();
+        let y = self.pop();
+        self.push((U256::from(107) + x - y) % 107);
     }
 
     fn run_div(&mut self) {
@@ -462,11 +519,14 @@ impl<'a> Interpreter<'a> {
     fn run_keccak_general(&mut self) {
         let context = self.pop().as_usize();
         let segment = Segment::all()[self.pop().as_usize()];
+        // Not strictly needed but here to avoid surprises with MSIZE.
+        assert_ne!(segment, Segment::MainMemory, "Call KECCAK256 instead.");
         let offset = self.pop().as_usize();
         let size = self.pop().as_usize();
         let bytes = (offset..offset + size)
             .map(|i| self.memory.mload_general(context, segment, i).byte(0))
             .collect::<Vec<_>>();
+        println!("Hashing {:?}", &bytes);
         let hash = keccak(bytes);
         self.push(U256::from_big_endian(hash.as_bytes()));
     }
@@ -535,12 +595,15 @@ impl<'a> Interpreter<'a> {
         }
     }
 
+    fn run_pc(&mut self) {
+        self.push((self.offset - 1).into());
+    }
+
     fn run_msize(&mut self) {
-        let num_bytes = self.memory.context_memory[self.context].segments
-            [Segment::MainMemory as usize]
-            .content
-            .len();
-        self.push(U256::from(num_bytes));
+        self.push(
+            self.memory.context_memory[self.context].segments[Segment::ContextMetadata as usize]
+                .get(ContextMetadata::MSize as usize),
+        )
     }
 
     fn run_jumpdest(&mut self) {
@@ -600,7 +663,13 @@ impl<'a> Interpreter<'a> {
         let segment = Segment::all()[self.pop().as_usize()];
         let offset = self.pop().as_usize();
         let value = self.pop();
-        assert!(value.bits() <= segment.bit_range());
+        assert!(
+            value.bits() <= segment.bit_range(),
+            "Value {} exceeds {:?} range of {} bits",
+            value,
+            segment,
+            segment.bit_range()
+        );
         self.memory.mstore_general(context, segment, offset, value);
     }
 }

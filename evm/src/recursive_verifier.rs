@@ -146,7 +146,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         }
 
         // Verify the CTL checks.
-        let degrees_bits = std::array::from_fn(|i| verifier_data[i].common.degree_bits);
+        let degrees_bits = std::array::from_fn(|i| verifier_data[i].common.degree_bits());
         verify_cross_table_lookups::<F, C, D>(
             cross_table_lookups,
             pis.map(|p| p.ctl_zs_last),
@@ -221,7 +221,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
         }
 
         // Verify the CTL checks.
-        let degrees_bits = std::array::from_fn(|i| verifier_data[i].common.degree_bits);
+        let degrees_bits = std::array::from_fn(|i| verifier_data[i].common.degree_bits());
         verify_cross_table_lookups_circuit::<F, C, D>(
             builder,
             cross_table_lookups,
@@ -235,7 +235,7 @@ impl<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>
             .zip(verifier_data_target)
             .enumerate()
         {
-            builder.verify_proof(
+            builder.verify_proof::<C>(
                 recursive_proof,
                 &verifier_data_target,
                 &verifier_data[i].common,
@@ -579,13 +579,14 @@ where
 {
     let recursive_proofs = std::array::from_fn(|i| {
         let verifier_data = &verifier_data[i];
-        builder.add_virtual_proof_with_pis(&verifier_data.common)
+        builder.add_virtual_proof_with_pis::<C>(&verifier_data.common)
     });
     let verifier_data = std::array::from_fn(|i| {
         let verifier_data = &verifier_data[i];
         VerifierCircuitTarget {
             constants_sigmas_cap: builder
                 .constant_merkle_cap(&verifier_data.verifier_only.constants_sigmas_cap),
+            circuit_digest: builder.add_virtual_hash(),
         }
     });
     RecursiveAllProofTargetWithData {

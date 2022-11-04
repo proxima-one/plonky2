@@ -20,24 +20,21 @@ pub(crate) enum Segment {
     KernelGeneral = 7,
     /// Another segment for general purpose kernel use.
     KernelGeneral2 = 8,
+    /// Segment to hold account code for opcodes like `CODESIZE, CODECOPY,...`.
+    KernelAccountCode = 9,
     /// Contains normalized transaction fields; see `NormalizedTxnField`.
-    TxnFields = 9,
+    TxnFields = 10,
     /// Contains the data field of a transaction.
-    TxnData = 10,
+    TxnData = 11,
     /// A buffer used to hold raw RLP data.
-    RlpRaw = 11,
+    RlpRaw = 12,
     /// Contains all trie data. Tries are stored as immutable, copy-on-write trees, so this is an
     /// append-only buffer. It is owned by the kernel, so it only lives on context 0.
-    TrieData = 12,
-    /// The account address associated with the `i`th storage trie. Only lives on context 0.
-    StorageTrieAddresses = 13,
-    /// A pointer to the `i`th storage trie within the `TrieData` buffer. Only lives on context 0.
-    StorageTriePointers = 14,
-    /// Like `StorageTriePointers`, except that these pointers correspond to the version of each
-    /// trie at the creation of a given context. This lets us easily revert a context by replacing
-    /// `StorageTriePointers` with `StorageTrieCheckpointPointers`.
-    /// See also `StateTrieCheckpointPointer`.
-    StorageTrieCheckpointPointers = 15,
+    TrieData = 13,
+    /// A buffer used to store the encodings of a branch node's children.
+    TrieEncodedChild = 14,
+    /// A buffer used to store the lengths of the encodings of a branch node's children.
+    TrieEncodedChildLen = 15,
 }
 
 impl Segment {
@@ -54,13 +51,13 @@ impl Segment {
             Self::ContextMetadata,
             Self::KernelGeneral,
             Self::KernelGeneral2,
+            Self::KernelAccountCode,
             Self::TxnFields,
             Self::TxnData,
             Self::RlpRaw,
             Self::TrieData,
-            Self::StorageTrieAddresses,
-            Self::StorageTriePointers,
-            Self::StorageTrieCheckpointPointers,
+            Self::TrieEncodedChild,
+            Self::TrieEncodedChildLen,
         ]
     }
 
@@ -76,13 +73,13 @@ impl Segment {
             Segment::ContextMetadata => "SEGMENT_CONTEXT_METADATA",
             Segment::KernelGeneral => "SEGMENT_KERNEL_GENERAL",
             Segment::KernelGeneral2 => "SEGMENT_KERNEL_GENERAL_2",
+            Segment::KernelAccountCode => "SEGMENT_KERNEL_ACCOUNT_CODE",
             Segment::TxnFields => "SEGMENT_NORMALIZED_TXN",
             Segment::TxnData => "SEGMENT_TXN_DATA",
             Segment::RlpRaw => "SEGMENT_RLP_RAW",
             Segment::TrieData => "SEGMENT_TRIE_DATA",
-            Segment::StorageTrieAddresses => "SEGMENT_STORAGE_TRIE_ADDRS",
-            Segment::StorageTriePointers => "SEGMENT_STORAGE_TRIE_PTRS",
-            Segment::StorageTrieCheckpointPointers => "SEGMENT_STORAGE_TRIE_CHECKPOINT_PTRS",
+            Segment::TrieEncodedChild => "SEGMENT_TRIE_ENCODED_CHILD",
+            Segment::TrieEncodedChildLen => "SEGMENT_TRIE_ENCODED_CHILD_LEN",
         }
     }
 
@@ -98,13 +95,13 @@ impl Segment {
             Segment::ContextMetadata => 256,
             Segment::KernelGeneral => 256,
             Segment::KernelGeneral2 => 256,
+            Segment::KernelAccountCode => 8,
             Segment::TxnFields => 256,
             Segment::TxnData => 256,
             Segment::RlpRaw => 8,
             Segment::TrieData => 256,
-            Segment::StorageTrieAddresses => 160,
-            Segment::StorageTriePointers => 32,
-            Segment::StorageTrieCheckpointPointers => 32,
+            Segment::TrieEncodedChild => 256,
+            Segment::TrieEncodedChildLen => 6,
         }
     }
 }

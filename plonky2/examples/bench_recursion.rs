@@ -32,7 +32,7 @@ use structopt::StructOpt;
 type ProofTuple<F, C, const D: usize> = (
     ProofWithPublicInputs<F, C, D>,
     VerifierOnlyCircuitData<C, D>,
-    CommonCircuitData<F, C, D>,
+    CommonCircuitData<F, D>,
 );
 
 #[derive(Clone, StructOpt, Debug)]
@@ -112,18 +112,16 @@ where
     let (inner_proof, inner_vd, inner_cd) = inner;
     let mut builder = CircuitBuilder::<F, D>::new(config.clone());
     let mut pw = PartialWitness::new();
-    let pt = builder.add_virtual_proof_with_pis(inner_cd);
+    let pt = builder.add_virtual_proof_with_pis::<InnerC>(inner_cd);
     pw.set_proof_with_pis_target(&pt, inner_proof);
 
     let inner_data = VerifierCircuitTarget {
         constants_sigmas_cap: builder.add_virtual_cap(inner_cd.config.fri_config.cap_height),
+        circuit_digest: builder.add_virtual_hash(),
     };
-    pw.set_cap_target(
-        &inner_data.constants_sigmas_cap,
-        &inner_vd.constants_sigmas_cap,
-    );
+    pw.set_verifier_data_target(&inner_data, inner_vd);
 
-    builder.verify_proof(pt, &inner_data, inner_cd);
+    builder.verify_proof::<InnerC>(pt, &inner_data, inner_cd);
     builder.print_gate_counts(0);
 
     if let Some(min_degree_bits) = min_degree_bits {
@@ -151,7 +149,8 @@ where
 /// Test serialization and print some size info.
 fn test_serialization<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(
     proof: &ProofWithPublicInputs<F, C, D>,
-    cd: &CommonCircuitData<F, C, D>,
+    vd: &VerifierOnlyCircuitData<C, D>,
+    cd: &CommonCircuitData<F, D>,
 ) -> Result<()>
 where
     [(); C::Hasher::HASH_SIZE]:,
@@ -162,8 +161,10 @@ where
     assert_eq!(proof, &proof_from_bytes);
 
     let now = std::time::Instant::now();
-    let compressed_proof = proof.clone().compress(cd)?;
-    let decompressed_compressed_proof = compressed_proof.clone().decompress(cd)?;
+    let compressed_proof = proof.clone().compress(&vd.circuit_digest, cd)?;
+    let decompressed_compressed_proof = compressed_proof
+        .clone()
+        .decompress(&vd.circuit_digest, cd)?;
     info!("{:.4}s to compress proof", now.elapsed().as_secs_f64());
     assert_eq!(proof, &decompressed_compressed_proof);
 
@@ -190,7 +191,7 @@ fn benchmark(config: &CircuitConfig, log2_inner_size: usize) -> Result<()> {
     info!(
         "Initial proof degree {} = 2^{}",
         cd.degree(),
-        cd.degree_bits
+        cd.degree_bits()
     );
 
     // Recursively verify the proof
@@ -199,19 +200,19 @@ fn benchmark(config: &CircuitConfig, log2_inner_size: usize) -> Result<()> {
     info!(
         "Single recursion proof degree {} = 2^{}",
         cd.degree(),
-        cd.degree_bits
+        cd.degree_bits()
     );
 
     // Add a second layer of recursion to shrink the proof size further
     let outer = recursive_proof::<F, C, C, D>(&middle, config, None)?;
-    let (proof, _, cd) = &outer;
+    let (proof, vd, cd) = &outer;
     info!(
         "Double recursion proof degree {} = 2^{}",
         cd.degree(),
-        cd.degree_bits
+        cd.degree_bits()
     );
 
-    test_serialization(proof, cd)?;
+    test_serialization(proof, vd, cd)?;
 
     Ok(())
 }

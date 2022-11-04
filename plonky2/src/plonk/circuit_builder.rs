@@ -34,7 +34,7 @@ use crate::iop::target::{BoolTarget, Target};
 use crate::iop::wire::Wire;
 use crate::plonk::circuit_data::{
     CircuitConfig, CircuitData, CommonCircuitData, ProverCircuitData, ProverOnlyCircuitData,
-    VerifierCircuitData, VerifierOnlyCircuitData,
+    VerifierCircuitData, VerifierCircuitTarget, VerifierOnlyCircuitData,
 };
 use crate::plonk::config::{GenericConfig, Hasher};
 use crate::plonk::copy_constraint::CopyConstraint;
@@ -83,6 +83,15 @@ pub struct CircuitBuilder<F: RichField + Extendable<D>, const D: usize> {
 
     /// List of constant generators used to fill the constant wires.
     constant_generators: Vec<ConstantGenerator<F>>,
+
+    /// Optional common data. When it is `Some(goal_data)`, the `build` function panics if the resulting
+    /// common data doesn't equal `goal_data`.
+    /// This is used in cyclic recursion.
+    pub(crate) goal_common_data: Option<CommonCircuitData<F, D>>,
+
+    /// Optional verifier data that is registered as public inputs.
+    /// This is used in cyclic recursion to hold the circuit's own verifier key.
+    pub(crate) verifier_data_public_input: Option<VerifierCircuitTarget>,
 }
 
 impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
@@ -102,6 +111,8 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             arithmetic_results: HashMap::new(),
             current_slots: HashMap::new(),
             constant_generators: Vec::new(),
+            goal_common_data: None,
+            verifier_data_public_input: None,
         };
         builder.check_config();
         builder
@@ -142,6 +153,10 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
     /// Registers the given targets as public inputs.
     pub fn register_public_inputs(&mut self, targets: &[Target]) {
         targets.iter().for_each(|&t| self.register_public_input(t));
+    }
+
+    pub fn num_public_inputs(&self) -> usize {
+        self.public_inputs.len()
     }
 
     /// Adds a new "virtual" target. This is not an actual wire in the witness, but just a target
@@ -198,8 +213,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         PolynomialCoeffsExtTarget(coeffs)
     }
 
-    // TODO: Unsafe
-    pub fn add_virtual_bool_target(&mut self) -> BoolTarget {
+    pub fn add_virtual_bool_target_unsafe(&mut self) -> BoolTarget {
         BoolTarget::new_unsafe(self.add_virtual_target())
     }
 
@@ -214,6 +228,21 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         let t = self.add_virtual_target();
         self.register_public_input(t);
         t
+    }
+    /// Add a virtual verifier data, register it as a public input and set it to `self.verifier_data_public_input`.
+    /// WARNING: Do not register any public input after calling this! TODO: relax this
+    pub(crate) fn add_verifier_data_public_input(&mut self) {
+        let verifier_data = VerifierCircuitTarget {
+            constants_sigmas_cap: self.add_virtual_cap(self.config.fri_config.cap_height),
+            circuit_digest: self.add_virtual_hash(),
+        };
+        // The verifier data are public inputs.
+        self.register_public_inputs(&verifier_data.circuit_digest.elements);
+        for i in 0..self.config.fri_config.num_cap_elements() {
+            self.register_public_inputs(&verifier_data.constants_sigmas_cap.0[i].elements);
+        }
+
+        self.verifier_data_public_input = Some(verifier_data);
     }
 
     /// Adds a gate to the circuit, and returns its index.
@@ -269,6 +298,10 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             gate.num_constants(),
             self.config.num_constants
         );
+    }
+
+    pub fn add_gate_to_gate_set(&mut self, gate: GateRef<F, D>) {
+        self.gates.insert(gate);
     }
 
     pub fn connect_extension(&mut self, src: ExtensionTarget<D>, dst: ExtensionTarget<D>) {
@@ -751,11 +784,6 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             Some(&fft_root_table),
         );
 
-        let constants_sigmas_cap = constants_sigmas_commitment.merkle_tree.cap.clone();
-        let verifier_only = VerifierOnlyCircuitData {
-            constants_sigmas_cap: constants_sigmas_cap.clone(),
-        };
-
         // Map between gates where not all generators are used and the gate's number of used generators.
         let incomplete_gates = self
             .current_slots
@@ -796,17 +824,6 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             indices.shrink_to_fit();
         }
 
-        let prover_only = ProverOnlyCircuitData {
-            generators: self.generators,
-            generator_indices_by_watches,
-            constants_sigmas_commitment,
-            sigmas: transpose_poly_values(sigma_vecs),
-            subgroup,
-            public_inputs: self.public_inputs,
-            representative_map: forest.parents,
-            fft_root_table: Some(fft_root_table),
-        };
-
         let num_gate_constraints = gates
             .iter()
             .map(|gate| gate.0.num_constraints())
@@ -816,6 +833,7 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         let num_partial_products =
             num_partial_products(self.config.num_routed_wires, quotient_degree_factor);
 
+        let constants_sigmas_cap = constants_sigmas_commitment.merkle_tree.cap.clone();
         // TODO: This should also include an encoding of gate constraints.
         let circuit_digest_parts = [
             constants_sigmas_cap.flatten(),
@@ -829,7 +847,6 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
         let common = CommonCircuitData {
             config: self.config,
             fri_params,
-            degree_bits,
             gates,
             selectors_info,
             quotient_degree_factor,
@@ -838,6 +855,25 @@ impl<F: RichField + Extendable<D>, const D: usize> CircuitBuilder<F, D> {
             num_public_inputs,
             k_is,
             num_partial_products,
+        };
+        if let Some(goal_data) = self.goal_common_data {
+            assert_eq!(goal_data, common);
+        }
+
+        let prover_only = ProverOnlyCircuitData {
+            generators: self.generators,
+            generator_indices_by_watches,
+            constants_sigmas_commitment,
+            sigmas: transpose_poly_values(sigma_vecs),
+            subgroup,
+            public_inputs: self.public_inputs,
+            representative_map: forest.parents,
+            fft_root_table: Some(fft_root_table),
+            circuit_digest,
+        };
+
+        let verifier_only = VerifierOnlyCircuitData {
+            constants_sigmas_cap,
             circuit_digest,
         };
 

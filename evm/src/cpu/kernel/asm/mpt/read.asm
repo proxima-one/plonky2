@@ -1,30 +1,30 @@
 // Given an address, return a pointer to the associated account data, which
 // consists of four words (nonce, balance, storage_root, code_hash), in the
-// state trie. Returns 0 if the address is not found.
+// state trie. Returns null if the address is not found.
 global mpt_read_state_trie:
     // stack: addr, retdest
-    // The key is the hash of the address. Since KECCAK_GENERAL takes input from
-    // memory, we will write addr bytes to SEGMENT_KERNEL_GENERAL[0..20] first.
-    %stack (addr) -> (0, @SEGMENT_KERNEL_GENERAL, 0, addr, 20, mpt_read_state_trie_after_mstore)
-    %jump(mstore_unpacking)
-mpt_read_state_trie_after_mstore:
-    // stack: retdest
-    %stack () -> (0, @SEGMENT_KERNEL_GENERAL, 0, 20) // context, segment, offset, len
-    KECCAK_GENERAL
+    %addr_to_state_key
     // stack: key, retdest
     PUSH 64 // num_nibbles
     %mload_global_metadata(@GLOBAL_METADATA_STATE_TRIE_ROOT) // node_ptr
     // stack: node_ptr, num_nibbles, key, retdest
     %jump(mpt_read)
 
+// Convenience macro to call mpt_read_state_trie and return where we left off.
+%macro mpt_read_state_trie
+    %stack (addr) -> (addr, %%after)
+    %jump(mpt_read_state_trie)
+%%after:
+%endmacro
+
 // Read a value from a MPT.
 //
 // Arguments:
 // - the virtual address of the trie to search in
-// - the key, as a U256
 // - the number of nibbles in the key (should start at 64)
+// - the key, as a U256
 //
-// This function returns a pointer to the leaf, or 0 if the key is not found.
+// This function returns a pointer to the value, or 0 if the key is not found.
 global mpt_read:
     // stack: node_ptr, num_nibbles, key, retdest
     DUP1
@@ -39,7 +39,7 @@ global mpt_read:
     DUP1 %eq_const(@MPT_NODE_EXTENSION) %jumpi(mpt_read_extension)
     DUP1 %eq_const(@MPT_NODE_LEAF)      %jumpi(mpt_read_leaf)
 
-    // There's still the MPT_NODE_HASH case, but if we hit a digest node,
+    // There's still the MPT_NODE_HASH case, but if we hit a hash node,
     // it means the prover failed to provide necessary Merkle data, so panic.
     PANIC
 
@@ -75,15 +75,8 @@ mpt_read_branch_end_of_key:
     %stack (node_payload_ptr, num_nibbles, key, retdest) -> (node_payload_ptr, retdest)
     // stack: node_payload_ptr, retdest
     %add_const(16) // skip over the 16 child nodes
-    // stack: value_len_ptr, retdest
-    DUP1 %mload_trie_data
-    // stack: value_len, value_len_ptr, retdest
-    %jumpi(mpt_read_branch_found_value)
-    // This branch node contains no value, so return null.
-    %stack (value_len_ptr, retdest) -> (retdest, 0)
-mpt_read_branch_found_value:
-    // stack: value_len_ptr, retdest
-    %increment
+    // stack: value_ptr_ptr, retdest
+    %mload_trie_data
     // stack: value_ptr, retdest
     SWAP1
     JUMP
@@ -147,7 +140,9 @@ mpt_read_leaf:
     JUMP
 mpt_read_leaf_found:
     // stack: node_payload_ptr, retdest
-    %add_const(3) // The value is located after num_nibbles, the key, and the value length.
+    %add_const(2) // The value pointer is located after num_nibbles and the key.
+    // stack: value_ptr_ptr, retdest
+    %mload_trie_data
     // stack: value_ptr, retdest
     SWAP1
     JUMP

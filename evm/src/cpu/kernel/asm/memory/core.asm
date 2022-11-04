@@ -55,6 +55,19 @@
     // stack: (empty)
 %endmacro
 
+// Store a single value from the given segment of kernel (context 0) memory.
+%macro mstore_kernel(segment, offset)
+    // stack: value
+    PUSH $offset
+    // stack: offset, value
+    PUSH $segment
+    // stack: segment, offset, value
+    PUSH 0 // kernel has context 0
+    // stack: context, segment, offset, value
+    MSTORE_GENERAL
+    // stack: (empty)
+%endmacro
+
 // Load from the kernel a big-endian u32, consisting of 4 bytes (c_3, c_2, c_1, c_0)
 %macro mload_kernel_u32(segment)
     // stack: offset
@@ -379,4 +392,22 @@
     // stack: offset, value
     %mstore_kernel_general_2
     // stack: (empty)
+%endmacro
+
+%macro mload_main
+    // stack: offset
+    DUP1
+    // stack: offset, offset
+    %update_msize
+    // stack: offset
+    %mload_current(@SEGMENT_MAIN_MEMORY)
+%endmacro
+
+%macro mstore_main
+    // stack: offset, value
+    DUP1
+    // stack: offset, offset, value
+    %update_msize
+    // stack: offset, value
+    %mstore_current(@SEGMENT_MAIN_MEMORY)
 %endmacro

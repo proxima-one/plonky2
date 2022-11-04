@@ -15,7 +15,7 @@ use crate::plonk::vars::EvaluationVars;
 pub(crate) fn verify<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>(
     proof_with_pis: ProofWithPublicInputs<F, C, D>,
     verifier_data: &VerifierOnlyCircuitData<C, D>,
-    common_data: &CommonCircuitData<F, C, D>,
+    common_data: &CommonCircuitData<F, D>,
 ) -> Result<()>
 where
     [(); C::Hasher::HASH_SIZE]:,
@@ -23,7 +23,11 @@ where
     validate_proof_with_pis_shape(&proof_with_pis, common_data)?;
 
     let public_inputs_hash = proof_with_pis.get_public_inputs_hash();
-    let challenges = proof_with_pis.get_challenges(public_inputs_hash, common_data)?;
+    let challenges = proof_with_pis.get_challenges(
+        public_inputs_hash,
+        &verifier_data.circuit_digest,
+        common_data,
+    )?;
 
     verify_with_challenges(
         proof_with_pis.proof,
@@ -43,7 +47,7 @@ pub(crate) fn verify_with_challenges<
     public_inputs_hash: <<C as GenericConfig<D>>::InnerHasher as Hasher<F>>::Hash,
     challenges: ProofChallenges<F, D>,
     verifier_data: &VerifierOnlyCircuitData<C, D>,
-    common_data: &CommonCircuitData<F, C, D>,
+    common_data: &CommonCircuitData<F, D>,
 ) -> Result<()>
 where
     [(); C::Hasher::HASH_SIZE]:,
@@ -61,7 +65,7 @@ where
     let partial_products = &proof.openings.partial_products;
 
     // Evaluate the vanishing polynomial at our challenge point, zeta.
-    let vanishing_polys_zeta = eval_vanishing_poly(
+    let vanishing_polys_zeta = eval_vanishing_poly::<F, C, D>(
         common_data,
         challenges.plonk_zeta,
         vars,
@@ -78,7 +82,7 @@ where
     let quotient_polys_zeta = &proof.openings.quotient_polys;
     let zeta_pow_deg = challenges
         .plonk_zeta
-        .exp_power_of_2(common_data.degree_bits);
+        .exp_power_of_2(common_data.degree_bits());
     let z_h_zeta = zeta_pow_deg - F::Extension::ONE;
     // `quotient_polys_zeta` holds `num_challenges * quotient_degree_factor` evaluations.
     // Each chunk of `quotient_degree_factor` holds the evaluations of `t_0(zeta),...,t_{quotient_degree_factor-1}(zeta)`
