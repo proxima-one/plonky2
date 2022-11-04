@@ -11,4 +11,7 @@ pub mod rlp;
 pub mod ro_memory;
 pub mod rw_memory;
 pub mod stack;
+pub mod slice_check;
+
 pub mod util;
+pub mod gadgets;

@@ -12,6 +12,7 @@ use plonky2::plonk::circuit_builder::CircuitBuilder;
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
 use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
 use crate::{lookup::eval_lookups, stark::Stark};
+use crate::starky2lib::gadgets::{ConstraintConsumerFiltered};
 
 pub mod generation;
 pub mod layout;

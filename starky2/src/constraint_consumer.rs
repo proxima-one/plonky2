@@ -58,29 +58,12 @@ impl<P: PackedField> ConstraintConsumer<P> {
         self.constraint(constraint * self.z_last);
     }
 
-    /// Add one constraint valid on all rows except the first.
-    pub fn constraint_after_first_row(&mut self, constraint: P) {
-        self.constraint(constraint * self.z_first)
-    }
-
     /// Add one constraint on all rows.
     pub fn constraint(&mut self, constraint: P) {
         for (&alpha, acc) in self.alphas.iter().zip(&mut self.constraint_accs) {
             *acc *= alpha;
             *acc += constraint;
         }
-    }
-
-    /// helper for applying a filter to a constraint
-    /// degree = degree(constraint) + degree(filter)
-    pub fn constraint_filtered(&mut self, constraint: P, filter: P) {
-        self.constraint(constraint * filter);
-    }
-
-    /// helper for applying a filter to a constraint
-    /// degree = degree(constraint) + degree(filter)
-    pub fn constraint_transition_filtered(&mut self, constraint: P, filter: P) {
-        self.constraint_transition(constraint * filter);
     }
 
     /// Add one constraint, but first multiply it by a filter such that it will only apply to the
