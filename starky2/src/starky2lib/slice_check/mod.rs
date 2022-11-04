@@ -50,16 +50,34 @@ macro_rules! impl_slice_check_stark_n_channels {
 				let mut curr_row: &SliceCheckRow<P, $n> = vars.local_values.borrow();
 				let mut next_row: &SliceCheckRow<P, $n> = vars.next_values.borrow();
 
-				// count starts at 0
-				yield_constr.constraint_first_row(curr_row.count);
-
 				// slice filters are binary and mutually exclusive
 				yield_constr.mutually_exclusive_binary_check(&curr_row.slice_filters);
 
-				// addresses increment by 1 each row unless one of the filters is set next row
+				// first row is not padding
+				yield_constr.constraint_first_row(curr_row.is_padding_row);
+
+				// if current row is padding, next row is padding
+				yield_constr.constraint_transition_filtered(P::ONES - next_row.is_padding_row, curr_row.is_padding_row);
+
+				// can only transition to padding row if remaining_len is zero
+				yield_constr.constraint_transition_filtered(curr_row.remaining_len, (P::ONES - curr_row.is_padding_row) * next_row.is_padding_row);
+
+				// addresses increment by 1 each row unless we're done with the input 
+				yield_constr.constraint_transition_filtered(next_row.left_addr - curr_row.left_addr - P::ONES, P::ONES - curr_row.done);
+				yield_constr.constraint_transition_filtered(next_row.right_addr - curr_row.right_addr - P::ONES, P::ONES - curr_row.done); 
+
+				// remaining_len decrements by 1 each row unles we're done with the input
+				yield_constr.constraint_transition_filtered(next_row.remaining_len - (curr_row.remaining_len - P::ONES), P::ONES - curr_row.done);
+
+				// remaining_len is zero if it's a padding row
+				yield_constr.constraint_filtered(curr_row.remaining_len, curr_row.is_padding_row);
+
+				// we're done with the input if remaining_len is zero
+				yield_constr.inv_check(curr_row.remaining_len, curr_row.remaining_len_inv, curr_row.done);
+
+				// one of the filters should be set next row iff we're done with the input and next row isn't padding
 				let filter = next_row.slice_filters.iter().copied().sum::<P>();
-				yield_constr.constraint_transition_filtered(next_row.left_addr - curr_row.left_addr - P::ONES, filter);
-				yield_constr.constraint_transition_filtered(next_row.right_addr - curr_row.right_addr - P::ONES, filter);
+				yield_constr.constraint(filter - curr_row.done * (P::ONES - next_row.is_padding_row));
 			}
 
             fn eval_ext_circuit(
@@ -70,24 +88,6 @@ macro_rules! impl_slice_check_stark_n_channels {
             ) {
 				let mut curr_row: &SliceCheckRow<ExtensionTarget<D>, $n> = vars.local_values.borrow();
 				let mut next_row: &SliceCheckRow<ExtensionTarget<D>, $n> = vars.next_values.borrow();
-
-				// count starts at 0
-				yield_constr.constraint_first_row(builder, curr_row.count);
-
-				// slice filters are binary and mutually exclusive
-				yield_constr.mutually_exclusive_binary_check(builder, &curr_row.slice_filters);
-
-				// addresses increment by 1 each row unless one of the filters is set next row
-				let filter = next_row.slice_filters.iter().fold(builder.one_extension(), |acc, &c| builder.add_extension(acc, c));
-
-				let one = builder.one_extension();
-				let c = builder.sub_extension(next_row.left_addr, curr_row.left_addr);
-				let c = builder.sub_extension(c, one);
-				yield_constr.constraint_transition_filtered(builder, c, filter);
-
-				let c = builder.sub_extension(next_row.right_addr, curr_row.right_addr);
-				let c = builder.sub_extension(c, one);
-				yield_constr.constraint_transition_filtered(builder, c, filter);
 			}
 
 			fn constraint_degree(&self) -> usize {
@@ -98,3 +98,80 @@ macro_rules! impl_slice_check_stark_n_channels {
 }
 
 impl_slice_check_stark_n_channels!(1);
+impl_slice_check_stark_n_channels!(2);
+impl_slice_check_stark_n_channels!(3);
+impl_slice_check_stark_n_channels!(4);
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+    use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
+    use plonky2::util::timing::TimingTree;
+	use plonky2::field::types::Field;
+    use rand::Rng;
+
+    use super::*;
+    use crate::config::StarkConfig;
+    use crate::prover::prove_no_ctl;
+    use crate::stark_testing::test_stark_low_degree;
+    use crate::starky2lib::slice_check::generation::SliceCheckRowGenerator;
+    use crate::verifier::verify_stark_proof_no_ctl;
+
+    #[test]
+    fn test_stark_degree() -> Result<()> {
+        const D: usize = 2;
+        type C = PoseidonGoldilocksConfig;
+        type F = <C as GenericConfig<D>>::F;
+        type S = SliceCheckStark<F, D, 1>;
+
+        let stark = S::new();
+        test_stark_low_degree(stark)
+    }
+
+	#[test]
+	fn test_slice_check() -> Result<()> {
+		const D: usize = 2;
+		type C = PoseidonGoldilocksConfig;
+		type F = <C as GenericConfig<D>>::F;
+		type S = SliceCheckStark<F, D, 1>;
+
+		let mut rng = rand::thread_rng();
+
+		let mut slice_values= Vec::new();
+		for _ in 0..5 {
+			let slice_len = rng.gen_range(1..10);
+			let slice_value = (0..slice_len).map(|_| rng.gen()).map(F::from_canonical_u32).collect::<Vec<F>>();
+			slice_values.push(slice_value);
+		}
+
+		let mut left_memory = (0..1000).map(|_| rng.gen()).map(F::from_canonical_u32).collect::<Vec<F>>();
+		let mut right_memory = (0..600).map(|_| rng.gen()).map(F::from_canonical_u32).collect::<Vec<F>>();
+
+		let mut slices = Vec::new();
+		for (i, slice) in slice_values.into_iter().enumerate() {
+			let left_offset = rng.gen_range(i * 100.. (i + 1)*100);
+			let right_offset = rng.gen_range(i * 60.. (i + 1)*60);
+
+			left_memory[left_offset..left_offset + slice.len()].copy_from_slice(&slice);
+			right_memory[right_offset..right_offset + slice.len()].copy_from_slice(&slice);
+
+			slices.push((left_offset, right_offset, slice.len()))
+		}
+
+		let mut generator = SliceCheckRowGenerator::<F, 1>::new(&left_memory, &right_memory);
+
+		for (left_start, right_start, len) in slices {
+			generator.gen_slice_check(left_start, right_start, len, 0);
+		}
+
+		let stark = S::new();
+		let trace = generator.into_polynomial_values();
+		let mut timing = TimingTree::default();
+		let config = StarkConfig::standard_fast_config();
+		let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing)?;
+		verify_stark_proof_no_ctl::<F, C, S, D>(&stark, &proof, &config)?;
+
+		Ok(())
+	}
+
+}

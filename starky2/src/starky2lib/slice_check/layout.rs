@@ -15,9 +15,10 @@ use crate::{
 #[repr(C)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct SliceCheckRow<T: Copy, const NUM_CHANNELS: usize> {
-	pub(crate) count_minus_len_minus_one_inv: T,
-	pub(crate) count: T,
-	pub(crate) len: T,
+    pub(crate) is_padding_row: T,
+    pub(crate) done: T,
+	pub(crate) remaining_len_inv: T,
+    pub(crate) remaining_len: T,
 	pub(crate) left_addr: T,
 	pub(crate) right_addr: T,
 	pub(crate) value: T,

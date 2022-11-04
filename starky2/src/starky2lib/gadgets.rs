@@ -43,7 +43,7 @@ impl<F: RichField + Extendable<D>, const D: usize> RecursiveConstraintConsumerFi
 
 pub trait Starky2ConstraintConsumer<P: PackedField> {
 	fn inv_check(&mut self, value: P, inv: P, binary_flag: P);
-	fn eval_inv_check_inverted(&mut self, value: P, inv: P, binary_flag: P);
+	fn inv_check_inverted(&mut self, value: P, inv: P, binary_flag: P);
 	fn binary_check(&mut self, value: P);
 	fn mutually_exclusive_binary_check(&mut self, values: &[P]);
 
@@ -60,7 +60,7 @@ impl<P: PackedField> Starky2ConstraintConsumer<P> for ConstraintConsumer<P> {
 		self.constraint_filtered(P::ONES - prod, P::ONES - binary_flag);
 	}
 
-	fn eval_inv_check_inverted(&mut self, value: P, inv: P, binary_flag: P) {
+	fn inv_check_inverted(&mut self, value: P, inv: P, binary_flag: P) {
 		self.inv_check(value, inv, P::ONES - binary_flag);
 	}
 
@@ -80,7 +80,7 @@ impl<P: PackedField> Starky2ConstraintConsumer<P> for ConstraintConsumer<P> {
 
 pub trait RecursiveStarky2ConstraintConsumer<F: RichField + Extendable<D>, const D: usize> {
 	fn inv_check(&mut self, builder: &mut CircuitBuilder<F, D>, value: ExtensionTarget<D>, inv: ExtensionTarget<D>, binary_flag: ExtensionTarget<D>);
-	fn eval_inv_check_inverted(&mut self, builder: &mut CircuitBuilder<F, D>, value: ExtensionTarget<D>, inv: ExtensionTarget<D>, binary_flag: ExtensionTarget<D>);
+	fn inv_check_inverted(&mut self, builder: &mut CircuitBuilder<F, D>, value: ExtensionTarget<D>, inv: ExtensionTarget<D>, binary_flag: ExtensionTarget<D>);
 	fn binary_check(&mut self, builder: &mut CircuitBuilder<F, D>, value: ExtensionTarget<D>);
 	fn mutually_exclusive_binary_check(&mut self, builder: &mut CircuitBuilder<F, D>, values: &[ExtensionTarget<D>]);
 
@@ -100,7 +100,7 @@ impl<F: RichField + Extendable<D>, const D: usize> RecursiveStarky2ConstraintCon
 		self.constraint_filtered(builder, c, f);
 	}
 
-	fn eval_inv_check_inverted(&mut self, builder: &mut CircuitBuilder<F, D>, value: ExtensionTarget<D>, inv: ExtensionTarget<D>, binary_flag: ExtensionTarget<D>) {
+	fn inv_check_inverted(&mut self, builder: &mut CircuitBuilder<F, D>, value: ExtensionTarget<D>, inv: ExtensionTarget<D>, binary_flag: ExtensionTarget<D>) {
 		let inverted_flag = builder.add_const_extension(binary_flag, -F::ONE);
 		self.inv_check(builder, value, inv, inverted_flag);
 	}
