@@ -10,8 +10,8 @@ pub mod idx_keyed_trie;
 pub mod rlp;
 pub mod ro_memory;
 pub mod rw_memory;
-pub mod stack;
 pub mod slice_check;
+pub mod stack;
 
-pub mod util;
 pub mod gadgets;
+pub mod util;

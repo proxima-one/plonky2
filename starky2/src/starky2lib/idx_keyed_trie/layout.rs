@@ -15,8 +15,7 @@ use crate::{
 #[repr(C)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct IdxKeyedTrieRow<T: Copy> {
-	pub(crate) idx: T 
-	// TODO
+    pub(crate) idx: T, // TODO
 }
 
 pub(crate) const IDX_KEYED_TRIE_NUM_COLS: usize = size_of::<IdxKeyedTrieRow<u8>>();

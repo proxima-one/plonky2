@@ -10,9 +10,9 @@ use plonky2::hash::hash_types::RichField;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
+use crate::starky2lib::gadgets::ConstraintConsumerFiltered;
 use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
 use crate::{lookup::eval_lookups, stark::Stark};
-use crate::starky2lib::gadgets::{ConstraintConsumerFiltered};
 
 pub mod generation;
 pub mod layout;
