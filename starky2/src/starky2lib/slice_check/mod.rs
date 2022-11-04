@@ -4,12 +4,18 @@ mod generation;
 use plonky2::field::{
 	types::PrimeField64,
 	polynomial::PolynomialValues,
-	extension::{Extendable, FieldExtension}
+	extension::{Extendable, FieldExtension},
+	packed::{PackedField},
 };
 use plonky2::hash::hash_types::RichField;
+use plonky2::plonk::circuit_builder::CircuitBuilder;
+use plonky2::iop::ext_target::ExtensionTarget;
 use core::marker::PhantomData;
 use core::borrow::Borrow;
+
+use layout::*;
 use crate::stark::Stark;
+use crate::starky2lib::gadgets::{ConstraintConsumerFiltered, RecursiveConstraintConsumerFiltered, Starky2ConstraintConsumer, RecursiveStarky2ConstraintConsumer};
 use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
 
@@ -41,8 +47,8 @@ macro_rules! impl_slice_check_stark_n_channels {
                 FE: FieldExtension<D2, BaseField = F>,
                 P: PackedField<Scalar = FE>,
             {
-				let mut curr_row: &SliceCheckRow<P> = vars.local_values.borrow();
-				let mut next_row: &SliceCheckRow<P> = vars.next_local_values.borrow();
+				let mut curr_row: &SliceCheckRow<P, $n> = vars.local_values.borrow();
+				let mut next_row: &SliceCheckRow<P, $n> = vars.next_values.borrow();
 
 				// count starts at 0
 				yield_constr.constraint_first_row(curr_row.count);
@@ -51,7 +57,7 @@ macro_rules! impl_slice_check_stark_n_channels {
 				yield_constr.mutually_exclusive_binary_check(&curr_row.slice_filters);
 
 				// addresses increment by 1 each row unless one of the filters is set next row
-				let filter = next_row.slice_filters.iter().sum::<P>();
+				let filter = next_row.slice_filters.iter().copied().sum::<P>();
 				yield_constr.constraint_transition_filtered(next_row.left_addr - curr_row.left_addr - P::ONES, filter);
 				yield_constr.constraint_transition_filtered(next_row.right_addr - curr_row.right_addr - P::ONES, filter);
 			}
@@ -62,25 +68,33 @@ macro_rules! impl_slice_check_stark_n_channels {
                 vars: StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
                 yield_constr: &mut RecursiveConstraintConsumer<F, D>,
             ) {
-				let mut curr_row: &SliceCheckRow<ExtensionTarget<D>> = vars.local_values.borrow();
-				let mut next_row: &SliceCheckRow<ExtensionTarget<D>> = vars.next_local_values.borrow();
+				let mut curr_row: &SliceCheckRow<ExtensionTarget<D>, $n> = vars.local_values.borrow();
+				let mut next_row: &SliceCheckRow<ExtensionTarget<D>, $n> = vars.next_values.borrow();
 
 				// count starts at 0
-				yield_constr.constraint_first_row(&mut builder, curr_row.count);
+				yield_constr.constraint_first_row(builder, curr_row.count);
 
 				// slice filters are binary and mutually exclusive
-				yield_constr.mutually_exclusive_binary_check(&mut builder, &curr_row.slice_filters);
+				yield_constr.mutually_exclusive_binary_check(builder, &curr_row.slice_filters);
 
 				// addresses increment by 1 each row unless one of the filters is set next row
-				let filter = next_row.slice_filters.iter().sum::<ExtensionTarget<D>>();
-				yield_constr.constraint_transition_filtered(&mut builder, next_row.left_addr - curr_row.left_addr - ExtensionTarget::<D>::ONES, filter);
-				yield_constr.constraint_transition_filtered(&mut builder, next_row.right_addr - curr_row.right_addr - ExtensionTarget::<D>::ONES, filter);
+				let filter = next_row.slice_filters.iter().fold(builder.one_extension(), |acc, &c| builder.add_extension(acc, c));
+
+				let one = builder.one_extension();
+				let c = builder.sub_extension(next_row.left_addr, curr_row.left_addr);
+				let c = builder.sub_extension(c, one);
+				yield_constr.constraint_transition_filtered(builder, c, filter);
+
+				let c = builder.sub_extension(next_row.right_addr, curr_row.right_addr);
+				let c = builder.sub_extension(c, one);
+				yield_constr.constraint_transition_filtered(builder, c, filter);
 			}
 
-			fn constraint_degree() -> usize {
+			fn constraint_degree(&self) -> usize {
 				3
 			}
 		}
 	};
 }
 
+impl_slice_check_stark_n_channels!(1);
