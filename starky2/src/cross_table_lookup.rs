@@ -1,3 +1,8 @@
+/// An implementation of Hermez's "domain-free" cross-table lookup
+/// this differes from the main cross-table lookup in `evm` where
+/// the "looking" table does not have to be at least as long as the "looked" table
+/// paper: https://eprint.iacr.org/2022/1050
+
 use std::iter;
 
 use anyhow::{anyhow, ensure, Result};
