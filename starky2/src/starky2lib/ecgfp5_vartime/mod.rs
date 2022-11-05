@@ -1,4 +1,5 @@
-/// A STARK that proves variable-time ECGFP5 operations
+/// A STARK that proves variable-time ECGFP5 operations (point additions and 32-bit scalar multiplications).
+
 use std::array;
 use std::borrow::Borrow;
 use std::marker::PhantomData;

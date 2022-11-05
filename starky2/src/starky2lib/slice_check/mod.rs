@@ -1,3 +1,5 @@
+/// STARK that checks two slices of two different memories have the same contents
+
 mod generation;
 mod layout;
 

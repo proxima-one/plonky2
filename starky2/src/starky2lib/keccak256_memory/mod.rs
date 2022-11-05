@@ -1,5 +1,6 @@
+/// STARK that does keccak256 by looking up keccak-f and reading input from a read-only memory
+
 pub mod generation;
-/// STARK that does keccak256 by looking up keccak-f. Does not check padding - padding must be applied by the 'calling' STARK
 pub mod layout;
 
 use std::borrow::Borrow;

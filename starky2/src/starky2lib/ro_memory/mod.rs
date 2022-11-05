@@ -1,3 +1,6 @@
+/// STARK that checks the access trace of a read-only memory
+/// this can be thought of as a form of "offline memory checking"
+
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 

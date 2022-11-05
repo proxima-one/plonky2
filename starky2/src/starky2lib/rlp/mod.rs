@@ -1,7 +1,8 @@
+/// a STARK for the ethereum RLP-encoding of recursive structured data types (i.e. lists and strings) using two memories and a call stack
+
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 
-/// STARK that checks rlp encodings using two memories
 use plonky2::field::{
     extension::{Extendable, FieldExtension},
     packed::PackedField,
