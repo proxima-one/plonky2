@@ -1,9 +1,10 @@
+#![allow(dead_code)]
+
 /// STARK that does keccak256 by looking up keccak-f and reading input from a read-only memory
 
 pub mod generation;
 pub mod layout;
 
-use std::borrow::Borrow;
 use std::marker::PhantomData;
 
 use layout::*;
@@ -15,7 +16,7 @@ use plonky2::hash::hash_types::RichField;
 
 use crate::permutation::PermutationPair;
 use crate::{
-    constraint_consumer::ConstraintConsumer, lookup::eval_lookups, stark::Stark,
+    constraint_consumer::ConstraintConsumer, stark::Stark,
     vars::StarkEvaluationVars,
 };
 
@@ -31,29 +32,32 @@ impl<F: RichField + Extendable<D>, const D: usize> Keccak256SpongeStark<F, D> {
     }
 }
 
+impl<F: RichField + Extendable<D>, const D: usize> Default for Keccak256SpongeStark<F, D> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Keccak256SpongeStark<F, D> {
     const COLUMNS: usize = KECCAK_256_STACK_NUM_COLS;
     const PUBLIC_INPUTS: usize = KECCAK_256_STACK_NUM_PIS;
 
     fn eval_packed_generic<FE, P, const D2: usize>(
         &self,
-        vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
-        yield_constr: &mut ConstraintConsumer<P>,
+        _vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        _yield_constr: &mut ConstraintConsumer<P>,
     ) where
         FE: FieldExtension<D2, BaseField = F>,
         P: PackedField<Scalar = FE>,
     {
-        let curr_row: &Keccak256StackRow<P> = vars.local_values.borrow();
-        let next_row: &Keccak256StackRow<P> = vars.next_values.borrow();
-
         todo!()
     }
 
     fn eval_ext_circuit(
         &self,
-        builder: &mut plonky2::plonk::circuit_builder::CircuitBuilder<F, D>,
-        vars: crate::vars::StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
-        yield_constr: &mut crate::constraint_consumer::RecursiveConstraintConsumer<F, D>,
+        _builder: &mut plonky2::plonk::circuit_builder::CircuitBuilder<F, D>,
+        _vars: crate::vars::StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        _yield_constr: &mut crate::constraint_consumer::RecursiveConstraintConsumer<F, D>,
     ) {
         todo!()
     }

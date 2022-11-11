@@ -1,14 +1,12 @@
 use plonky2::field::{
     extension::Extendable,
     packed::PackedField,
-    types::{Field, PrimeField64},
 };
 use plonky2::hash::hash_types::RichField;
 use plonky2::iop::ext_target::ExtensionTarget;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
-use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
 
 pub trait ConstraintConsumerFiltered<P: PackedField> {
     fn constraint_filtered(&mut self, c: P, filter: P);

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use itertools::Itertools;
 use maybe_rayon::*;
 use plonky2::field::extension::{Extendable, FieldExtension};
@@ -267,7 +269,8 @@ pub struct StarkOpeningSetTarget<const D: usize> {
 }
 
 impl<const D: usize> StarkOpeningSetTarget<D> {
-    pub(crate) fn to_fri_openings(&self, zero: Target) -> FriOpeningsTarget<D> {
+    #[allow(dead_code)]
+    pub(crate) fn to_fri_openings(&self, _zero: Target) -> FriOpeningsTarget<D> {
         let zeta_batch = FriOpeningBatchTarget {
             values: self
                 .local_values

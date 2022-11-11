@@ -112,6 +112,15 @@ where
     }
 }
 
+impl<T: Copy + Default, const NUM_CHANNELS: usize> Default for Ecgfp5Row<T, NUM_CHANNELS>
+where
+    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Copy, const NUM_CHANNELS: usize> From<[T; ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]>
     for Ecgfp5Row<T, NUM_CHANNELS>
 where

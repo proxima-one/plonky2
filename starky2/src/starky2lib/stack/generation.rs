@@ -1,6 +1,5 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use arrayref::array_ref;
 use itertools::Itertools;
 use plonky2::field::{
     polynomial::PolynomialValues,
@@ -24,6 +23,15 @@ where
 pub enum StackOp<F: Field> {
     Push(F),
     Pop(F),
+}
+
+impl<F: PrimeField64, const NUM_CHANNELS: usize> Default for StackGenerator<F, NUM_CHANNELS>
+where
+    [(); STACK_NUM_COLS_BASE + NUM_CHANNELS]:,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<F: PrimeField64, const NUM_CHANNELS: usize> StackGenerator<F, NUM_CHANNELS>
@@ -168,7 +176,7 @@ where
         values
     }
 
-    pub fn into_polynomial_values(mut self) -> Vec<PolynomialValues<F>> {
+    pub fn into_polynomial_values(self) -> Vec<PolynomialValues<F>> {
         self.into_polynomial_values_of_target_degree(0)
     }
 }

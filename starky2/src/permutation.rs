@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Permutation arguments.
 
 use itertools::Itertools;

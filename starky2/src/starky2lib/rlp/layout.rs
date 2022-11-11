@@ -7,8 +7,6 @@ use std::{
 use memoffset::{offset_of, span_of};
 
 use crate::{
-    cross_table_lookup::{CtlColSet, TableID},
-    permutation::PermutationPair,
     util::transmute_no_compile_time_size_checks,
 };
 
@@ -175,6 +173,12 @@ pub(crate) const RLP_NUM_COLS: usize = size_of::<RlpRow<u8>>();
 impl<T: Copy + Default> RlpRow<T> {
     pub fn new() -> Self {
         [T::default(); RLP_NUM_COLS].into()
+    }
+}
+
+impl<T: Copy + Default> Default for RlpRow<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

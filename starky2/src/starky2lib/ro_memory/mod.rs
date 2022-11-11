@@ -35,6 +35,12 @@ impl<F: RichField + Extendable<D>, const D: usize, const NUM_CHANNELS: usize>
     }
 }
 
+impl<F: RichField + Extendable<D>, const D: usize> Default for RoMemoryStark<F, D, 0> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 macro_rules! impl_ro_memory_stark_for_n_channels {
     ($channels:expr) => {
         impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D>

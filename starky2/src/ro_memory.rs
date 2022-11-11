@@ -14,7 +14,7 @@ use plonky2::{
 
 use crate::{
     config::StarkConfig, constraint_consumer::ConstraintConsumer,
-    proof::StarkProofWithPublicInputs, stark::Stark, vars::StarkEvaluationVars,
+    stark::Stark, vars::StarkEvaluationVars,
 };
 
 #[derive(Debug, Clone)]

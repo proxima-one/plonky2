@@ -1,12 +1,10 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use arrayref::array_ref;
 use itertools::Itertools;
 use plonky2::field::{
     polynomial::PolynomialValues,
     types::{Field, PrimeField64},
 };
-use plonky2_util::log2_ceil;
 
 use super::layout::*;
 use crate::util::trace_rows_to_poly_values;
@@ -16,6 +14,15 @@ where
     [(); RO_MEMORY_NUM_COLS_BASE + NUM_CHANNELS]:,
 {
     trace: Vec<[F; RO_MEMORY_NUM_COLS_BASE + NUM_CHANNELS]>,
+}
+
+impl<F: PrimeField64, const NUM_CHANNELS: usize> Default for RoMemoryStarkGenerator<F, NUM_CHANNELS>
+where
+    [(); RO_MEMORY_NUM_COLS_BASE + NUM_CHANNELS]:,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<F: PrimeField64, const NUM_CHANNELS: usize> RoMemoryStarkGenerator<F, NUM_CHANNELS>

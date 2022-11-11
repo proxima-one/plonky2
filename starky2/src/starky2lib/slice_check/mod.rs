@@ -1,7 +1,7 @@
 /// STARK that checks two slices of two different memories have the same contents
 
-mod generation;
-mod layout;
+pub mod generation;
+pub mod layout;
 
 use core::borrow::Borrow;
 use core::marker::PhantomData;
@@ -10,18 +10,15 @@ use layout::*;
 use plonky2::field::{
     extension::{Extendable, FieldExtension},
     packed::PackedField,
-    polynomial::PolynomialValues,
-    types::PrimeField64,
 };
 use plonky2::hash::hash_types::RichField;
-use plonky2::iop::ext_target::ExtensionTarget;
 use plonky2::plonk::circuit_builder::CircuitBuilder;
 
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
 use crate::stark::Stark;
 use crate::starky2lib::gadgets::{
-    ConstraintConsumerFiltered, RecursiveConstraintConsumerFiltered,
-    RecursiveStarky2ConstraintConsumer, Starky2ConstraintConsumer,
+    ConstraintConsumerFiltered,
+    Starky2ConstraintConsumer,
 };
 use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
 
@@ -37,6 +34,14 @@ impl<F: RichField + Extendable<D>, const D: usize, const NUM_CHANNELS: usize>
         SliceCheckStark {
             _phantom: PhantomData,
         }
+    }
+}
+
+impl<F: RichField + Extendable<D>, const D: usize> Default
+    for SliceCheckStark<F, D, 0>
+{
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -56,8 +61,8 @@ macro_rules! impl_slice_check_stark_n_channels {
                 FE: FieldExtension<D2, BaseField = F>,
                 P: PackedField<Scalar = FE>,
             {
-                let mut curr_row: &SliceCheckRow<P, $n> = vars.local_values.borrow();
-                let mut next_row: &SliceCheckRow<P, $n> = vars.next_values.borrow();
+                let curr_row: &SliceCheckRow<P, $n> = vars.local_values.borrow();
+                let next_row: &SliceCheckRow<P, $n> = vars.next_values.borrow();
 
                 // slice filters are binary and mutually exclusive
                 yield_constr.mutually_exclusive_binary_check(&curr_row.slice_filters);
@@ -111,14 +116,11 @@ macro_rules! impl_slice_check_stark_n_channels {
 
             fn eval_ext_circuit(
                 &self,
-                builder: &mut CircuitBuilder<F, D>,
-                vars: StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
-                yield_constr: &mut RecursiveConstraintConsumer<F, D>,
+                _builder: &mut CircuitBuilder<F, D>,
+                _vars: StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+                _yield_constr: &mut RecursiveConstraintConsumer<F, D>,
             ) {
-                let mut curr_row: &SliceCheckRow<ExtensionTarget<D>, $n> =
-                    vars.local_values.borrow();
-                let mut next_row: &SliceCheckRow<ExtensionTarget<D>, $n> =
-                    vars.next_values.borrow();
+                todo!()
             }
 
             fn constraint_degree(&self) -> usize {

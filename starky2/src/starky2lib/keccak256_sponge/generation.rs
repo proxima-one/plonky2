@@ -21,6 +21,12 @@ pub struct Keccak256SpongeGenerator<F: PrimeField64> {
     block_idx: u16,
 }
 
+impl<F: PrimeField64> Default for Keccak256SpongeGenerator<F> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
     pub fn new() -> Self {
         Self {
@@ -71,7 +77,7 @@ impl<F: PrimeField64> Keccak256SpongeGenerator<F> {
         cols
     }
 
-    fn set_permuted_cols(cols: &mut Vec<PolynomialValues<F>>) {
+    fn set_permuted_cols(cols: &mut [PolynomialValues<F>]) {
         let pairs = [
             (block_idx_bytes_start_col(), u8_lut_col()),
             (block_idx_bytes_start_col() + 1, u7_lut_col()),

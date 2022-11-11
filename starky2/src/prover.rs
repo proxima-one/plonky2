@@ -19,7 +19,7 @@ use plonky2_util::{log2_ceil, log2_strict};
 use crate::config::StarkConfig;
 use crate::constraint_consumer::ConstraintConsumer;
 use crate::cross_table_lookup::{
-    CtlChallenge, CtlCheckVars, CtlColSet, CtlLinearCombChallenge, CtlTableData, TableID,
+    CtlChallenge, CtlCheckVars, CtlColSet, CtlLinearCombChallenge, CtlTableData,
 };
 use crate::permutation::compute_permutation_z_polys;
 use crate::permutation::get_n_permutation_challenge_sets;
@@ -215,9 +215,9 @@ where
         );
 
         let permutation_z_polys = compute_permutation_z_polys::<F, C, S, D>(
-            &stark,
+            stark,
             config,
-            &trace_poly_values,
+            trace_poly_values,
             &permutation_challenge_sets,
         );
 
@@ -283,7 +283,7 @@ where
         &permutation_zs_commitment_challenges,
         &ctl_zs_commitment_challenges_cols,
         public_inputs,
-        alphas.clone(),
+        alphas,
         degree_bits,
         config,
     );
@@ -476,7 +476,6 @@ where
             let i_range = i_start..i_start + P::WIDTH;
 
             let x = *P::from_slice(&coset[i_range.clone()]);
-            let z_first = x - first;
             let z_last = x - last;
             let lagrange_basis_first = *P::from_slice(&lagrange_first.values[i_range.clone()]);
             let lagrange_basis_last = *P::from_slice(&lagrange_last.values[i_range]);
@@ -484,7 +483,6 @@ where
             let mut consumer = ConstraintConsumer::new(
                 alphas.clone(),
                 z_last,
-                z_first,
                 lagrange_basis_first,
                 lagrange_basis_last,
             );

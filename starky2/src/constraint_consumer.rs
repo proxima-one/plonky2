@@ -19,9 +19,6 @@ pub struct ConstraintConsumer<P: PackedField> {
     /// The evaluation of `X - g^(n-1)`.
     z_last: P,
 
-    /// The evaluation of `X - g^0`.
-    z_first: P,
-
     /// The evaluation of the Lagrange basis polynomial which is nonzero at the point associated
     /// with the first trace row, and zero at other points in the subgroup.
     lagrange_basis_first: P,
@@ -35,14 +32,12 @@ impl<P: PackedField> ConstraintConsumer<P> {
     pub fn new(
         alphas: Vec<P::Scalar>,
         z_last: P,
-        z_first: P,
         lagrange_basis_first: P,
         lagrange_basis_last: P,
     ) -> Self {
         Self {
             constraint_accs: vec![P::ZEROS; alphas.len()],
             alphas,
-            z_first,
             z_last,
             lagrange_basis_first,
             lagrange_basis_last,

@@ -42,6 +42,12 @@ enum RlpOpcode {
     Halt,
 }
 
+impl<F: PrimeField64> Default for RlpStarkGenerator<F> {
+    fn default() -> Self {
+        Self::new() 
+    }
+}
+
 impl<F: PrimeField64> RlpStarkGenerator<F> {
     pub fn new() -> Self {
         Self {
@@ -64,7 +70,7 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
 
     pub fn gen_input_memory(&mut self, items: &[RlpItem]) {
         let vals = RlpItem::items_to_memory_values::<F>(items);
-        self.input_memory = vals.clone();
+        self.input_memory = vals;
     }
 
     // returns an trace of accesses to be used to generate an ro-memory STARK
@@ -466,7 +472,7 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
                     let first_val = self.output_stack.last().unwrap();
                     let first_val = first_val.to_canonical_u64() as u8;
                     let prefix = compute_str_prefix(self.count, first_val);
-                    if prefix.len() == 0 {
+                    if prefix.is_empty() {
                         row.rc_127 = F::from_canonical_u8(first_val);
                     }
 
@@ -521,7 +527,7 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
                         );
                         // push op_id to the output stack
                         self.push_output_stack(
-                            F::from_canonical_u64(self.op_id as u64),
+                            F::from_canonical_u64(self.op_id),
                             &mut row,
                             1,
                         );
@@ -614,7 +620,7 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
     }
 
     fn gen_output_stack_addrs(&mut self, row: &mut RlpRow<F>) {
-        if self.stark_trace.len() == 0 {
+        if self.stark_trace.is_empty() {
             row.output_stack[0][0] = F::ZERO;
         } else {
             let prev_row = self.stark_trace.last().unwrap();
@@ -628,7 +634,7 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
     }
 
     fn gen_stack_timestamps(&mut self, row: &mut RlpRow<F>) {
-        if self.stark_trace.len() == 0 {
+        if self.stark_trace.is_empty() {
             row.call_stack[0][2] = F::ONE;
         } else {
             let prev_row = self.stark_trace.last().unwrap();
@@ -826,14 +832,14 @@ impl RlpItem {
     pub fn try_as_byte_str(&self) -> Result<Vec<u8>, &'static str> {
         match self {
             RlpItem::Str(s) => Ok(s.clone()),
-            _ => Err(&"not a byte string"),
+            _ => Err("not a byte string"),
         }
     }
 
     pub fn try_as_list(&self) -> Result<Vec<RlpItem>, &'static str> {
         match self {
             RlpItem::List(l) => Ok(l.iter().map(|x| *x.clone()).collect()),
-            _ => Err(&"not a list"),
+            _ => Err("not a list"),
         }
     }
 }
@@ -842,7 +848,7 @@ impl Encodable for RlpItem {
     fn rlp_append(&self, s: &mut RlpStream) {
         match self {
             RlpItem::List(items) => {
-                s.append_list::<Self, Box<Self>>(&items);
+                s.append_list::<Self, Box<Self>>(items);
             }
             RlpItem::Str(buf) => {
                 buf.rlp_append(s);

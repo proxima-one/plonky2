@@ -180,7 +180,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             .chain(
                 ctl_zs_oracle_info
                     .as_ref()
-                    .map(|(oracle, _)| oracle.clone()),
+                    .map(|(oracle, _)| *oracle),
             )
             .chain(std::iter::once(quotient_oracle))
             .collect_vec();
@@ -297,7 +297,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
             .chain(
                 ctl_zs_oracle_info
                     .as_ref()
-                    .map(|(oracle, _)| oracle.clone()),
+                    .map(|(oracle, _)| *oracle),
             )
             .chain(std::iter::once(quotient_oracle))
             .collect_vec();

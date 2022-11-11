@@ -107,7 +107,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Tree5Stark<F,
         let is_flag_transition_i = |i| level_selectors[i] * next_level_selectors[i + 1];
         let flag_transition_i = |i| level_selectors[i] - next_level_selectors[i + 1];
         let is_transition: P = (0..TREE_DEPTH - 1)
-            .map(|level| is_flag_transition_i(level))
+            .map(is_flag_transition_i)
             .sum();
         yield_constr.constraint_transition(curr_row[LEVEL_DONE_FLAG] - is_transition);
 

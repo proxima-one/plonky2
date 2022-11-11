@@ -36,6 +36,12 @@ impl<F: RichField + Extendable<D>, const D: usize, const NUM_CHANNELS: usize>
     }
 }
 
+impl<F: RichField + Extendable<D>, const D: usize> Default for StackStark<F, D, 0> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 macro_rules! impl_stack_stark_for_n_channels {
     ($channels:expr) => {
         impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D>

@@ -5,7 +5,6 @@ use std::{
 
 use crate::{
     cross_table_lookup::{CtlColSet, TableID},
-    permutation::PermutationPair,
     util::transmute_no_compile_time_size_checks,
 };
 
@@ -69,6 +68,15 @@ where
 {
     pub fn new() -> Self {
         [T::default(); STACK_NUM_COLS_BASE + NUM_CHANNELS].into()
+    }
+}
+
+impl<T: Copy + Default, const NUM_CHANNELS: usize> Default for StackRow<T, NUM_CHANNELS>
+where
+    [(); STACK_NUM_COLS_BASE + NUM_CHANNELS]:,
+{
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -28,6 +28,16 @@ where
     }
 }
 
+impl<T: Copy + Default, const NUM_CHANNELS: usize> Default
+    for RoMemoryRow<T, NUM_CHANNELS>
+where
+    [(); RO_MEMORY_NUM_COLS_BASE + NUM_CHANNELS]:,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Copy, const NUM_CHANNELS: usize> From<[T; RO_MEMORY_NUM_COLS_BASE + NUM_CHANNELS]>
     for RoMemoryRow<T, NUM_CHANNELS>
 where

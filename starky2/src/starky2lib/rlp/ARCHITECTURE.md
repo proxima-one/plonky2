@@ -31,7 +31,7 @@ The "output stack" is actually a read-only memory. But, semantically, we're usin
 * len: len of rlp-encoded string (number of elements to pop)
 * op_id: `i`
 
-The entry at the top of the stack has the highest `1op_id` and the entry at the bottom should have `op_id = 0`.
+The entry at the top of the stack has the highest `op_id` and the entry at the bottom should have `op_id = 0`.
 
 ### call stack layout
 

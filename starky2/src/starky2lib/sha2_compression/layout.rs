@@ -1,4 +1,3 @@
-pub(crate) const NUM_PIS: usize = 0;
 pub(crate) const NUM_COLS: usize = LAST_COL + 1;
 pub(crate) const NUM_STEPS_PER_HASH: usize = 65;
 

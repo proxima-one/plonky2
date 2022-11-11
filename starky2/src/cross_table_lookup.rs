@@ -1,13 +1,12 @@
+#![allow(clippy::all)]
+
 /// An implementation of Hermez's "domain-free" cross-table lookup
 /// this differes from the main cross-table lookup in `evm` where
 /// the "looking" table does not have to be at least as long as the "looked" table
 /// paper: https://eprint.iacr.org/2022/1050
 
-use std::iter;
-
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{anyhow, Result};
 use itertools::Itertools;
-use maybe_rayon::*;
 use plonky2::field::extension::{Extendable, FieldExtension};
 use plonky2::field::packed::PackedField;
 use plonky2::field::polynomial::PolynomialValues;
@@ -79,9 +78,9 @@ impl From<usize> for TableID {
     }
 }
 
-impl Into<usize> for TableID {
-    fn into(self) -> usize {
-        self.0
+impl From<TableID> for usize {
+    fn from(id: TableID) -> Self {
+        id.0
     }
 }
 
@@ -386,22 +385,22 @@ where
         }
 
         let instances_by_table = instances_by_table
-            .into_iter()
-            .map(|(looking, looked)| looking.into_iter().chain(looked.into_iter()));
+            .iter()
+            .map(|(looking, looked)| looking.iter().chain(looked.iter()));
 
         instances_by_table
             .zip(first_last_zs.zip(ctl_zs))
             .zip(
                 linear_comb_challenges_by_table
-                    .into_iter()
-                    .zip(ctl_challenges_by_table.into_iter()),
+                    .iter()
+                    .zip(ctl_challenges_by_table.iter()),
             )
             .map(
                 |(
                     (instances, ((first_zs, last_zs), ctl_zs)),
                     (linear_comb_challenges, ctl_challenges),
                 )| {
-                    let cols = instances.cloned().collect_vec();
+                    let cols = instances.map(|&x| x.clone()).collect_vec();
                     let (local_zs, next_zs) = ctl_zs.unzip();
 
                     let challenges = ctl_challenges.clone();

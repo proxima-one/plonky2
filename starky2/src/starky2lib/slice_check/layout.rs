@@ -1,14 +1,9 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     mem::{size_of, transmute},
-    ops::Range,
 };
 
-use memoffset::{offset_of, span_of};
-
 use crate::{
-    cross_table_lookup::{CtlColSet, TableID},
-    permutation::PermutationPair,
     util::transmute_no_compile_time_size_checks,
 };
 
@@ -34,6 +29,16 @@ where
 {
     pub fn new() -> Self {
         [T::default(); SLICE_CHECK_NUM_COLS_BASE + NUM_CHANNELS].into()
+    }
+}
+
+impl<T: Copy + Default, const NUM_CHANNELS: usize> Default
+    for SliceCheckRow<T, NUM_CHANNELS>
+where
+    [T; SLICE_CHECK_NUM_COLS_BASE + NUM_CHANNELS]:,
+{
+    fn default() -> Self {
+        Self::new()
     }
 }
 

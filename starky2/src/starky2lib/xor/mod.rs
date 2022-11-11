@@ -1,3 +1,5 @@
+#![allow(clippy::reversed_empty_ranges)]
+
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 
@@ -34,6 +36,14 @@ impl<F: RichField + Extendable<D>, const D: usize, const N: usize, const NUM_CHA
         XorStark {
             _phantom: PhantomData,
         }
+    }
+}
+
+impl<F: RichField + Extendable<D>, const D: usize, const N: usize, const NUM_CHANNELS: usize>
+    Default for XorStark<F, D, N, NUM_CHANNELS>
+{
+    fn default() -> Self {
+        Self::new()
     }
 }
 

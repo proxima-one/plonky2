@@ -14,7 +14,7 @@ use plonky2::hash::hash_types::RichField;
 
 use crate::permutation::PermutationPair;
 use crate::{
-    constraint_consumer::ConstraintConsumer, lookup::eval_lookups, stark::Stark,
+    constraint_consumer::ConstraintConsumer, stark::Stark,
     vars::StarkEvaluationVars,
 };
 
@@ -27,6 +27,12 @@ impl<F: RichField + Extendable<D>, const D: usize> Keccak256SpongeStark<F, D> {
         Self {
             _phantom: PhantomData,
         }
+    }
+}
+
+impl<F: RichField + Extendable<D>, const D: usize> Default for Keccak256SpongeStark<F, D> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -192,9 +198,9 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Keccak256Spon
 
     fn eval_ext_circuit(
         &self,
-        builder: &mut plonky2::plonk::circuit_builder::CircuitBuilder<F, D>,
-        vars: crate::vars::StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
-        yield_constr: &mut crate::constraint_consumer::RecursiveConstraintConsumer<F, D>,
+        _builder: &mut plonky2::plonk::circuit_builder::CircuitBuilder<F, D>,
+        _vars: crate::vars::StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        _yield_constr: &mut crate::constraint_consumer::RecursiveConstraintConsumer<F, D>,
     ) {
         todo!()
     }

@@ -1,6 +1,6 @@
 use plonky2::field::{
     polynomial::PolynomialValues,
-    types::{Field, PrimeField64},
+    types::PrimeField64
 };
 use plonky2_util::log2_ceil;
 
@@ -12,6 +12,16 @@ where
     [(); 3 + 2 * N + NUM_CHANNELS]:,
 {
     trace: Vec<[F; 3 + 2 * N + NUM_CHANNELS]>,
+}
+
+impl<F: PrimeField64, const N: usize, const NUM_CHANNELS: usize> Default
+    for XorGenerator<F, N, NUM_CHANNELS>
+where
+    [(); 3 + 2 * N + NUM_CHANNELS]:,
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<F: PrimeField64, const N: usize, const NUM_CHANNELS: usize> XorGenerator<F, N, NUM_CHANNELS>

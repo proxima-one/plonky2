@@ -32,14 +32,20 @@ impl<F: RichField + Extendable<D>, const D: usize> RlpStark<F, D> {
     }
 }
 
+impl<F: RichField + Extendable<D>, const D: usize> Default for RlpStark<F, D> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for RlpStark<F, D> {
     const COLUMNS: usize = layout::RLP_NUM_COLS;
     const PUBLIC_INPUTS: usize = 0;
 
     fn eval_packed_generic<FE, P, const D2: usize>(
         &self,
-        vars: crate::vars::StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
-        yield_constr: &mut crate::constraint_consumer::ConstraintConsumer<P>,
+        vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        yield_constr: &mut ConstraintConsumer<P>,
     ) where
         FE: FieldExtension<D2, BaseField = F>,
         P: PackedField<Scalar = FE>,
@@ -506,7 +512,6 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for RlpStark<F, D
         let prefix_string_in_range_case = curr_row.prefix_case_flags[0];
         let prefix_string_out_of_range_case = curr_row.prefix_case_flags[1];
         let prefix_list_in_range_case = curr_row.prefix_case_flags[2];
-        let prefix_list_out_of_range_case = curr_row.prefix_case_flags[3];
 
         // check if count <= 55 using base-56 decomp
         let upper_limb_sum = (1..6).map(|i| curr_row.rc_56_limbs[i]).sum::<P>();
@@ -930,7 +935,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for RlpStark<F, D
 
         // byte decomp
         let recomp = (0..4)
-            .map(|i| curr_row.rc_u8s[i + 1] * FE::from_canonical_u64(1 << i * 8))
+            .map(|i| curr_row.rc_u8s[i + 1] * FE::from_canonical_u64(1 << (i * 8)))
             .sum::<P>();
         yield_constr.constraint(curr_row.count - recomp);
         for (i, j) in rc_u8_permuted_cols().zip(lut_u8_permuted_cols()) {

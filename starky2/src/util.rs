@@ -42,7 +42,7 @@ pub fn to_u32_vec_le(data: &[u8]) -> Vec<u32> {
     for (o, chunk) in u32s.iter_mut().zip(data.chunks(4)) {
         if chunk.len() != 4 {
             let mut block = [0; 4];
-            (&mut block[..chunk.len()]).copy_from_slice(chunk);
+            block[..chunk.len()].copy_from_slice(chunk);
             *o = u32::from_le_bytes(block);
         } else {
             *o = u32::from_le_bytes(chunk.try_into().unwrap());
@@ -56,7 +56,7 @@ pub fn to_u32_vec_be(data: &[u8]) -> Vec<u32> {
     for (o, chunk) in u32s.iter_mut().zip(data.chunks(4)) {
         if chunk.len() != 4 {
             let mut block = [0; 4];
-            (&mut block[..chunk.len()]).copy_from_slice(chunk);
+            block[..chunk.len()].copy_from_slice(chunk);
             *o = u32::from_be_bytes(block);
         } else {
             *o = u32::from_be_bytes(chunk.try_into().unwrap());

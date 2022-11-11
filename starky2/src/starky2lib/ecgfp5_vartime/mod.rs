@@ -1,3 +1,5 @@
+#![allow(clippy::needless_range_loop)]
+
 /// A STARK that proves variable-time ECGFP5 operations (point additions and 32-bit scalar multiplications).
 
 use std::array;
@@ -29,6 +31,14 @@ impl<F: RichField + Extendable<D>, const D: usize, const NUM_CHANNELS: usize>
         Self {
             _phantom: PhantomData,
         }
+    }
+}
+
+impl<F: RichField + Extendable<D>, const D: usize, const NUM_CHANNELS: usize>
+    Default for Ecgfp5Stark<F, D, NUM_CHANNELS>
+{
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -629,9 +639,9 @@ where
 
     fn eval_ext_circuit(
         &self,
-        builder: &mut plonky2::plonk::circuit_builder::CircuitBuilder<F, D>,
-        vars: crate::vars::StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
-        yield_constr: &mut crate::constraint_consumer::RecursiveConstraintConsumer<F, D>,
+        _builder: &mut plonky2::plonk::circuit_builder::CircuitBuilder<F, D>,
+        _vars: crate::vars::StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        _yield_constr: &mut crate::constraint_consumer::RecursiveConstraintConsumer<F, D>,
     ) {
         todo!()
     }
@@ -729,14 +739,6 @@ fn constraint_ext_is_equal_cond<P: PackedField>(
         yield_constr.constraint(cond * (a[i] - b[i]));
         yield_constr.constraint((P::ONES - cond) * (a[i] - c[i]));
     }
-}
-
-fn constraint_ext_is_one<P: PackedField>(a: &Ext<P>, yield_constr: &mut ConstraintConsumer<P>) {
-    yield_constr.constraint(P::ONES - a[0]);
-    yield_constr.constraint(a[1]);
-    yield_constr.constraint(a[2]);
-    yield_constr.constraint(a[3]);
-    yield_constr.constraint(a[4]);
 }
 
 fn constraint_ext_is_zero<P: PackedField>(a: &Ext<P>, yield_constr: &mut ConstraintConsumer<P>) {

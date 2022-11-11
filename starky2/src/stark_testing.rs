@@ -54,7 +54,6 @@ where
             let mut consumer = ConstraintConsumer::<F>::new(
                 vec![alpha],
                 subgroup[i] - last,
-                subgroup[i] - first,
                 lagrange_first.values[i],
                 lagrange_last.values[i],
             );
@@ -110,7 +109,6 @@ where
             .map(F::Extension::from_basefield)
             .collect(),
         last,
-        first,
         lagrange_first,
         lagrange_last,
     );

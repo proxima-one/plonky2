@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use itertools::Itertools;
 use plonky2::field::extension::Extendable;
 use plonky2::field::polynomial::PolynomialCoeffs;
@@ -38,7 +40,7 @@ where
         challenger.observe_cap(cap);
     }
 
-    return challenger;
+    challenger
 }
 
 // assumes `start_all_proof_challenges` was used to get the challenger

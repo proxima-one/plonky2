@@ -1,16 +1,14 @@
-use std::borrow::{Borrow, BorrowMut};
+#![allow(clippy::needless_range_loop)]
 
 use arrayref::array_ref;
 use plonky2::field::{polynomial::PolynomialValues, types::PrimeField64};
-use plonky2_util::log2_ceil;
-use tiny_keccak::keccakf;
 
 use super::layout::*;
 use crate::{
     lookup::permuted_cols,
     starky2lib::keccak256_sponge::generation::keccakf_u32s,
-    starky2lib::{stack::generation::StackOp, util::u32_byte_recomp_field_le},
-    util::{to_u32_array_le, trace_rows_to_poly_values},
+    starky2lib::util::u32_byte_recomp_field_le,
+    util::trace_rows_to_poly_values
 };
 
 // minimum number of rows for this table. This is necessary because it uses a size 136 lookup table, and the next power of two is 256
@@ -28,9 +26,9 @@ pub struct Keccak256StackGenerator<F: PrimeField64> {
 }
 
 enum Keccak256StackOpcode {
-    ABSORB,
-    SQUEEZE,
-    HALT,
+    Absorb,
+    Squeeze,
+    Halt,
 }
 
 pub struct Keccak256InputStack<F: PrimeField64> {
@@ -40,8 +38,7 @@ pub struct Keccak256InputStack<F: PrimeField64> {
 
 impl<F: PrimeField64> Keccak256InputStack<F> {
     pub(crate) fn pop(&mut self) -> F {
-        let val = self.stack.pop().unwrap();
-        val
+        self.stack.pop().unwrap()
     }
 
     pub fn from_items(vals: &[Vec<u8>]) -> Self {
@@ -72,7 +69,7 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
         Self {
             trace: vec![],
             state: [0; KECCAK_WIDTH_U32S],
-            opcode: Keccak256StackOpcode::ABSORB,
+            opcode: Keccak256StackOpcode::Absorb,
             output_memory: vec![],
             op_id: 0,
             is_last_block: false,
@@ -100,13 +97,13 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
 
     fn gen_row(&self, row: &mut Keccak256StackRow<F>) {
         row.opcode = match self.opcode {
-            Keccak256StackOpcode::HALT => [F::ZERO, F::ZERO],
-            Keccak256StackOpcode::ABSORB => [F::ONE, F::ZERO],
-            Keccak256StackOpcode::SQUEEZE => [F::ZERO, F::ONE],
+            Keccak256StackOpcode::Halt => [F::ZERO, F::ZERO],
+            Keccak256StackOpcode::Absorb => [F::ONE, F::ZERO],
+            Keccak256StackOpcode::Squeeze => [F::ZERO, F::ONE],
         };
 
         row.invoke_permutation_filter = match self.opcode {
-            Keccak256StackOpcode::ABSORB | Keccak256StackOpcode::SQUEEZE => F::ONE,
+            Keccak256StackOpcode::Absorb | Keccak256StackOpcode::Squeeze => F::ONE,
             _ => F::ONE,
         };
 
@@ -184,19 +181,16 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
     }
 
     fn gen_pop_block(&mut self, row: &mut Keccak256StackRow<F>) {
-        match self.opcode {
-            Keccak256StackOpcode::ABSORB => {
-                if self.len >= KECCAK_RATE_BYTES {
-                    self.gen_pop_n_bytes(row, KECCAK_RATE_BYTES);
-                    self.len -= KECCAK_RATE_BYTES;
-                } else {
-                    self.is_last_block = true;
-                    self.gen_pop_n_bytes(row, self.len);
-                    self.gen_padding_bytes(row, self.len);
-                    row.rc_136 = F::from_canonical_usize(self.len);
-                }
+        if let Keccak256StackOpcode::Absorb = self.opcode {
+            if self.len >= KECCAK_RATE_BYTES {
+                self.gen_pop_n_bytes(row, KECCAK_RATE_BYTES);
+                self.len -= KECCAK_RATE_BYTES;
+            } else {
+                self.is_last_block = true;
+                self.gen_pop_n_bytes(row, self.len);
+                self.gen_padding_bytes(row, self.len);
+                row.rc_136 = F::from_canonical_usize(self.len);
             }
-            _ => {}
         }
     }
 
@@ -241,9 +235,9 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
         let mut is_new_item = true;
         loop {
             match self.opcode {
-                Keccak256StackOpcode::ABSORB => {
+                Keccak256StackOpcode::Absorb => {
                     let mut row = Keccak256StackRow::new();
-                    if self.trace.len() == 0 {
+                    if self.trace.is_empty() {
                         self.load_first_sp(&mut row);
                     }
 
@@ -259,12 +253,12 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
                     self.trace.push(row);
 
                     if self.is_last_block {
-                        self.opcode = Keccak256StackOpcode::SQUEEZE;
+                        self.opcode = Keccak256StackOpcode::Squeeze;
                     } else {
-                        self.opcode = Keccak256StackOpcode::ABSORB;
+                        self.opcode = Keccak256StackOpcode::Absorb;
                     }
                 }
-                Keccak256StackOpcode::SQUEEZE => {
+                Keccak256StackOpcode::Squeeze => {
                     let mut row = Keccak256StackRow::new();
                     self.gen_row(&mut row);
                     row.xored_state_rate = row.curr_state_rate;
@@ -273,13 +267,13 @@ impl<F: PrimeField64> Keccak256StackGenerator<F> {
                     self.trace.push(row);
 
                     if self.op_id == 0 {
-                        self.opcode = Keccak256StackOpcode::HALT;
+                        self.opcode = Keccak256StackOpcode::Halt;
                     } else {
-                        self.opcode = Keccak256StackOpcode::ABSORB;
+                        self.opcode = Keccak256StackOpcode::Absorb;
                         is_new_item = true;
                     }
                 }
-                Keccak256StackOpcode::HALT => {
+                Keccak256StackOpcode::Halt => {
                     let mut row = Keccak256StackRow::new();
                     self.gen_row(&mut row);
                     self.trace.push(row);

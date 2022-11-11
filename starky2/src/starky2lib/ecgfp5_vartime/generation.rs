@@ -1,16 +1,14 @@
 use std::{
-    array,
     borrow::{Borrow, BorrowMut},
 };
 
-use arrayref::array_ref;
 use ecgfp5::{curve::Point as CurvePoint, field::GFp5, scalar::Scalar};
 use plonky2::field::{
     extension::{quintic::QuinticExtension, FieldExtension},
     goldilocks_field::GoldilocksField,
     ops::Square,
     polynomial::PolynomialValues,
-    types::{Field, Field64, PrimeField64},
+    types::{Field, PrimeField64},
 };
 use plonky2_util::log2_ceil;
 
@@ -47,6 +45,15 @@ where
     op_idx: u32,
 }
 
+impl<const NUM_CHANNELS: usize> Default for Ecgfp5StarkGenerator<NUM_CHANNELS>
+where
+    [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<const NUM_CHANNELS: usize> Ecgfp5StarkGenerator<NUM_CHANNELS>
 where
     [(); ECGFP5_NUM_COLS_BASE + 4 * NUM_CHANNELS]:,
@@ -74,8 +81,8 @@ where
             _ => panic!("invalid microcode"),
         };
 
-        let a = row.add_lhs_input.map(|x| GFP5::from_basefield_array(x));
-        let b = row.input_2.map(|x| GFP5::from_basefield_array(x));
+        let a = row.add_lhs_input.map(GFP5::from_basefield_array);
+        let b = row.input_2.map(GFP5::from_basefield_array);
         let a_is_inf = row.add_lhs_input_is_infinity == F::ONE;
         let b_is_inf = row.input_2_is_infinity == F::ONE;
 
@@ -147,7 +154,7 @@ where
     }
 
     fn gen_double_unit(&mut self, row: &mut Ecgfp5Row<F, NUM_CHANNELS>) {
-        let a = row.input_1.map(|x| GFP5::from_basefield_array(x));
+        let a = row.input_1.map(GFP5::from_basefield_array);
         let a_is_inf = row.input_1_is_infinity == F::ONE;
 
         let [x1, y1] = a;
@@ -219,7 +226,7 @@ where
             row.output_is_infinity = row.add_output_is_infinity;
         }
 
-        let output_coords = row.output.map(|x| GFP5::from_basefield_array(x));
+        let output_coords = row.output.map(GFP5::from_basefield_array);
         let output_is_inf = row.output_is_infinity == F::ONE;
         let output = (output_coords, output_is_inf);
 
@@ -266,7 +273,7 @@ where
             let (output, output_is_inf) = ecgfp5_to_plonky2(output);
             assert!(F::from_bool(output_is_inf) == row.output_is_infinity);
             if !output_is_inf {
-                assert!(output == row.output.map(|x| GFP5::from_basefield_array(x)));
+                assert!(output == row.output.map(GFP5::from_basefield_array));
             }
         }
 
@@ -301,7 +308,7 @@ where
             let (output, output_is_inf) = ecgfp5_to_plonky2(output);
             assert!(F::from_bool(output_is_inf) == row.output_is_infinity);
             if !output_is_inf {
-                assert!(output == row.output.map(|x| GFP5::from_basefield_array(x)));
+                assert!(output == row.output.map(GFP5::from_basefield_array));
             }
         }
 
@@ -360,7 +367,7 @@ where
             let (output, output_is_inf) = ecgfp5_to_plonky2(output);
             assert!(F::from_bool(output_is_inf) == row.output_is_infinity);
             if !output_is_inf {
-                assert!(output == row.output.map(|x| GFP5::from_basefield_array(x)));
+                assert!(output == row.output.map(GFP5::from_basefield_array));
             }
         }
 
@@ -394,8 +401,8 @@ fn input_encode_gfp5(x: GFP5, op_idx: u32) -> InputEncodedGFP5<F> {
     {
         let lo = x.to_canonical_u64() & ((1 << 32) - 1);
         let hi = x.to_canonical_u64() >> 32;
-        result[i][0] = F::from_canonical_u64(lo as u64 | (op_idx << 32));
-        result[i][1] = F::from_canonical_u64(hi as u64 | (op_idx << 32));
+        result[i][0] = F::from_canonical_u64(lo | (op_idx << 32));
+        result[i][1] = F::from_canonical_u64(hi | (op_idx << 32));
     }
 
     result
@@ -424,6 +431,7 @@ fn input_encode_point(([x, y], _): GenPoint, op_idx: u32) -> InputEncodedPoint<F
 #[cfg(test)]
 mod tests {
     use rand::{rngs::ThreadRng, Rng};
+    use plonky2::field::types::Field64;
 
     use super::*;
 
