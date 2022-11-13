@@ -1,6 +1,6 @@
 ## Starky2
 
-This is WIP fork of `starky` but with a generic cross-table-lookup interface which can be used to share STARKs as if they were standalone modules.
+This is WIP prototype fork of `starky` but with a generic cross-table-lookup interface which can be used to share STARKs as if they were standalone modules. This document describes the current state of the project.
 
 Currently, since the cross-table lookups are not yet implemented recursively (i.e. no `eval_cross_table_lookups_circuit`), this fork of starky doesn't support recursion yet.
 
@@ -39,8 +39,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
     /// The number of public inputs.
     const PUBLIC_INPUTS: usize;
 	
-	...
-
+	// ...
 }
 ```
 
@@ -96,11 +95,248 @@ Using this trick often leads to more performance because, roughly speaking, prov
 
 Of course, cross-table lookups do come with overhead in addition to the overhead of having to prove multiple STARKs, not just one. So for small things it might not be worth it, but for the most part the things we want to build are non-trivial, so it's often quite worth it to delegate functionality that naturally fits into a narrow, long trace (e.g. memory) to a separate stark from "dependent" functionality that more naturally fits into a shorter, wider trace (e.g. hash functions). The modularity also makes actually writing stuff more manageable.
 
-#### Using Cross-Table Lookups on existing STARK implementations
+### Using Cross-Table Lookups via AllStark
 
-TODO:
-* AllStark
-* CtlDescriptor
-* ColSets
-* Column Helpers
-* 
+Suppose we already had a stark implemented, including a layout, trace generator, and implementation of `Stark`. To use CTLs to generate a set of related proofs (which we call an `AllStarkProof`), one must implemeunt two traits:
+1. `CtlStark`
+2. `AllStark`
+
+#### Implementing `CtlStark`
+
+```rust
+/// This trait is implemented by multi-trace STARKs that use cross-table lookups
+/// This trait is used to configure which columns are to look up which other columns.
+pub trait CtlStark<F: Field> {
+    /// Data needed to generate all of the traces
+    type GenData;
+
+    /// returns the number of tables in this multi-trace STARK
+    fn num_tables(&self) -> usize;
+
+    /// returns a `CtlDescriptor`, which contains pairs `CtlColumn`s that represent each CTL to perform.
+    /// IMPORTANT: This method establishes the ordering for extracing challenge points, so the ordering of the instances returned must be deterministic.
+    /// see `CtlDescriptor` for more information
+    fn get_ctl_descriptor(&self) -> CtlDescriptor;
+
+    /// generate all of the traces
+    /// returns (public_inputses, traces_poly_valueses)
+    fn generate(
+        &self,
+        gen_data: Self::GenData,
+    ) -> Result<(Vec<Vec<F>>, Vec<Vec<PolynomialValues<F>>>)>;
+}
+```
+
+Lets go through each item:
+1. `GenData`:  a type containing whatever data the `generate` method would need to generate all of the constituent STARK's traces via their trace generators.
+2. `num_tables()` a method that returns the number of individual STARKs we'd like to tie together with cross-table lookups
+3. `get_ctl_descriptor()`: a method that returns a struct whose contents declare which columns of which STARK are to "look up" which columns from which other STARK. More on this below.
+4. `generate()`: a method that takes `GenData` and returns a tuple with two elements. The LHS is a vector of the public inputs for each STARK, where the `i`th public inputs are the public inputs for STARK `i`. the RHS is a vector of STARK traces, where the `i`th trace is for the STARK `i`. it's up to the you to ensure traces and public inputs are in the correct order.
+
+the meat of this is `get_ctl_descriptor()`. Let's take a look at `CtlDescriptor`:
+```rust
+pub struct TableID(pub usize);
+
+/// represets a set of cross-table lookups to be performed between an arbitrary number of starks on arbitrary sets of colums
+#[derive(Debug, Clone)]
+pub struct CtlDescriptor {
+    /// instances of CTLs, where a colset in one table "looks up" a column in another table
+    /// represented as pairs of columns where the LHS is a set of columns in some table "looking" up the RHS, another set of columns in some table
+    pub instances: Vec<(CtlColSet, CtlColSet)>,
+    /// the number of tables involved
+    pub num_tables: usize,
+}
+
+/// Describes a set of columns that is involved in a cross-table lookup
+/// These columns are "linked" together via a linear-combination. This
+/// means the lookup effectively amounts to looking up a "tuple"
+/// of columns up to the *same* permutations. In other words,
+/// if a set of colums (a, b, c) in trace 0 is "looking up"
+/// a set of columns in (x, y, z) in trace 1, then the lookup will
+/// enforce that, for every row i in trace 0, there exists a row j in trace 1
+/// such that (a[i], b[i], c[i]) = (x[j], y[j], z[j]).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CtlColSet {
+    /// table ID for the table that this column set belongs to
+    pub(crate) tid: TableID,
+    /// set of column indices for this side of the CTL
+    pub(crate) colset: Vec<usize>,
+    /// column index for the corresponding filter, if any
+    pub(crate) filter_col: Option<usize>,
+}
+```
+
+A `CtlDescriptor` contains a `Vec` of pairs `CtlColSet`s, whose `colset` field is an ordered list of columns from a particular STARK's table. The left hand `CtlColSet` of the pair is the "looking" colset, and the right hand `CtlColSet` of the pair is the "looked" colset. If `filter_col` is given, then a particular row is "ignored" by the lookup IFF the value in that column is 0 (i.e. it's "included" IFF it's 1). The lookup argument will then enforce that, for every row in the looking STARK's trace where the filter is set (of every row if no filter is given), the values of the columns in the looking `colset` are identical (according to order in which the cols are given) to the values of the columns in the looked `colset` at *some* row in the looked STARK's trace where the looked stark's filter is set (or any row of the lookked STARK's trace if no filter is set).
+
+Therefore, writing `get_ctl_descriptor()`, more or less means collecting the lookup instances you wish to apply as pairs of `CtlColSet`s. In practice, we write helpers in our STARK's layouts for this. For instance, a memory access from the `rw_memory` requires four arguments: a flag indicating whether or not the access is a write, an address, a value, and a logical timestamp. 
+
+A good way to do this is to implement helpers in each STARK's lookup that returns `CtlColSets` for each of the lookups it expects to make. The most clean / clear example of this can be found in [`starky2lib/xor/layout.rs`](./src/starky2lib/xor/layout.rs).
+
+#### Implementing AllStark
+
+This is a bit of a hack because `starky` is written entriely with static dispatch and for this prototype we didn't want to re-write a lot of starky. With dynamic dispatch, this trait can probably be implemented once for every implementor of `CtlStark`. That said, while it's a fair bit of boilerplate, it's very formulaic code to write that a proc macro could write.
+
+```rust
+/// This trait is implemented by multi-trace STARKs that use cross-table lookups
+pub trait AllStark<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>:
+    CtlStark<F>
+{
+    // a type containing all of the `Stark` implementors for this multi-table STARK.
+    type Starks;
+
+    /// return instances of all of the `Stark` implementors
+    fn get_starks(&self, config: &StarkConfig) -> Self::Starks;
+
+    fn prove(
+        &self,
+        starks: &Self::Starks,
+        config: &StarkConfig,
+        trace_poly_valueses: &[Vec<PolynomialValues<F>>],
+        public_inputses: &[Vec<F>],
+        timing: &mut TimingTree,
+    ) -> Result<AllProof<F, C, D>>;
+    fn verify(
+        &self,
+        starks: &Self::Starks,
+        config: &StarkConfig,
+        proof: &AllProof<F, C, D>,
+    ) -> Result<()>;
+}
+
+/// an aggregate multi-table STARK proof.
+pub struct AllProof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize> {
+    pub proofs: Vec<StarkProofWithPublicInputs<F, C, D>>,
+}
+```
+
+Again, the implementation of this should be fairly bording and formulaic. We show how to implement each. The simplest full example can be found in [`examples/depth_5_merkle_stark_sha2`](./examples/depth_5_merkle_stark_sha2.rs), and snippets given here are taken from there:
+
+##### `Starks`
+
+This should be just a tuple type where the `i`th type is the STARK whose corresponding trace is returned at index `i` from `CtlStark::generate()`. For example, for the merkle STARK, it contains the `Tree5Stark` from `depth_5_merkle_tree` and the `Sha2CompressionStark` from `sha2_compression`:
+
+```rust
+    type Starks = (Tree5Stark<F, D>, Sha2CompressionStark<F, D>);
+```
+
+##### `get_starks()`
+
+This should be a thing that instantiates each `Stark` implementor and returns them as a `Starks`. For instance, for the merkle stark:
+
+```rust
+    fn get_starks(&self, _config: &StarkConfig) -> Self::Starks {
+        let tree_stark = Tree5Stark::<F, D>::new();
+        let sha2_stark = Sha2CompressionStark::<F, D>::new();
+        (tree_stark, sha2_stark)
+    }
+```
+
+##### `prove()`
+
+There are four steps steps to `prove()`. First, compute the trace commitments for all of the STARKs and initialize the challenger by calling `start_all_proof`. Again, for the merkle stark, it looks like this:
+```rust
+    fn prove(
+        &self,
+        starks: &Self::Starks,
+        config: &starky2::config::StarkConfig,
+        trace_poly_valueses: &[Vec<PolynomialValues<F>>],
+        public_inputses: &[Vec<F>],
+        timing: &mut plonky2::util::timing::TimingTree,
+    ) -> Result<AllProof<F, C, D>> {
+        let (trace_commitments, mut challenger) =
+            start_all_proof::<F, C, D>(config, trace_poly_valueses, timing)?;
+
+        // ...
+    }
+```
+
+under the hood, `start_all_proof` will have the challenger observe all of the trace commitments before returning, so the challenger is now ready to be used for anything that requires the trace commitment to have already been observed or "included in the transcript".
+
+Second, we get the `CtlDescriptor` and compute the CTL polynomials (`CtlData`) from it by calling `get_ctl_data`. This will look something like this:
+```rust
+    let ctl_descriptor = self.get_ctl_descriptor();
+    let ctl_data = get_ctl_data::<F, C, D>(
+        config,
+        trace_poly_valueses,
+        &ctl_descriptor,
+        &mut challenger,
+    );
+```
+
+Third, for each STARK, we generate a proof using `prove_single_table`, which looks something like this:
+```rust
+// get the stark from the tuple
+let stark = &starks.0;
+// get that STARK's public inputs
+let pis = public_inputses[0].clone().try_into()?;
+// generate the proof
+let proof = prove_single_table(
+    stark,
+    config,
+    &trace_poly_valueses[0],
+    &trace_commitments[0],
+    Some(&ctl_data.by_table[0]),
+    pis,
+    &mut challenger,
+    timing,
+)?;
+```
+
+Fourth, put all of the proofs into a `Vec` and return an instance of `AllProof`. This amounts to fair bit of boilerplate, but it's pretty straightforward to write - mostly copy and paste. In principle this can be automated by a proc macro but for now this is what has to be done.
+
+##### `verify()`
+
+implementing `verify()` is similar to implementing `prove()`. First, we intitialize the challenger by calling `start_all_proof_challenger`, which looks something like this:
+```rust
+    fn verify(
+        &self,
+        starks: &Self::Starks,
+        config: &StarkConfig,
+        all_proof: &AllProof<F, C, D>,
+    ) -> anyhow::Result<()> {
+        let mut challenger = start_all_proof_challenger::<F, C, _, D>(
+            all_proof.proofs.iter().map(|proof| &proof.proof.trace_cap),
+        );
+
+        // ...
+    }
+```
+
+Under the hood, `start_all_proof_challenger` will observe the trace commitments contained in each of the proofs, so the challenger is now ready to be used for anything that requires the trace commitment to have already been observed or "included in the transcript", and, if the prover was honest, should have the same state the prover's challenger had after calling `start_all_proof`.
+
+Second, we get the `CtlDescriptor`, challenges and evaluations by calling `get_ctl_descriptor()`, `get_ctl_challenges_by_table()`, and `CtlCheckVars::from_proofs`, which looks something like this:
+```rust
+    let num_challenges = config.num_challenges;
+
+    let ctl_descriptor = self.get_ctl_descriptor();
+    let (linear_comb_challenges, ctl_challenges) = get_ctl_challenges_by_table::<F, C, D>(
+        &mut challenger,
+        &ctl_descriptor,
+        num_challenges,
+    );
+
+    let ctl_vars = CtlCheckVars::from_proofs(
+        &all_proof.proofs,
+        &ctl_descriptor,
+        &linear_comb_challenges,
+        &ctl_challenges,
+    );
+```
+
+Third, we verify each of the STARK proofs:
+```rust
+    let stark = &starks.0;
+    let proof = &all_proof.proofs[0];
+    verify_stark_proof_with_ctl(stark, proof, &ctl_vars[0], &mut challenger, config)?;
+```
+
+Finally, we verify the cross-table lookup arguments:
+```rust
+verify_cross_table_lookups(
+    all_proof.proofs.iter().map(|p| &p.proof),
+    &ctl_descriptor,
+    num_challenges,
+)?;
+```
+
+For full examples of how to generate / verify STARK proofs, see the [`examples`](./examples/) or the tests for each of the STARKs in [`starky2lib`](./src/starky2lib/).

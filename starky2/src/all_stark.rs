@@ -12,7 +12,6 @@ use crate::proof::StarkProofWithPublicInputs;
 
 /// This trait is implemented by multi-trace STARKs that use cross-table lookups
 /// This trait is used to configure which columns are to look up which other columns.
-/// It is highly reccomended to implement this trait via the `derive(AllStark)` macro in the `all_stark_derive` crate
 pub trait CtlStark<F: Field> {
     /// Data needed to generate all of the traces
     type GenData;
@@ -39,7 +38,6 @@ pub struct AllProof<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, co
 }
 
 /// This trait is implemented by multi-trace STARKs that use cross-table lookups
-/// TODO: `derive(AllStark)` macro in a new `all_stark_derive` crate that can be used to auto-implement this.
 pub trait AllStark<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, const D: usize>:
     CtlStark<F>
 {
