@@ -339,4 +339,4 @@ verify_cross_table_lookups(
 )?;
 ```
 
-For full examples of how to generate / verify STARK proofs, see the [`examples`](./examples/) or the tests for each of the STARKs in [`starky2lib`](./src/starky2lib/).
+For full examples see the [`examples`](./examples/) and/or the tests for each of the STARKs in [`starky2lib`](./src/starky2lib/).
