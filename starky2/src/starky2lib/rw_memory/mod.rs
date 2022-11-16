@@ -183,7 +183,7 @@ mod tests {
 
         let mut generator = RwMemoryGenerator::<F, 1>::new();
         let mut rng = rand::thread_rng();
-        let addrs = (0..100);
+        let addrs = 0..100;
         for addr in addrs.clone() {
             generator.gen_write(addr, F::ZERO, &[0])
         }

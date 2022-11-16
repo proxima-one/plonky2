@@ -552,8 +552,6 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for KeccakStark<F
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
-    use env_logger::{try_init_from_env, Env, DEFAULT_FILTER_ENV};
-    use plonky2::field::polynomial::PolynomialValues;
     use plonky2::field::types::{Field, PrimeField64};
     use plonky2::fri::oracle::PolynomialBatch;
     use plonky2::iop::challenger::Challenger;
@@ -562,12 +560,16 @@ mod tests {
     use plonky2::util::timing::TimingTree;
     use tiny_keccak::keccakf;
 
-    use crate::config::StarkConfig;
-    use crate::prover::prove_no_ctl;
     use crate::stark_testing::{test_stark_circuit_constraints, test_stark_low_degree};
     use crate::starky2lib::keccak_f::keccak_stark::{KeccakStark, NUM_INPUTS, NUM_ROUNDS};
     use crate::starky2lib::keccak_f::layout::reg_output_limb;
+
+
     use crate::verifier::verify_stark_proof_no_ctl;
+    use crate::config::StarkConfig;
+    use crate::prover::prove_no_ctl;
+    use env_logger::{try_init_from_env, Env, DEFAULT_FILTER_ENV};
+    use plonky2::field::polynomial::PolynomialValues;
 
     #[test]
     fn test_stark_degree() -> Result<()> {

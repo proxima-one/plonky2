@@ -3,6 +3,8 @@ use std::{
     mem::{size_of, transmute},
 };
 
+use memoffset::offset_of;
+
 use crate::{
     cross_table_lookup::{CtlColSet, TableID},
     util::transmute_no_compile_time_size_checks,
@@ -39,13 +41,36 @@ pub struct StackRow<T: Copy, const NUM_CHANNELS: usize> {
 }
 
 pub(crate) fn sorted_access_permutation_pairs() -> Vec<(usize, usize)> {
-    vec![(0, 4), (1, 5), (2, 6), (3, 7)]
+    vec![
+        (
+            offset_of!(StackRow<u8, 0>, addr),
+            offset_of!(StackRow<u8, 0>, addr_sorted),
+        ),
+        (
+            offset_of!(StackRow<u8, 0>, timestamp),
+            offset_of!(StackRow<u8, 0>, timestamp_sorted),
+        ),
+        (
+            offset_of!(StackRow<u8, 0>, value),
+            offset_of!(StackRow<u8, 0>, value_sorted),
+        ),
+        (
+            offset_of!(StackRow<u8, 0>, is_write),
+            offset_of!(StackRow<u8, 0>, is_write_sorted),
+        ),
+    ]
 }
 
 pub(crate) fn lookup_permutation_sets() -> Vec<(usize, usize, usize, usize)> {
     vec![
         // (timestamp_sorted_diff, timestamp, timestamp_sorted_diff_permuted, timestamp_permuted)
-        (8, 1, 9, 12),
+        (
+                offset_of!(StackRow<u8, 0>, timestamp_sorted_diff),
+                offset_of!(StackRow<u8, 0>, timestamp),
+                offset_of!(StackRow<u8, 0>, timestamp_sorted_diff_permuted),
+                offset_of!(StackRow<u8, 0>, timestamp_permuted),
+
+        )
     ]
 }
 
@@ -54,8 +79,12 @@ pub fn ctl_cols<const NUM_CHANNELS: usize>(tid: TableID) -> impl Iterator<Item =
     (0..NUM_CHANNELS).map(move |i| {
         CtlColSet::new(
             tid,
-            vec![12, 2, 1],
-            Some(STACK_NUM_COLS_BASE - (NUM_CHANNELS - i)),
+            vec![
+                offset_of!(StackRow<u8, NUM_CHANNELS>, is_pop),
+                offset_of!(StackRow<u8, NUM_CHANNELS>, value),
+                offset_of!(StackRow<u8, NUM_CHANNELS>, timestamp),
+            ],
+            Some(offset_of!(StackRow<u8, NUM_CHANNELS>, filter_cols) + i),
         )
     })
 }

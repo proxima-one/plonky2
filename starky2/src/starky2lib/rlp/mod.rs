@@ -1154,10 +1154,8 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for RlpStark<F, D
 mod tests {
 
     use anyhow::Result;
-    use plonky2::field::types::{Field, Field64};
     use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
     use plonky2::util::timing::TimingTree;
-    use rand::Rng;
 
     use super::*;
     use crate::config::StarkConfig;
