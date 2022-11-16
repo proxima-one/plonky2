@@ -95,6 +95,13 @@ Using this trick often leads to more performance because, roughly speaking, prov
 
 Of course, cross-table lookups do come with overhead in addition to the overhead of having to prove multiple STARKs, not just one. So for small things it might not be worth it, but for the most part the things we want to build are non-trivial, so it's often quite worth it to delegate functionality that naturally fits into a narrow, long trace (e.g. memory) to a separate stark from "dependent" functionality that more naturally fits into a shorter, wider trace (e.g. hash functions). The modularity also makes actually writing stuff more manageable.
 
+#### Terminology
+
+Before moving onwards, we introduce some terminology for working with CTLs:
+1. *table*: a STARK trace - in particular, the trace of a single component STARK vs the entire STARK.
+2. *looked* and *looking*: in a lookup argument, we say a table is "looking" if the lookup argument is using a set of columns in that table as the "thing being looked up", and the corresponding "looked" table is the table the lookup argument is checking against.
+3. *channels*: Sometimes several STARKs may utilize CTLs to delegate the same functionality to one STARK. An example of this is a memory, where two STARKs may check the contents of different subsets of the same memory. To keep them separate, we introduce the concept of a "channel", where the looked table can allocate a "channel" for each looking STARK. In practice, this is done with binary filters.
+
 ### Using Cross-Table Lookups via AllStark
 
 Suppose we already had a stark implemented, including a layout, trace generator, and implementation of `Stark`. To use CTLs to generate a set of related proofs (which we call an `AllStarkProof`), one must implemeunt two traits:
