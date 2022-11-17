@@ -218,7 +218,7 @@ mod tests {
         let mut generator = StackGenerator::<F, 1>::new();
         let mut rng = rand::thread_rng();
         let mut height = 0;
-        for i in 0..500 {
+        for _ in 0..500 {
             let is_pop = if height == 0 {
                 false
             } else {

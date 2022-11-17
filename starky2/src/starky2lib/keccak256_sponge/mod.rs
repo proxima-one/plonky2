@@ -239,7 +239,7 @@ mod tests {
     use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
     use plonky2::util::timing::TimingTree;
 
-    use super::generation::{pad101, to_le_blocks, Keccak256SpongeGenerator};
+    use super::generation::Keccak256SpongeGenerator;
     use super::*;
     use crate::config::StarkConfig;
     use crate::prover::prove_no_ctl;

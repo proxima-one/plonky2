@@ -188,7 +188,7 @@ mod tests {
             generator.gen_write(addr, F::ZERO, &[0])
         }
 
-        for i in 0..500 {
+        for _ in 0..500 {
             let addr = rng.gen_range(addrs.clone());
             let is_write = rng.gen_bool(0.5);
             if is_write {
