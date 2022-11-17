@@ -590,7 +590,6 @@ where
                 * (curr_row.output_is_infinity - curr_row.dbl_output_is_infinity),
         );
 
-        // I/O
 
         // op_idx starts with 1
         yield_constr.constraint_first_row(P::ONES - curr_row.op_idx);
@@ -603,37 +602,6 @@ where
         // op_idx is incremented when scalar_step_bits[31]
         yield_constr.constraint_transition(
             curr_row.scalar_step_bits[31] * (next_row.op_idx - curr_row.op_idx - P::ONES),
-        );
-
-        // check I/O encoding for points
-        for coord in 0..1 {
-            for i in 0..5 {
-                let decoded_lo = curr_row.input_1_encoded[coord][i][0]
-                    - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
-                let decoded_hi = curr_row.input_1_encoded[coord][i][1]
-                    - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
-                let decoded = decoded_lo + decoded_hi * FE::from_canonical_u64(1 << 32);
-                yield_constr.constraint(curr_row.input_1[coord][i] - decoded);
-
-                let decoded_lo = curr_row.input_2_encoded[coord][i][0]
-                    - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
-                let decoded_hi = curr_row.input_2_encoded[coord][i][1]
-                    - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
-                let decoded = decoded_lo + decoded_hi * FE::from_canonical_u64(1 << 32);
-                yield_constr.constraint(curr_row.input_2[coord][i] - decoded);
-
-                let decoded_lo = curr_row.output_encoded[coord][i][0]
-                    - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
-                let decoded_hi = curr_row.output_encoded[coord][i][1]
-                    - curr_row.op_idx * FE::from_canonical_u64(1 << 32);
-                let decoded = decoded_lo + decoded_hi * FE::from_canonical_u64(1 << 32);
-                yield_constr.constraint(curr_row.output[coord][i] - decoded);
-            }
-        }
-        // check I/O encoding for scalar
-        yield_constr.constraint(
-            curr_row.scalar
-                - (curr_row.scalar_encoded - curr_row.op_idx * FE::from_canonical_u64(1 << 32)),
         );
     }
 
@@ -759,7 +727,6 @@ mod tests {
     use ecgfp5::curve::Point as CurvePoint;
     use ecgfp5::scalar::Scalar;
     use plonky2::field::extension::quintic::QuinticExtension;
-    use plonky2::field::packable::Packable;
     use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
     use plonky2::util::timing::TimingTree;
     use rand::{rngs::ThreadRng, Rng};

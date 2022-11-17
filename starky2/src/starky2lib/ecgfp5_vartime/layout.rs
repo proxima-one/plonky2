@@ -3,29 +3,16 @@ use std::{
     mem::{size_of, transmute},
 };
 
-use crate::util::transmute_no_compile_time_size_checks;
+use memoffset::offset_of;
+
+use crate::{util::transmute_no_compile_time_size_checks, cross_table_lookup::{TableID, CtlColSet}};
 
 // NOTE: THIS IS ONLY DEFINED OVER GOLDILOCKS FIELD (p = w^64 - 2^32 + 1). ONLY INSTANTIATE IT OVER GOLDILOCKS
 
 #[repr(C)]
 #[derive(Eq, PartialEq, Debug)]
 pub struct Ecgfp5Row<T: Copy, const NUM_CHANNELS: usize> {
-    // this is a counter that starts at 1 and increments after each operation (not micro-op)
-    // this is used to distinguish between inputs/outputs of different operations
-    // otherwise, a malicious prover could satisfy the lookup argument by swapping arguments / retvals across invocations
-    // TODO: there's probably a more clever way to do this than adding 62 colums
     pub(crate) op_idx: T,
-
-    // input_1 where each of the base-field limbs of the each coordinate are 32-bit chunks,
-    // and op_idx << 32 is added to it
-    // this is not range-checked by this STARK. it must be range-checked elsewhere
-    pub(crate) input_1_encoded: Point<[T; 2]>,
-    // same as previous but for input 2
-    pub(crate) input_2_encoded: Point<[T; 2]>,
-    // same as previous but for output
-    pub(crate) output_encoded: Point<[T; 2]>,
-    // scalar for scalar mul. It's encoded the same way
-    pub(crate) scalar_encoded: T,
 
     // 00 add
     // 01 double
@@ -93,8 +80,104 @@ pub struct Ecgfp5Row<T: Copy, const NUM_CHANNELS: usize> {
     pub(crate) dbl_output_is_infinity: T,
 
     // filters for cross-table lookups
-    // the fourth filter is for scalar multiplication, for which the output does not necessarily occur on the same row
+    // 0: add,
+    // 1: double-add,
+    // 2: scalar mul input
+    // 3: scalar mul output
     pub(crate) filter_cols_by_opcode: [[T; 4]; NUM_CHANNELS],
+}
+
+pub fn ctl_cols_add<const NUM_CHANNELS: usize>(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+    type R = Ecgfp5Row<u8, 0>;
+    let mut colset = Vec::new();
+    colset.push(
+        offset_of!(R, op_idx),
+    );
+    colset.push(
+        offset_of!(R, opcode),
+    );
+    colset.push(
+        offset_of!(R, opcode) + 1,
+    );
+
+    colset.extend((0..10).map(|i| offset_of!(R, input_1) + i));
+    colset.extend((0..10).map(|i| offset_of!(R, input_2) + i));
+    colset.extend((0..10).map(|i| offset_of!(R, output) + i));
+
+    (0..NUM_CHANNELS).map(move |i| CtlColSet::new(
+        tid,
+        colset.clone(),
+        Some(offset_of!(R, filter_cols_by_opcode) + 4 * i),
+    ))
+}
+
+pub fn ctl_cols_double_add<const NUM_CHANNELS: usize>(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+    type R = Ecgfp5Row<u8, 0>;
+    let mut colset = Vec::new();
+    colset.push(
+        offset_of!(R, op_idx),
+    );
+    colset.push(
+        offset_of!(R, opcode),
+    );
+    colset.push(
+        offset_of!(R, opcode) + 1,
+    );
+
+    colset.extend((0..10).map(|i| offset_of!(R, input_1) + i));
+    colset.extend((0..10).map(|i| offset_of!(R, input_2) + i));
+    colset.extend((0..10).map(|i| offset_of!(R, output) + i));
+
+    (0..NUM_CHANNELS).map(move |i| CtlColSet::new(
+        tid,
+        colset.clone(),
+        Some(offset_of!(R, filter_cols_by_opcode) + 1 + 4 * i),
+    ))
+}
+
+pub fn ctl_cols_scalar_mul_input<const NUM_CHANNELS: usize>(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+    type R = Ecgfp5Row<u8, 0>;
+    let mut colset = Vec::new();
+    colset.push(
+        offset_of!(R, op_idx),
+    );
+    colset.push(
+        offset_of!(R, opcode),
+    );
+    colset.push(
+        offset_of!(R, opcode) + 1,
+    );
+
+    colset.extend((0..10).map(|i| offset_of!(R, input_2) + i));
+    colset.push(offset_of!(R, scalar));
+
+    (0..NUM_CHANNELS).map(move |i| CtlColSet::new(
+        tid,
+        colset.clone(),
+        Some(offset_of!(R, filter_cols_by_opcode) + 2 + 4 * i),
+    ))
+}
+
+pub fn ctl_cols_scalar_mul_output<const NUM_CHANNELS: usize>(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+    type R = Ecgfp5Row<u8, 0>;
+    let mut colset = Vec::new();
+
+    colset.push(
+        offset_of!(R, op_idx),
+    );
+    colset.push(
+        offset_of!(R, opcode),
+    );
+    colset.push(
+        offset_of!(R, opcode) + 1,
+    );
+    colset.extend((0..10).map(|i| offset_of!(R, output) + i));
+
+    (0..NUM_CHANNELS).map(move |i| CtlColSet::new(
+        tid,
+        colset.clone(),
+        Some(offset_of!(R, filter_cols_by_opcode) + 3 + 4 * i),
+    ))
 }
 
 pub const ECGFP5_NUM_COLS_BASE: usize = size_of::<Ecgfp5Row<u8, 0>>();

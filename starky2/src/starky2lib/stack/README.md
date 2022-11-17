@@ -4,4 +4,4 @@ This module contains a STARK that checks the semantics of a trace of stack opera
 
 ### CTL Interface
 
-For each channel, the STARK exposes one `CtlColSet` for the accesses on that channel. It can be retrieved by calling the `ctl_cols` method in `layout.rs`.
+For each channel, the STARK exposes one `CtlColSet` for the accesses on that channel, which contains three columns - `is_pop`, `value`, `timestamp`. It can be retrieved by calling the `ctl_cols` method in `layout.rs`.

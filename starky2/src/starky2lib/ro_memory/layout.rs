@@ -3,7 +3,9 @@ use std::{
     mem::{size_of, transmute},
 };
 
-use crate::util::transmute_no_compile_time_size_checks;
+use memoffset::offset_of;
+
+use crate::{util::transmute_no_compile_time_size_checks, cross_table_lookup::{CtlColSet, TableID}};
 
 #[repr(C)]
 #[derive(Eq, PartialEq, Debug)]
@@ -15,6 +17,21 @@ pub struct RoMemoryRow<T: Copy, const NUM_CHANNELS: usize> {
     // fitler cols for each lookup channel
     // >0 channel can be helpful when a STARK only wants to read part of the memory
     pub(crate) filter_cols: [T; NUM_CHANNELS],
+}
+
+/// [addr, value] for each channel
+pub fn ctl_cols<const NUM_CHANNELS: usize>(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+    type R = RoMemoryRow<u8, 0>;
+    (0..NUM_CHANNELS).map(move |i| {
+        CtlColSet::new(
+            tid,
+            vec![
+                offset_of!(R, addr),
+                offset_of!(R, value),
+            ],
+            Some(offset_of!(R, filter_cols) + i),
+        )
+    })
 }
 
 pub(crate) const RO_MEMORY_NUM_COLS_BASE: usize = size_of::<RoMemoryRow<u8, 0>>();

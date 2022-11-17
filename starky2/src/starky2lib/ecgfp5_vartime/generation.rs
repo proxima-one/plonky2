@@ -18,8 +18,6 @@ use crate::util::trace_rows_to_poly_values;
 type F = GoldilocksField;
 type GFP5 = QuinticExtension<F>;
 type GenPoint = ([GFP5; 2], bool);
-type InputEncodedGFP5<T> = [[T; 2]; 5];
-type InputEncodedPoint<T> = [InputEncodedGFP5<T>; 2];
 
 pub const MICROCODE_ADD: [F; 2] = [F::ZERO, F::ZERO];
 pub const MICROCODE_DBL: [F; 2] = [F::ONE, F::ZERO];
@@ -197,13 +195,8 @@ where
         let a = ecgfp5_to_plonky2(a);
         let b = ecgfp5_to_plonky2(b);
 
-        row.input_1_encoded = input_encode_point(a, self.op_idx);
-        row.input_2_encoded = input_encode_point(b, self.op_idx);
-
         let scalar = scalar as u64;
-        let op_idx = self.op_idx as u64;
         row.scalar = F::from_canonical_u64(scalar);
-        row.scalar_encoded = F::from_canonical_u64(scalar | (op_idx << 32));
 
         let (a_encoded, a_is_inf_encoded) = trace_encode_point(a);
         let (b_encoded, b_is_inf_encoded) = trace_encode_point(b);
@@ -225,12 +218,6 @@ where
             row.output = row.add_output;
             row.output_is_infinity = row.add_output_is_infinity;
         }
-
-        let output_coords = row.output.map(GFP5::from_basefield_array);
-        let output_is_inf = row.output_is_infinity == F::ONE;
-        let output = (output_coords, output_is_inf);
-
-        row.output_encoded = input_encode_point(output, self.op_idx);
     }
 
     fn gen_ctl_filters(&mut self, row: &mut Ecgfp5Row<F, NUM_CHANNELS>, channel: usize) {
@@ -392,22 +379,6 @@ where
     }
 }
 
-fn input_encode_gfp5(x: GFP5, op_idx: u32) -> InputEncodedGFP5<F> {
-    let op_idx = op_idx as u64;
-    let mut result = [[F::ZERO; 2]; 5];
-    for (i, x) in <GFP5 as FieldExtension<5>>::to_basefield_array(&x)
-        .iter()
-        .enumerate()
-    {
-        let lo = x.to_canonical_u64() & ((1 << 32) - 1);
-        let hi = x.to_canonical_u64() >> 32;
-        result[i][0] = F::from_canonical_u64(lo | (op_idx << 32));
-        result[i][1] = F::from_canonical_u64(hi | (op_idx << 32));
-    }
-
-    result
-}
-
 fn gfp5_to_plonky2(x: GFp5) -> GFP5 {
     GFP5::from_basefield_array(x.0.map(|x| F::from_canonical_u64(x.to_u64())))
 }
@@ -422,10 +393,6 @@ fn trace_encode_point(([x, y], is_inf): GenPoint) -> (Point<F>, F) {
         [x.to_basefield_array(), y.to_basefield_array()],
         F::from_bool(is_inf),
     )
-}
-
-fn input_encode_point(([x, y], _): GenPoint, op_idx: u32) -> InputEncodedPoint<F> {
-    [input_encode_gfp5(x, op_idx), input_encode_gfp5(y, op_idx)]
 }
 
 #[cfg(test)]

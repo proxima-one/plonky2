@@ -7,7 +7,7 @@ use std::{
 use memoffset::{offset_of, span_of};
 
 use crate::{
-    util::transmute_no_compile_time_size_checks,
+    util::transmute_no_compile_time_size_checks, cross_table_lookup::{CtlColSet, TableID},
 };
 
 #[repr(C)]
@@ -127,6 +127,43 @@ pub struct RlpRow<T: Copy> {
     // each represented as [addr, val]
     pub(crate) output_stack: [[T; 2]; 5],
     pub(crate) output_stack_filters: [T; 5],
+}
+
+pub fn input_memory_ctls(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+    type R = RlpRow<u8>;
+    (0..5).map(move |i| CtlColSet {
+        tid,
+        colset: vec![
+            offset_of!(R, input_memory) + 2 * i,
+            offset_of!(R, input_memory) + 2 * i + 1,
+        ],
+        filter_col: Some(offset_of!(R, input_memory_filters) + i),
+    })
+}
+
+pub fn call_stack_ctls(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+    type R = RlpRow<u8>;
+    (0..3).map(move |i| CtlColSet {
+        tid,
+        colset: vec![
+            offset_of!(R, call_stack) + 3 * i,
+            offset_of!(R, call_stack) + 3 * i + 1,
+            offset_of!(R, call_stack) + 3 * i + 2,
+        ],
+        filter_col: Some(offset_of!(R, call_stack_filters) + i),
+    })
+}
+
+pub fn output_stack_ctls(tid: TableID) -> impl Iterator<Item = CtlColSet> {
+    type R = RlpRow<u8>;
+    (0..5).map(move |i| CtlColSet {
+        tid,
+        colset: vec![
+            offset_of!(R, output_stack) + 2 * i,
+            offset_of!(R, output_stack) + 2 * i + 1,
+        ],
+        filter_col: Some(offset_of!(R, output_stack_filters) + i),
+    })
 }
 
 pub fn rc_56_cols() -> Range<usize> {
