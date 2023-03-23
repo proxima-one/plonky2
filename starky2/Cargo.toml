@@ -34,6 +34,7 @@ rand = "0.8.5"
 rand_chacha = "0.3.1"
 eth_trie = "0.1.0"
 hex = "0.4.3"
+serde_json = "1"
 
 [[bench]]
 name = "sha256_compression"

@@ -15,3 +15,4 @@ pub mod stack;
 
 pub mod gadgets;
 pub mod util;
+mod fibonacci;

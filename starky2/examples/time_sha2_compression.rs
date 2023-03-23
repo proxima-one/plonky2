@@ -21,7 +21,7 @@ type C = PoseidonGoldilocksConfig;
 type F = <C as GenericConfig<D>>::F;
 type S = Sha2CompressionStark<F, D>;
 
-const NUM_HASHES: usize = 63;
+const NUM_HASHES: usize = 126;
 
 fn main() {
     let mut builder = env_logger::Builder::from_default_env();
@@ -40,12 +40,17 @@ fn main() {
     let trace = compressor.generate();
 
     let mut config = StarkConfig::standard_fast_config();
-    config.fri_config.cap_height = 4;
+    // config.fri_config.cap_height = 4;
+    // config.fri_config.rate_bits = 3;
+    // config.fri_config.num_query_rounds = 30;
 
     let stark = S::new();
     let mut timing = TimingTree::new("prove", Level::Debug);
     let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing).unwrap();
     timing.print();
+
+    let proof_bytes = serde_json::to_vec(&proof.proof.opening_proof).unwrap();
+    println!("Proof size: {} bytes", proof_bytes.len());
 
     verify_stark_proof_no_ctl(&stark, &proof, &config).unwrap();
 }
