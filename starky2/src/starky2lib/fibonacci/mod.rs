@@ -16,10 +16,20 @@ mod generation;
 
 use layout::FibonacciRow;
 
-pub struct FibonacciStark;
+pub struct FibonacciStark<F: RichField + Extendable<D>, const D: usize> {
+	_phantom: std::marker::PhantomData<F>
+}
+
+impl<F: RichField + Extendable<D>, const D: usize> FibonacciStark<F, D> {
+	pub fn new() -> Self {
+		Self {
+			_phantom: std::marker::PhantomData
+		}
+	}
+}
 
 impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D>
-for FibonacciStark
+for FibonacciStark<F, D>
 {
 	const COLUMNS: usize = 5;
 	const PUBLIC_INPUTS: usize = 1;
@@ -110,14 +120,20 @@ pub mod tests {
 		const D: usize = 2;
 		type C = PoseidonGoldilocksConfig;
 		type F = <C as GenericConfig<D>>::F;
-		type S = FibonacciStark;
+		type S = FibonacciStark<F, D>;
 
-		let stark = FibonacciStark;
-		let trace = generate_trace(5);
+		let stark = S::new();
+		let trace = generate_trace::<F>(5);
+		let trace_arrs: Vec<[F; 5]> = trace.iter().map(|row| row.to_arr()).collect::<Vec<_>>();
+		let trace_polys = trace_rows_to_poly_values(trace_arrs);
+		println!("trace: {:?}", trace);
+
         let config = StarkConfig::standard_fast_config();
 
 		let mut timing = TimingTree::default();
-		let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [F::from_canonical_u64(5)], &mut timing)?;
-		verify_stark_proof_no_ctl(&stark, &proof, &config)
+		let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace_polys, [F::from_canonical_u64(5)], &mut timing)?;
+		verify_stark_proof_no_ctl(&stark, &proof, &config)?;
+
+		Ok(())
 	}
 }
