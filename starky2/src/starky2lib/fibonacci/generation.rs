@@ -25,6 +25,7 @@ pub fn generate_trace<F: Field>(k: usize) -> Vec<FibonacciRow<F>> {
 			is_done: F::ZERO
 		};
 
+		curr_row = next_row;
 		trace.push(next_row);
 	}
 
@@ -38,19 +39,23 @@ pub fn generate_trace<F: Field>(k: usize) -> Vec<FibonacciRow<F>> {
 		is_done: F::ONE
 	};
 
+	curr_row = next_row;
 	trace.push(next_row);
 
 	// pad to the next power of 2
 	let next_power_of_two = usize::next_power_of_two(k);
 	while trace.len() < next_power_of_two {
-		let n = trace.len();
-		trace.push(FibonacciRow {
+		let n = trace.len() + 1;
+		let next_row = FibonacciRow {
 			n: F::from_canonical_usize(n),
 			f_n: curr_row.f_n + curr_row.f_n_minus_1,
 			f_n_minus_1: curr_row.f_n,
 			n_minus_k_inv: (F::from_canonical_usize(n) - F::from_canonical_usize(k)).inverse(),
 			is_done: F::ZERO	
-		});
+		};
+
+		curr_row = next_row;
+		trace.push(next_row);
 	}
 
 	trace

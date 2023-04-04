@@ -16,6 +16,7 @@ impl StarkConfig {
     /// Targets ~100 bit conjectured security.
     pub fn standard_fast_config() -> Self {
         Self {
+            // rate_bits * num_query_rounds + PoW bits
             security_bits: 100,
             num_challenges: 2,
             fri_config: FriConfig {

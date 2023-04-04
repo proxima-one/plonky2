@@ -1,5 +1,9 @@
+use std::{borrow::{Borrow, BorrowMut}, mem::transmute};
+
+use crate::util::transmute_no_compile_time_size_checks;
+
 #[repr(C)]
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub struct FibonacciRow<T: Copy> {
     pub n: T,
     pub f_n: T,
@@ -8,19 +12,34 @@ pub struct FibonacciRow<T: Copy> {
 	pub is_done: T
 }
 
-impl<T: Copy> FibonacciRow<T> {
-	fn from_array(arr: &[T]) -> Self {
-		debug_assert!(arr.len() == 5);
-		FibonacciRow {
-			n: arr[0],
-			f_n: arr[1],
-			f_n_minus_1: arr[2],
-			n_minus_k_inv: arr[3],
-			is_done: arr[4]
-		}
-	}
+impl<T: Copy> From<[T; 5]>
+    for FibonacciRow<T>
+{
+    fn from(row: [T; 5]) -> Self {
+        unsafe { transmute_no_compile_time_size_checks(row) }
+    }
+}
 
-	fn to_array(&self) -> [T; 5] {
-		[self.n, self.f_n, self.f_n_minus_1, self.n_minus_k_inv, self.is_done]
-	}
+impl<T: Copy> From<FibonacciRow<T>>
+    for [T; 5]
+{
+    fn from(value: FibonacciRow<T>) -> Self {
+        unsafe { transmute_no_compile_time_size_checks(value) }
+    }
+}
+
+impl<T: Copy> Borrow<FibonacciRow<T>>
+    for [T; 5]
+{
+    fn borrow(&self) -> &FibonacciRow<T> {
+        unsafe { transmute(self) }
+    }
+}
+
+impl<T: Copy> BorrowMut<FibonacciRow<T>>
+    for [T; 5]
+{
+    fn borrow_mut(&mut self) -> &mut FibonacciRow<T> {
+        unsafe { transmute(self) }
+    }
 }

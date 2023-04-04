@@ -54,6 +54,7 @@ impl<P: PackedField> ConstraintConsumer<P> {
     }
 
     /// Add one constraint on all rows.
+    /// c constraint
     pub fn constraint(&mut self, constraint: P) {
         for (&alpha, acc) in self.alphas.iter().zip(&mut self.constraint_accs) {
             *acc *= alpha;
