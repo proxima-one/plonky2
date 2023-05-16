@@ -44,7 +44,7 @@ fn main() {
 
     let stark = S::new();
     let mut timing = TimingTree::new("prove", Level::Debug);
-    let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing).unwrap();
+    let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, &[], &mut timing).unwrap();
     timing.print();
 
     verify_stark_proof_no_ctl(&stark, &proof, &config).unwrap();

@@ -44,12 +44,18 @@ impl<F: RichField + Extendable<D>, const D: usize> Default for Tree5Stark<F, D> 
 // Padding unnecessary since we're doing always 2^n - 1 hashes for some n, and we have 1 row per hash + 1 for output
 
 impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Tree5Stark<F, D> {
-    const COLUMNS: usize = NUM_COLS;
-    const PUBLIC_INPUTS: usize = NUM_PUBLIC_INPUTS;
+
+    fn num_columns(&self) -> usize {
+        NUM_COLS
+    }
+
+    fn num_public_inputs(&self) -> usize {
+        0
+    }
 
     fn eval_packed_generic<FE, P, const D2: usize>(
         &self,
-        vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        vars: StarkEvaluationVars<FE, P>,
         yield_constr: &mut ConstraintConsumer<P>,
     ) where
         FE: FieldExtension<D2, BaseField = F>,
@@ -253,7 +259,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Tree5Stark<F,
     fn eval_ext_circuit(
         &self,
         _builder: &mut CircuitBuilder<F, D>,
-        _vars: StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        _vars: StarkEvaluationTargets<D>,
         _yield_constr: &mut RecursiveConstraintConsumer<F, D>,
     ) {
         todo!()
@@ -322,7 +328,7 @@ mod tests {
         let config = StarkConfig::standard_fast_config();
         let stark = S::new();
         let mut timing = TimingTree::default();
-        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, pis, &mut timing)?;
+        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, &pis[..], &mut timing)?;
 
         verify_stark_proof_no_ctl(&stark, &proof, &config)?;
 

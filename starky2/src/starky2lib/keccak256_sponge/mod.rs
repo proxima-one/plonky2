@@ -37,19 +37,27 @@ impl<F: RichField + Extendable<D>, const D: usize> Default for Keccak256SpongeSt
 }
 
 impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Keccak256SpongeStark<F, D> {
-    const COLUMNS: usize = KECCAK_256_NUM_COLS;
-    const PUBLIC_INPUTS: usize = KECCAK_256_NUM_PIS;
+    fn num_columns(&self) -> usize {
+        KECCAK_256_NUM_COLS
+    }
+
+    fn num_public_inputs(&self) -> usize {
+        KECCAK_256_NUM_PIS
+    }
 
     fn eval_packed_generic<FE, P, const D2: usize>(
         &self,
-        vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        vars: StarkEvaluationVars<FE, P>,
         yield_constr: &mut ConstraintConsumer<P>,
     ) where
         FE: FieldExtension<D2, BaseField = F>,
         P: PackedField<Scalar = FE>,
     {
-        let curr_row: &Keccak256SpongeRow<P> = vars.local_values.borrow();
-        let next_row: &Keccak256SpongeRow<P> = vars.next_values.borrow();
+        let as_arr: &[P; KECCAK_256_NUM_COLS] = vars.local_values.try_into().unwrap();
+        let curr_row: &Keccak256SpongeRow<P> = as_arr.borrow();
+
+        let as_arr: &[P; KECCAK_256_NUM_COLS] = vars.next_values.try_into().unwrap();
+        let next_row: &Keccak256SpongeRow<P> = as_arr.borrow();
 
         // assert mode bits are binary
         // degree 2
@@ -199,7 +207,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Keccak256Spon
     fn eval_ext_circuit(
         &self,
         _builder: &mut plonky2::plonk::circuit_builder::CircuitBuilder<F, D>,
-        _vars: crate::vars::StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        _vars: crate::vars::StarkEvaluationTargets<D>,
         _yield_constr: &mut crate::constraint_consumer::RecursiveConstraintConsumer<F, D>,
     ) {
         todo!()
@@ -270,7 +278,7 @@ mod tests {
         let stark = Keccak256SpongeStark::<F, D>::new();
         let trace = generator.into_polynomial_values();
         let mut timing = TimingTree::default();
-        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing)?;
+        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, &[], &mut timing)?;
 
         verify_stark_proof_no_ctl(&stark, &proof, &config)?;
 

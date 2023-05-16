@@ -67,18 +67,24 @@ macro_rules! impl_xor_stark_n {
         impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D>
             for XorStark<F, D, $n, $channels>
         {
-            const COLUMNS: usize = 3 + 2 * $n + $channels;
-            const PUBLIC_INPUTS: usize = 0;
+            fn num_columns(&self) -> usize {
+                3 + 2 * $n + $channels
+            }
+
+            fn num_public_inputs(&self) -> usize {
+                0
+            }
 
             fn eval_packed_generic<FE, P, const D2: usize>(
                 &self,
-                vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+                vars: StarkEvaluationVars<FE, P>,
                 yield_constr: &mut ConstraintConsumer<P>,
             ) where
                 FE: FieldExtension<D2, BaseField = F>,
                 P: PackedField<Scalar = FE>,
             {
-                let row: &XorLayout<P, $n, $channels> = vars.local_values.borrow();
+                let as_arr: &[P; 3 + 2 * $n + $channels] = vars.local_values.try_into().unwrap();
+                let row: &XorLayout<P, $n, $channels> = as_arr.borrow();
 
                 let c: P = (0..$n)
                     .map(|i| row.a_bits[i] * FE::from_canonical_u64(1 << i))
@@ -109,10 +115,11 @@ macro_rules! impl_xor_stark_n {
             fn eval_ext_circuit(
                 &self,
                 builder: &mut CircuitBuilder<F, D>,
-                vars: StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+                vars: StarkEvaluationTargets<D>,
                 yield_constr: &mut RecursiveConstraintConsumer<F, D>,
             ) {
-                let row: &XorLayout<ExtensionTarget<D>, $n, $channels> = vars.local_values.borrow();
+                let as_arr: &[ExtensionTarget<D>; 3 + 2 * $n + $channels] = vars.local_values.try_into().unwrap();
+                let row: &XorLayout<ExtensionTarget<D>, $n, $channels> = as_arr.borrow();
 
                 let addends = (0..$n)
                     .map(|i| {
@@ -336,7 +343,7 @@ mod tests {
                     let stark = S::new();
                     let trace = generator.into_polynomial_values();
                     let mut timing = TimingTree::default();
-                    let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing)?;
+                    let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, &[], &mut timing)?;
                     verify_stark_proof_no_ctl(&stark, &proof, &config)
                 }
             }

@@ -232,12 +232,17 @@ impl<F: RichField + Extendable<D>, const D: usize> KeccakStark<F, D> {
 }
 
 impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for KeccakStark<F, D> {
-    const COLUMNS: usize = NUM_COLUMNS;
-    const PUBLIC_INPUTS: usize = NUM_PUBLIC_INPUTS;
+    fn num_columns(&self) -> usize {
+        NUM_COLUMNS
+    }
+
+    fn num_public_inputs(&self) -> usize {
+        NUM_PUBLIC_INPUTS
+    }
 
     fn eval_packed_generic<FE, P, const D2: usize>(
         &self,
-        vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        vars: StarkEvaluationVars<FE, P>,
         yield_constr: &mut ConstraintConsumer<P>,
     ) where
         FE: FieldExtension<D2, BaseField = F>,
@@ -385,7 +390,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for KeccakStark<F
     fn eval_ext_circuit(
         &self,
         builder: &mut plonky2::plonk::circuit_builder::CircuitBuilder<F, D>,
-        vars: StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        vars: StarkEvaluationTargets<D>,
         yield_constr: &mut RecursiveConstraintConsumer<F, D>,
     ) {
         let two = builder.two();
@@ -664,7 +669,7 @@ mod tests {
         );
 
         let proof =
-            prove_no_ctl::<F, C, S, D>(&stark, &config, &trace_poly_values, [], &mut timing)?;
+            prove_no_ctl::<F, C, S, D>(&stark, &config, &trace_poly_values, &[], &mut timing)?;
 
         timing.print();
 

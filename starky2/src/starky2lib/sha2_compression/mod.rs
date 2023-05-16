@@ -90,12 +90,17 @@ impl<F: RichField + Extendable<D>, const D: usize> Default for Sha2CompressionSt
 }
 
 impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2CompressionStark<F, D> {
-    const COLUMNS: usize = NUM_COLS;
-    const PUBLIC_INPUTS: usize = 0;
+    fn num_columns(&self) -> usize {
+        NUM_COLS
+    }
+
+    fn num_public_inputs(&self) -> usize {
+        0
+    }
 
     fn eval_packed_generic<FE, P, const D2: usize>(
         &self,
-        vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        vars: StarkEvaluationVars<FE, P>,
         yield_constr: &mut ConstraintConsumer<P>,
     ) where
         FE: FieldExtension<D2, BaseField = F>,
@@ -530,7 +535,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
     fn eval_ext_circuit(
         &self,
         _builder: &mut CircuitBuilder<F, D>,
-        _vars: StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+        _vars: StarkEvaluationTargets<D>,
         _yield_constr: &mut RecursiveConstraintConsumer<F, D>,
     ) {
         todo!();
@@ -541,7 +546,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Sha2Compressi
     }
 }
 
-fn eval_bits_are_bits<F, P>(curr_row: &[P; NUM_COLS], yield_constr: &mut ConstraintConsumer<P>)
+fn eval_bits_are_bits<F, P>(curr_row: &[P], yield_constr: &mut ConstraintConsumer<P>)
 where
     F: Field,
     P: PackedField<Scalar = F>,
@@ -763,7 +768,7 @@ mod tests {
         let stark = S::new();
         let trace = generator.into_polynomial_values();
         let mut timing = TimingTree::default();
-        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing)?;
+        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, &[], &mut timing)?;
 
         verify_stark_proof_no_ctl(&stark, &proof, &config)?;
 
@@ -792,7 +797,7 @@ mod tests {
         let config = StarkConfig::standard_fast_config();
         let stark = S::new();
         let mut timing = TimingTree::default();
-        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing)?;
+        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, &[], &mut timing)?;
 
         verify_stark_proof_no_ctl(&stark, &proof, &config)?;
 

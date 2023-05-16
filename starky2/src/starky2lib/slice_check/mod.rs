@@ -50,19 +50,28 @@ macro_rules! impl_slice_check_stark_n_channels {
         impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D>
             for SliceCheckStark<F, D, $n>
         {
-            const COLUMNS: usize = SLICE_CHECK_NUM_COLS_BASE + $n;
-            const PUBLIC_INPUTS: usize = 0;
+
+            fn num_columns(&self) -> usize {
+                SLICE_CHECK_NUM_COLS_BASE + $n
+            }
+
+            fn num_public_inputs(&self) -> usize {
+                0
+            }
 
             fn eval_packed_generic<FE, P, const D2: usize>(
                 &self,
-                vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+                vars: StarkEvaluationVars<FE, P>,
                 yield_constr: &mut ConstraintConsumer<P>,
             ) where
                 FE: FieldExtension<D2, BaseField = F>,
                 P: PackedField<Scalar = FE>,
             {
-                let curr_row: &SliceCheckRow<P, $n> = vars.local_values.borrow();
-                let next_row: &SliceCheckRow<P, $n> = vars.next_values.borrow();
+                let as_arr: &[P; SLICE_CHECK_NUM_COLS_BASE + $n] = vars.local_values.try_into().unwrap();
+                let curr_row: &SliceCheckRow<P, $n> = as_arr.borrow();
+
+                let as_arr: &[P; SLICE_CHECK_NUM_COLS_BASE + $n] = vars.next_values.try_into().unwrap();
+                let next_row: &SliceCheckRow<P, $n> = as_arr.borrow();
 
                 // slice filters are binary and mutually exclusive
                 yield_constr.mutually_exclusive_binary_check(&curr_row.slice_filters);
@@ -117,7 +126,7 @@ macro_rules! impl_slice_check_stark_n_channels {
             fn eval_ext_circuit(
                 &self,
                 _builder: &mut CircuitBuilder<F, D>,
-                _vars: StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+                _vars: StarkEvaluationTargets<D>,
                 _yield_constr: &mut RecursiveConstraintConsumer<F, D>,
             ) {
                 todo!()
@@ -210,7 +219,7 @@ mod tests {
         let trace = generator.into_polynomial_values();
         let mut timing = TimingTree::default();
         let config = StarkConfig::standard_fast_config();
-        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing)?;
+        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, &[], &mut timing)?;
         verify_stark_proof_no_ctl::<F, C, S, D>(&stark, &proof, &config)?;
 
         Ok(())

@@ -47,19 +47,30 @@ macro_rules! impl_stack_stark_for_n_channels {
         impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D>
             for StackStark<F, D, $channels>
         {
-            const COLUMNS: usize = RW_MEMORY_NUM_COLS_BASE + $channels;
-            const PUBLIC_INPUTS: usize = 0;
+
+            fn num_columns(&self) -> usize {
+                RW_MEMORY_NUM_COLS_BASE + $channels
+            }
+
+            fn num_public_inputs(&self) -> usize {
+                0
+            }
 
             fn eval_packed_generic<FE, P, const D2: usize>(
                 &self,
-                vars: StarkEvaluationVars<FE, P, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+                vars: StarkEvaluationVars<FE, P>,
                 yield_constr: &mut ConstraintConsumer<P>,
             ) where
                 FE: FieldExtension<D2, BaseField = F>,
                 P: PackedField<Scalar = FE>,
             {
-                let curr_row: &RwMemoryRow<P, $channels> = vars.local_values.borrow();
-                let next_row: &RwMemoryRow<P, $channels> = vars.next_values.borrow();
+
+                let as_arr: &[P; RW_MEMORY_NUM_COLS_BASE + $channels] = vars.local_values.try_into().unwrap();
+                let curr_row: &RwMemoryRow<P, $channels> = as_arr.borrow();
+
+                let as_arr: &[P; RW_MEMORY_NUM_COLS_BASE + $channels] = vars.next_values.try_into().unwrap();
+                let next_row: &RwMemoryRow<P, $channels> = as_arr.borrow();
+
 
                 // check sorted addresses are monotonic, continuous, and start at 0
                 // we do this by ensuring either the sorted address increases by 0 or 1 at each curr_row and at the first curr_row, the sorted addr is 0
@@ -127,7 +138,7 @@ macro_rules! impl_stack_stark_for_n_channels {
             fn eval_ext_circuit(
                 &self,
                 _builder: &mut CircuitBuilder<F, D>,
-                _vars: StarkEvaluationTargets<D, { Self::COLUMNS }, { Self::PUBLIC_INPUTS }>,
+                _vars: StarkEvaluationTargets<D>,
                 _yield_constr: &mut RecursiveConstraintConsumer<F, D>,
             ) {
                 todo!()
@@ -203,7 +214,7 @@ mod tests {
         let stark = S::new();
         let trace = generator.into_polynomial_values();
         let mut timing = TimingTree::default();
-        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, [], &mut timing)?;
+        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, &[], &mut timing)?;
         verify_stark_proof_no_ctl(&stark, &proof, &config)?;
 
         Ok(())

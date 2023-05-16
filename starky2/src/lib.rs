@@ -21,7 +21,7 @@ pub mod lookup;
 pub mod ro_memory;
 pub mod stark;
 pub mod stark_testing;
-// pub mod starky2lib;
+pub mod starky2lib;
 pub mod util;
 pub mod vanishing_poly;
 pub mod vars;
