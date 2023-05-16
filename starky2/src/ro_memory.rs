@@ -171,7 +171,7 @@ where
 }
 
 pub(crate) fn eval_ro_memory_checks<F, FE, P, C, S, const D: usize, const D2: usize>(
-    vars: StarkEvaluationVars<FE, P, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
+    vars: StarkEvaluationVars<FE, P>,
     ro_memory_vars: &RoMemoryCheckVars<F, FE, P, D2>,
     yield_constr: &mut ConstraintConsumer<P>,
 ) where
@@ -180,8 +180,6 @@ pub(crate) fn eval_ro_memory_checks<F, FE, P, C, S, const D: usize, const D2: us
     P: PackedField<Scalar = FE>,
     C: GenericConfig<D, F = F>,
     S: Stark<F, D>,
-    [(); S::COLUMNS]:,
-    [(); S::PUBLIC_INPUTS]:,
 {
     let RoMemoryCheckVars {
         local_pps,

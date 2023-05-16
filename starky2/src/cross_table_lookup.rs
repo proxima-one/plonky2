@@ -422,7 +422,7 @@ where
 }
 
 pub(crate) fn eval_cross_table_lookup_checks<F, FE, P, C, S, const D: usize, const D2: usize>(
-    vars: StarkEvaluationVars<FE, P, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
+    vars: StarkEvaluationVars<FE, P>,
     ctl_vars: &CtlCheckVars<F, FE, P, D2>,
     consumer: &mut ConstraintConsumer<P>,
     num_challenges: usize,
@@ -432,8 +432,6 @@ pub(crate) fn eval_cross_table_lookup_checks<F, FE, P, C, S, const D: usize, con
     P: PackedField<Scalar = FE>,
     C: GenericConfig<D, F = F>,
     S: Stark<F, D>,
-    [(); S::COLUMNS]:,
-    [(); S::PUBLIC_INPUTS]:,
 {
     debug_assert_eq!(
         ctl_vars.challenges.len(),

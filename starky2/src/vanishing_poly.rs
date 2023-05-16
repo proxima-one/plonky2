@@ -14,7 +14,7 @@ use crate::vars::StarkEvaluationVars;
 pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usize>(
     stark: &S,
     config: &StarkConfig,
-    vars: StarkEvaluationVars<FE, P, { S::COLUMNS }, { S::PUBLIC_INPUTS }>,
+    vars: StarkEvaluationVars<FE, P>,
     ro_memory_vars: Option<RoMemoryCheckVars<F, FE, P, D2>>,
     permutation_vars: Option<PermutationCheckVars<F, FE, P, D2>>,
     ctl_vars: Option<&CtlCheckVars<F, FE, P, D2>>,
@@ -25,8 +25,6 @@ pub(crate) fn eval_vanishing_poly<F, FE, P, C, S, const D: usize, const D2: usiz
     P: PackedField<Scalar = FE>,
     C: GenericConfig<D, F = F>,
     S: Stark<F, D>,
-    [(); S::COLUMNS]:,
-    [(); S::PUBLIC_INPUTS]:,
 {
     stark.eval_packed_generic(vars, consumer);
 

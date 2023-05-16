@@ -13,10 +13,8 @@ use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
 pub(crate) fn eval_lookups<
     F: Field,
     P: PackedField<Scalar = F>,
-    const NUM_COLS: usize,
-    const NUM_PIS: usize,
 >(
-    vars: &StarkEvaluationVars<F, P, NUM_COLS, NUM_PIS>,
+    vars: &StarkEvaluationVars<F, P>,
     yield_constr: &mut ConstraintConsumer<P>,
     col_permuted_input: usize,
     col_permuted_table: usize,
@@ -41,12 +39,10 @@ pub(crate) fn eval_lookups<
 #[allow(dead_code)]
 pub(crate) fn eval_lookups_circuit<
     F: RichField + Extendable<D>,
-    const D: usize,
-    const NUM_COLS: usize,
-    const NUM_PIS: usize,
+    const D: usize
 >(
     builder: &mut CircuitBuilder<F, D>,
-    vars: &StarkEvaluationTargets<D, NUM_COLS, NUM_PIS>,
+    vars: &StarkEvaluationTargets<D>,
     yield_constr: &mut RecursiveConstraintConsumer<F, D>,
     col_permuted_input: usize,
     col_permuted_table: usize,

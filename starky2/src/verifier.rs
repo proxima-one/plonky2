@@ -30,11 +30,9 @@ pub fn verify_stark_proof_no_ctl<
     config: &StarkConfig,
 ) -> Result<()>
 where
-    [(); S::COLUMNS]:,
-    [(); S::PUBLIC_INPUTS]:,
     [(); C::Hasher::HASH_SIZE]:,
 {
-    ensure!(proof_with_pis.public_inputs.len() == S::PUBLIC_INPUTS);
+    ensure!(proof_with_pis.public_inputs.len() == S::num_public_inputs());
     let degree_bits = proof_with_pis.proof.recover_degree_bits(config);
     let challenges = proof_with_pis.get_stark_challenges_no_ctl(stark, config, degree_bits);
     verify_stark_proof_with_challenges(stark, proof_with_pis, &challenges, None, config)
@@ -53,11 +51,9 @@ pub fn verify_stark_proof_with_ctl<
     config: &StarkConfig,
 ) -> Result<()>
 where
-    [(); S::COLUMNS]:,
-    [(); S::PUBLIC_INPUTS]:,
     [(); C::Hasher::HASH_SIZE]:,
 {
-    ensure!(proof_with_pis.public_inputs.len() == S::PUBLIC_INPUTS);
+    ensure!(proof_with_pis.public_inputs.len() == S::num_public_inputs());
     let degree_bits = proof_with_pis.proof.recover_degree_bits(config);
     let challenges =
         proof_with_pis.get_stark_challenges_with_ctl(stark, config, challenger, degree_bits);
@@ -77,8 +73,6 @@ pub(crate) fn verify_stark_proof_with_challenges<
     config: &StarkConfig,
 ) -> Result<()>
 where
-    [(); S::COLUMNS]:,
-    [(); S::PUBLIC_INPUTS]:,
     [(); C::Hasher::HASH_SIZE]:,
 {
     // assert!(ctl_vars.is_none(), "CTL not yet supported");
@@ -87,7 +81,8 @@ where
         proof,
         public_inputs,
     } = proof_with_pis;
-    ensure!(public_inputs.len() == S::PUBLIC_INPUTS);
+    ensure!(public_inputs.len() == S::num_public_inputs());
+
     let StarkOpeningSet {
         local_values,
         next_values,
@@ -102,15 +97,13 @@ where
         quotient_polys,
     } = &proof.openings;
     let vars = StarkEvaluationVars {
-        local_values: &local_values.to_vec().try_into().unwrap(),
-        next_values: &next_values.to_vec().try_into().unwrap(),
+        local_values: &local_values.to_vec(),
+        next_values: &next_values.to_vec(),
         public_inputs: &public_inputs
             .iter()
             .copied()
             .map(F::Extension::from_basefield)
             .collect::<Vec<_>>()
-            .try_into()
-            .unwrap(),
     };
 
     let degree_bits = proof.recover_degree_bits(config);

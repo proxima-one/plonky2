@@ -92,7 +92,7 @@ pub fn prove_no_ctl<F, C, S, const D: usize>(
     stark: &S,
     config: &StarkConfig,
     trace_poly_values: &[PolynomialValues<F>],
-    public_inputs: [F; S::PUBLIC_INPUTS],
+    public_inputs: &[F],
     timing: &mut TimingTree,
 ) -> Result<StarkProofWithPublicInputs<F, C, D>>
 where
@@ -100,9 +100,9 @@ where
     C: GenericConfig<D, F = F>,
     S: Stark<F, D>,
     [(); C::Hasher::HASH_SIZE]:,
-    [(); S::COLUMNS]:,
-    [(); S::PUBLIC_INPUTS]:,
 {
+    assert_eq!(public_inputs.len(), S::num_public_inputs());
+
     let rate_bits = config.fri_config.rate_bits;
     let cap_height = config.fri_config.cap_height;
 
@@ -144,7 +144,7 @@ pub fn prove_single_table<F, C, S, const D: usize>(
     trace_poly_values: &[PolynomialValues<F>],
     trace_commitment: &PolynomialBatch<F, C, D>,
     ctl_data: Option<&CtlTableData<F>>,
-    public_inputs: [F; S::PUBLIC_INPUTS],
+    public_inputs: &[F],
     challenger: &mut Challenger<F, C::Hasher>,
     timing: &mut TimingTree,
 ) -> Result<StarkProofWithPublicInputs<F, C, D>>
@@ -153,9 +153,10 @@ where
     C: GenericConfig<D, F = F>,
     S: Stark<F, D>,
     [(); C::Hasher::HASH_SIZE]:,
-    [(); S::COLUMNS]:,
-    [(); S::PUBLIC_INPUTS]:,
 {
+
+    assert_eq!(public_inputs.len(), S::num_public_inputs());
+
     let degree = trace_poly_values[0].len();
     let degree_bits = log2_strict(degree);
     let fri_params = config.fri_params(degree_bits);
@@ -387,7 +388,7 @@ fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
     ro_memory_commitment_challenges: &'a Option<(
         PolynomialBatch<F, C, D>,
         Vec<RoMemoryChallenge<F>>,
-        ([Vec<usize>; 4]),
+        [Vec<usize>; 4],
     )>,
     permutation_zs_commitment_challenges: &'a Option<(
         PolynomialBatch<F, C, D>,
@@ -398,7 +399,7 @@ fn compute_quotient_polys<'a, F, P, C, S, const D: usize>(
         (Vec<CtlLinearCombChallenge<F>>, Vec<CtlChallenge<F>>),
         Vec<CtlColSet>,
     )>,
-    public_inputs: [F; S::PUBLIC_INPUTS],
+    public_inputs: &[F],
     alphas: Vec<F>,
     degree_bits: usize,
     config: &StarkConfig,
@@ -408,8 +409,6 @@ where
     P: PackedField<Scalar = F>,
     C: GenericConfig<D, F = F>,
     S: Stark<F, D>,
-    [(); S::COLUMNS]:,
-    [(); S::PUBLIC_INPUTS]:,
 {
     let degree = 1 << degree_bits;
     let rate_bits = config.fri_config.rate_bits;
@@ -432,11 +431,10 @@ where
     let z_h_on_coset = ZeroPolyOnCoset::<F>::new(degree_bits, quotient_degree_bits);
 
     // Retrieve the LDE values at index `i`.
-    let get_trace_values_packed = |i_start| -> [P; S::COLUMNS] {
+    // result is a vector of length S::num_columns()
+    let get_trace_values_packed = |i_start| -> Vec<P> {
         trace_commitment
             .get_lde_values_packed(i_start, step)
-            .try_into()
-            .unwrap()
     };
 
     // First element of the subgroup.
