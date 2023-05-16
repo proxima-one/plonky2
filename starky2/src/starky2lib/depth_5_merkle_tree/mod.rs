@@ -49,7 +49,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Tree5Stark<F,
     }
 
     fn num_public_inputs(&self) -> usize {
-        0
+        NUM_PUBLIC_INPUTS
     }
 
     fn eval_packed_generic<FE, P, const D2: usize>(
@@ -325,7 +325,7 @@ mod tests {
         let config = StarkConfig::standard_fast_config();
         let stark = S::new();
         let mut timing = TimingTree::default();
-        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, &pis[..], &mut timing)?;
+        let proof = prove_no_ctl::<F, C, S, D>(&stark, &config, &trace, &pis, &mut timing)?;
 
         verify_stark_proof_no_ctl(&stark, &proof, &config)?;
 

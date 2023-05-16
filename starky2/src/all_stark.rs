@@ -40,121 +40,15 @@ pub trait AllStark<F: RichField + Extendable<D>, C: GenericConfig<D, F = F>, con
 
     fn prove(
         &self,
-        starks: &[&impl Stark<F, D>],
         config: &StarkConfig,
         traces_evals: &[Vec<PolynomialValues<F>>],
-        public_inputses: &[Vec<F>],
+        public_inputs: &[Vec<F>],
         timing: &mut TimingTree,
     ) -> Result<AllProof<F, C, D>>
     where
-        [(); C::Hasher::HASH_SIZE]:,
-    {
-        ensure!(
-            starks.len() == Self::num_starks(),
-            "number of starks given must be equal to AllStark::num_starks()"
-        );
-        ensure!(
-            starks.len() == traces_evals.len(),
-            "number of traces must be equal to the number of starks"
-        );
+        [(); C::Hasher::HASH_SIZE]:;
 
-        for (stark, pis) in starks.iter().zip(public_inputses.iter()) {
-            ensure!(
-                stark.num_public_inputs() == pis.len(),
-                "each stark must have the correct number of corresponding public inputs"
-            );
-        }
-
-        for (stark, trace_evals) in starks.iter().zip(traces_evals.iter()) {
-            ensure!(
-                stark.num_columns() == trace_evals.len(),
-                "each stark must have the correct number of columns"
-            );
-        }
-
-        let (trace_commitments, mut challenger) =
-            start_all_proof::<F, C, D>(config, traces_evals, timing)?;
-
-        let ctl_descriptor = self.get_ctl_descriptor();
-        assert_eq!(ctl_descriptor.num_tables, starks.len());
-
-        let ctl_data = timed!(
-            timing,
-            "get ctl data",
-            get_ctl_data::<F, C, D>(config, traces_evals, &ctl_descriptor, &mut challenger,)
-        );
-
-        let mut proofs = Vec::with_capacity(starks.len());
-        for (&stark, trace_commitment, trace_evals, ctl_data, public_inputs) in izip!(
-            starks,
-            &trace_commitments,
-            traces_evals,
-            &ctl_data.by_table,
-            public_inputses
-        ) {
-            let proof = prove_single_table(
-                stark,
-                config,
-                trace_evals,
-                trace_commitment,
-                Some(ctl_data),
-                public_inputs,
-                &mut challenger,
-                timing,
-            )?;
-            proofs.push(proof);
-        }
-
-        Ok(AllProof { proofs })
-    }
-
-    fn verify(
-        &self,
-        starks: &[&impl Stark<F, D>],
-        config: &StarkConfig,
-        all_proof: &AllProof<F, C, D>,
-    ) -> Result<()>
+    fn verify(&self, config: &StarkConfig, all_proof: &AllProof<F, C, D>) -> Result<()>
     where
-        [(); C::Hasher::HASH_SIZE]:,
-    {
-        ensure!(
-            starks.len() == Self::num_starks(),
-            "number of starks given must be equal to AllStark::num_starks()"
-        );
-        ensure!(
-            starks.len() == all_proof.proofs.len(),
-            "number of starks given must be equal to number of proofs"
-        );
-
-        let mut challenger = start_all_proof_challenger::<F, C, _, D>(
-            all_proof.proofs.iter().map(|proof| &proof.proof.trace_cap),
-        );
-        let num_challenges = config.num_challenges;
-
-        let ctl_descriptor = self.get_ctl_descriptor();
-        let (linear_comb_challenges, ctl_challenges) = get_ctl_challenges_by_table::<F, C, D>(
-            &mut challenger,
-            &ctl_descriptor,
-            num_challenges,
-        );
-
-        let ctl_vars = CtlCheckVars::from_proofs(
-            &all_proof.proofs,
-            &ctl_descriptor,
-            &linear_comb_challenges,
-            &ctl_challenges,
-        );
-
-        for (&stark, proof, ctl_vars) in izip!(starks, &all_proof.proofs, &ctl_vars) {
-            verify_stark_proof_with_ctl(stark, proof, ctl_vars, &mut challenger, config)?;
-        }
-
-        verify_cross_table_lookups(
-            all_proof.proofs.iter().map(|p| &p.proof),
-            &ctl_descriptor,
-            num_challenges,
-        )?;
-
-        Ok(())
-    }
+        [(); C::Hasher::HASH_SIZE]:;
 }
