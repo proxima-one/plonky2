@@ -230,11 +230,14 @@ fn main() -> Result<()> {
     // tree has PIs, hash doesn't
     let public_inputs = vec![public_inputs.clone(), vec![]];
 
+    // make config and timing tree
     let config = StarkConfig::standard_fast_config();
-
     let mut timing = TimingTree::new("prove", Level::Debug);
+
+    // prove
     let proof = all_stark.prove(&config, &traces, &public_inputs, &mut timing)?;
     timing.print();
 
+    // verify
     all_stark.verify(&config, &proof)
 }
