@@ -20,8 +20,8 @@ use crate::vars::StarkEvaluationVars;
 
 /// Represents a STARK system.
 pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
-    fn num_columns() -> usize;
-    fn num_public_inputs() -> usize;
+    fn num_columns(&self) -> usize;
+    fn num_public_inputs(&self) -> usize;
 
     /// Evaluate constraints at a vector of points.
     ///
@@ -49,10 +49,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
     /// Evaluate constraints at a single point from the degree `D` extension field.
     fn eval_ext(
         &self,
-        vars: StarkEvaluationVars<
-            F::Extension,
-            F::Extension,
-        >,
+        vars: StarkEvaluationVars<F::Extension, F::Extension>,
         yield_constr: &mut ConstraintConsumer<F::Extension>,
     ) {
         self.eval_packed_generic(vars, yield_constr)
@@ -93,9 +90,9 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         let mut oracle_indices = 0..;
 
         let trace_info =
-            FriPolynomialInfo::from_range(oracle_indices.next().unwrap(), 0..Self::num_columns());
+            FriPolynomialInfo::from_range(oracle_indices.next().unwrap(), 0..self.num_columns());
         let trace_oracle = FriOracleInfo {
-            num_polys: Self::num_columns(),
+            num_polys: self.num_columns(),
             blinding: false,
         };
 
@@ -173,11 +170,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         let oracles = std::iter::once(trace_oracle)
             .chain(ro_memory_oracle_info.map(|(oracle, _)| oracle))
             .chain(permutation_oracle_info.map(|(oracle, _)| oracle))
-            .chain(
-                ctl_zs_oracle_info
-                    .as_ref()
-                    .map(|(oracle, _)| *oracle),
-            )
+            .chain(ctl_zs_oracle_info.as_ref().map(|(oracle, _)| *oracle))
             .chain(std::iter::once(quotient_oracle))
             .collect_vec();
 
@@ -209,9 +202,9 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         let mut oracle_indices = 0..;
 
         let trace_info =
-            FriPolynomialInfo::from_range(oracle_indices.next().unwrap(), 0..Self::num_columns());
+            FriPolynomialInfo::from_range(oracle_indices.next().unwrap(), 0..self.num_columns());
         let trace_oracle = FriOracleInfo {
-            num_polys: Self::num_columns(),
+            num_polys: self.num_columns(),
             blinding: false,
         };
 
@@ -290,11 +283,7 @@ pub trait Stark<F: RichField + Extendable<D>, const D: usize>: Sync {
         let oracles = std::iter::once(trace_oracle)
             .chain(ro_memory_oracle_info.map(|(oracle, _)| oracle))
             .chain(permutation_oracle_info.map(|(oracle, _)| oracle))
-            .chain(
-                ctl_zs_oracle_info
-                    .as_ref()
-                    .map(|(oracle, _)| *oracle),
-            )
+            .chain(ctl_zs_oracle_info.as_ref().map(|(oracle, _)| *oracle))
             .chain(std::iter::once(quotient_oracle))
             .collect_vec();
 

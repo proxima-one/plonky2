@@ -13,8 +13,8 @@ use plonky2::{
 };
 
 use crate::{
-    config::StarkConfig, constraint_consumer::ConstraintConsumer,
-    stark::Stark, vars::StarkEvaluationVars,
+    config::StarkConfig, constraint_consumer::ConstraintConsumer, stark::Stark,
+    vars::StarkEvaluationVars,
 };
 
 #[derive(Debug, Clone)]

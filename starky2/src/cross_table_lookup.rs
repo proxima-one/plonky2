@@ -4,7 +4,6 @@
 /// this differes from the main cross-table lookup in `evm` where
 /// the "looking" table does not have to be at least as long as the "looked" table
 /// paper: https://eprint.iacr.org/2022/1050
-
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use plonky2::field::extension::{Extendable, FieldExtension};

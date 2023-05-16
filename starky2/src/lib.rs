@@ -15,7 +15,7 @@ pub mod permutation;
 pub mod proof;
 pub mod prover;
 // pub mod recursive_verifier;
-// pub mod all_stark;
+pub mod all_stark;
 pub mod cross_table_lookup;
 pub mod lookup;
 pub mod ro_memory;

@@ -14,10 +14,7 @@ where
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct StarkEvaluationTargets<
-    'a,
-    const D: usize
-> {
+pub struct StarkEvaluationTargets<'a, const D: usize> {
     pub local_values: &'a [ExtensionTarget<D>],
     pub next_values: &'a [ExtensionTarget<D>],
     pub public_inputs: &'a [ExtensionTarget<D>],

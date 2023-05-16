@@ -101,7 +101,7 @@ where
     S: Stark<F, D>,
     [(); C::Hasher::HASH_SIZE]:,
 {
-    assert_eq!(public_inputs.len(), S::num_public_inputs());
+    assert_eq!(public_inputs.len(), stark.num_public_inputs());
 
     let rate_bits = config.fri_config.rate_bits;
     let cap_height = config.fri_config.cap_height;
@@ -154,8 +154,7 @@ where
     S: Stark<F, D>,
     [(); C::Hasher::HASH_SIZE]:,
 {
-
-    assert_eq!(public_inputs.len(), S::num_public_inputs());
+    assert_eq!(public_inputs.len(), stark.num_public_inputs());
 
     let degree = trace_poly_values[0].len();
     let degree_bits = log2_strict(degree);
@@ -432,10 +431,8 @@ where
 
     // Retrieve the LDE values at index `i`.
     // result is a vector of length S::num_columns()
-    let get_trace_values_packed = |i_start| -> Vec<P> {
-        trace_commitment
-            .get_lde_values_packed(i_start, step)
-    };
+    let get_trace_values_packed =
+        |i_start| -> Vec<P> { trace_commitment.get_lde_values_packed(i_start, step) };
 
     // First element of the subgroup.
     let first = F::primitive_root_of_unity(degree_bits);

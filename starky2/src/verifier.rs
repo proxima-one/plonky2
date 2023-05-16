@@ -32,7 +32,7 @@ pub fn verify_stark_proof_no_ctl<
 where
     [(); C::Hasher::HASH_SIZE]:,
 {
-    ensure!(proof_with_pis.public_inputs.len() == S::num_public_inputs());
+    ensure!(proof_with_pis.public_inputs.len() == stark.num_public_inputs());
     let degree_bits = proof_with_pis.proof.recover_degree_bits(config);
     let challenges = proof_with_pis.get_stark_challenges_no_ctl(stark, config, degree_bits);
     verify_stark_proof_with_challenges(stark, proof_with_pis, &challenges, None, config)
@@ -53,7 +53,7 @@ pub fn verify_stark_proof_with_ctl<
 where
     [(); C::Hasher::HASH_SIZE]:,
 {
-    ensure!(proof_with_pis.public_inputs.len() == S::num_public_inputs());
+    ensure!(proof_with_pis.public_inputs.len() == stark.num_public_inputs());
     let degree_bits = proof_with_pis.proof.recover_degree_bits(config);
     let challenges =
         proof_with_pis.get_stark_challenges_with_ctl(stark, config, challenger, degree_bits);
@@ -81,7 +81,7 @@ where
         proof,
         public_inputs,
     } = proof_with_pis;
-    ensure!(public_inputs.len() == S::num_public_inputs());
+    ensure!(public_inputs.len() == stark.num_public_inputs());
 
     let StarkOpeningSet {
         local_values,
@@ -103,7 +103,7 @@ where
             .iter()
             .copied()
             .map(F::Extension::from_basefield)
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>(),
     };
 
     let degree_bits = proof.recover_degree_bits(config);

@@ -26,9 +26,9 @@ where
 {
     let rate_bits = log2_ceil(stark.constraint_degree() + 1);
 
-    let trace_ldes = random_low_degree_matrix::<F>(S::num_columns(), rate_bits);
+    let trace_ldes = random_low_degree_matrix::<F>(stark.num_columns(), rate_bits);
     let size = trace_ldes.len();
-    let public_inputs = F::rand_vec(S::num_public_inputs());
+    let public_inputs = F::rand_vec(stark.num_public_inputs());
 
     let lagrange_first = PolynomialValues::selector(WITNESS_SIZE, 0).lde(rate_bits);
     let lagrange_last = PolynomialValues::selector(WITNESS_SIZE, WITNESS_SIZE - 1).lde(rate_bits);
@@ -42,8 +42,7 @@ where
         .map(|i| {
             let vars = StarkEvaluationVars {
                 local_values: &trace_ldes[i].clone(),
-                next_values: &trace_ldes[(i + (1 << rate_bits)) % size]
-                    .clone(),
+                next_values: &trace_ldes[(i + (1 << rate_bits)) % size].clone(),
                 public_inputs: &public_inputs,
             };
 
@@ -87,9 +86,9 @@ where
 {
     // Compute native constraint evaluation on random values.
     let vars = StarkEvaluationVars {
-        local_values: &F::Extension::rand_vec(S::num_columns()),
-        next_values: &F::Extension::rand_vec(S::num_columns()),
-        public_inputs: &F::Extension::rand_vec(S::num_public_inputs()),
+        local_values: &F::Extension::rand_vec(stark.num_columns()),
+        next_values: &F::Extension::rand_vec(stark.num_columns()),
+        public_inputs: &F::Extension::rand_vec(stark.num_public_inputs()),
     };
     let alphas = F::rand_vec(1);
     let first = F::Extension::primitive_root_of_unity(log2_strict(WITNESS_SIZE));
@@ -114,11 +113,11 @@ where
     let mut builder = CircuitBuilder::<F, D>::new(circuit_config);
     let mut pw = PartialWitness::<F>::new();
 
-    let locals_t = builder.add_virtual_extension_targets(S::num_columns());
+    let locals_t = builder.add_virtual_extension_targets(stark.num_columns());
     pw.set_extension_targets(&locals_t, vars.local_values);
-    let nexts_t = builder.add_virtual_extension_targets(S::num_columns());
+    let nexts_t = builder.add_virtual_extension_targets(stark.num_columns());
     pw.set_extension_targets(&nexts_t, vars.next_values);
-    let pis_t = builder.add_virtual_extension_targets(S::num_public_inputs());
+    let pis_t = builder.add_virtual_extension_targets(stark.num_public_inputs());
     pw.set_extension_targets(&pis_t, vars.public_inputs);
     let alphas_t = builder.add_virtual_targets(1);
     pw.set_target(alphas_t[0], alphas[0]);
