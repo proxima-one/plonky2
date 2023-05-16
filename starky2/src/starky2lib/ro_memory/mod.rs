@@ -1,6 +1,5 @@
 /// STARK that checks the access trace of a read-only memory
 /// this can be thought of as a form of "offline memory checking"
-
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 
@@ -46,7 +45,6 @@ macro_rules! impl_ro_memory_stark_for_n_channels {
         impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D>
             for RoMemoryStark<F, D, $channels>
         {
-
             fn num_columns(&self) -> usize {
                 RO_MEMORY_NUM_COLS_BASE + $channels
             }
@@ -63,10 +61,12 @@ macro_rules! impl_ro_memory_stark_for_n_channels {
                 FE: FieldExtension<D2, BaseField = F>,
                 P: PackedField<Scalar = FE>,
             {
-                let as_arr: &[P; RO_MEMORY_NUM_COLS_BASE + $channels] = vars.local_values.try_into().unwrap();
+                let as_arr: &[P; RO_MEMORY_NUM_COLS_BASE + $channels] =
+                    vars.local_values.try_into().unwrap();
                 let curr_row: &RoMemoryRow<P, $channels> = as_arr.borrow();
 
-                let as_arr: &[P; RO_MEMORY_NUM_COLS_BASE + $channels] = vars.next_values.try_into().unwrap();
+                let as_arr: &[P; RO_MEMORY_NUM_COLS_BASE + $channels] =
+                    vars.next_values.try_into().unwrap();
                 let next_row: &RoMemoryRow<P, $channels> = as_arr.borrow();
 
                 // all constraints are applied by the ro memory argument. This is just a trace that holds the values

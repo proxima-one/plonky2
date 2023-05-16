@@ -1,5 +1,4 @@
 /// STARK that proves SHA2 compression function of inputs checked via cross-table lookup
-
 use std::iter::once;
 use std::marker::PhantomData;
 

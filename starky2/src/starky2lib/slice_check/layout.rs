@@ -3,9 +3,7 @@ use std::{
     mem::{size_of, transmute},
 };
 
-use crate::{
-    util::transmute_no_compile_time_size_checks,
-};
+use crate::util::transmute_no_compile_time_size_checks;
 
 #[repr(C)]
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
@@ -32,8 +30,7 @@ where
     }
 }
 
-impl<T: Copy + Default, const NUM_CHANNELS: usize> Default
-    for SliceCheckRow<T, NUM_CHANNELS>
+impl<T: Copy + Default, const NUM_CHANNELS: usize> Default for SliceCheckRow<T, NUM_CHANNELS>
 where
     [T; SLICE_CHECK_NUM_COLS_BASE + NUM_CHANNELS]:,
 {

@@ -13,10 +13,7 @@ use plonky2::field::{
 use plonky2::hash::hash_types::RichField;
 
 use crate::permutation::PermutationPair;
-use crate::{
-    constraint_consumer::ConstraintConsumer, stark::Stark,
-    vars::StarkEvaluationVars,
-};
+use crate::{constraint_consumer::ConstraintConsumer, stark::Stark, vars::StarkEvaluationVars};
 
 pub struct Keccak256SpongeStark<F: RichField + Extendable<D>, const D: usize> {
     _phantom: PhantomData<F>,

@@ -1,5 +1,4 @@
 /// a STARK for the ethereum RLP-encoding of recursive structured data types (i.e. lists and strings) using two memories and a call stack
-
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 
@@ -63,7 +62,6 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for RlpStark<F, D
 
         let as_arr: &[P; layout::RLP_NUM_COLS] = vars.next_values.try_into().unwrap();
         let next_row: &RlpRow<P> = as_arr.borrow();
-
 
         // initial op_id is 0
         yield_constr.constraint_first_row(curr_row.op_id);

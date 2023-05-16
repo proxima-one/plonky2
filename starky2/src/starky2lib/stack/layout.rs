@@ -65,12 +65,11 @@ pub(crate) fn lookup_permutation_sets() -> Vec<(usize, usize, usize, usize)> {
     vec![
         // (timestamp_sorted_diff, timestamp, timestamp_sorted_diff_permuted, timestamp_permuted)
         (
-                offset_of!(StackRow<u8, 0>, timestamp_sorted_diff),
-                offset_of!(StackRow<u8, 0>, timestamp),
-                offset_of!(StackRow<u8, 0>, timestamp_sorted_diff_permuted),
-                offset_of!(StackRow<u8, 0>, timestamp_permuted),
-
-        )
+            offset_of!(StackRow<u8, 0>, timestamp_sorted_diff),
+            offset_of!(StackRow<u8, 0>, timestamp),
+            offset_of!(StackRow<u8, 0>, timestamp_sorted_diff_permuted),
+            offset_of!(StackRow<u8, 0>, timestamp_permuted),
+        ),
     ]
 }
 

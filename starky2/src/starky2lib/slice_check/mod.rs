@@ -1,5 +1,4 @@
 /// STARK that checks two slices of two different memories have the same contents
-
 pub mod generation;
 pub mod layout;
 
@@ -16,10 +15,7 @@ use plonky2::plonk::circuit_builder::CircuitBuilder;
 
 use crate::constraint_consumer::{ConstraintConsumer, RecursiveConstraintConsumer};
 use crate::stark::Stark;
-use crate::starky2lib::gadgets::{
-    ConstraintConsumerFiltered,
-    Starky2ConstraintConsumer,
-};
+use crate::starky2lib::gadgets::{ConstraintConsumerFiltered, Starky2ConstraintConsumer};
 use crate::vars::{StarkEvaluationTargets, StarkEvaluationVars};
 
 pub struct SliceCheckStark<F: RichField + Extendable<D>, const D: usize, const NUM_CHANNELS: usize>
@@ -37,9 +33,7 @@ impl<F: RichField + Extendable<D>, const D: usize, const NUM_CHANNELS: usize>
     }
 }
 
-impl<F: RichField + Extendable<D>, const D: usize> Default
-    for SliceCheckStark<F, D, 0>
-{
+impl<F: RichField + Extendable<D>, const D: usize> Default for SliceCheckStark<F, D, 0> {
     fn default() -> Self {
         Self::new()
     }
@@ -50,7 +44,6 @@ macro_rules! impl_slice_check_stark_n_channels {
         impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D>
             for SliceCheckStark<F, D, $n>
         {
-
             fn num_columns(&self) -> usize {
                 SLICE_CHECK_NUM_COLS_BASE + $n
             }
@@ -67,10 +60,12 @@ macro_rules! impl_slice_check_stark_n_channels {
                 FE: FieldExtension<D2, BaseField = F>,
                 P: PackedField<Scalar = FE>,
             {
-                let as_arr: &[P; SLICE_CHECK_NUM_COLS_BASE + $n] = vars.local_values.try_into().unwrap();
+                let as_arr: &[P; SLICE_CHECK_NUM_COLS_BASE + $n] =
+                    vars.local_values.try_into().unwrap();
                 let curr_row: &SliceCheckRow<P, $n> = as_arr.borrow();
 
-                let as_arr: &[P; SLICE_CHECK_NUM_COLS_BASE + $n] = vars.next_values.try_into().unwrap();
+                let as_arr: &[P; SLICE_CHECK_NUM_COLS_BASE + $n] =
+                    vars.next_values.try_into().unwrap();
                 let next_row: &SliceCheckRow<P, $n> = as_arr.borrow();
 
                 // slice filters are binary and mutually exclusive

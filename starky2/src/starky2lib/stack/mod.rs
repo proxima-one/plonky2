@@ -1,6 +1,5 @@
 /// STARK that checks the access trace of a stack
 /// this can be thought of as a form of "offline memory checking"
-
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 
@@ -49,7 +48,6 @@ macro_rules! impl_stack_stark_for_n_channels {
         impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D>
             for StackStark<F, D, $channels>
         {
-
             fn num_columns(&self) -> usize {
                 STACK_NUM_COLS_BASE + $channels
             }
@@ -66,10 +64,12 @@ macro_rules! impl_stack_stark_for_n_channels {
                 FE: FieldExtension<D2, BaseField = F>,
                 P: PackedField<Scalar = FE>,
             {
-                let as_arr: &[P; STACK_NUM_COLS_BASE + $channels] = vars.local_values.try_into().unwrap();
+                let as_arr: &[P; STACK_NUM_COLS_BASE + $channels] =
+                    vars.local_values.try_into().unwrap();
                 let curr_row: &StackRow<P, $channels> = as_arr.borrow();
 
-                let as_arr: &[P; STACK_NUM_COLS_BASE + $channels] = vars.next_values.try_into().unwrap();
+                let as_arr: &[P; STACK_NUM_COLS_BASE + $channels] =
+                    vars.next_values.try_into().unwrap();
                 let next_row: &StackRow<P, $channels> = as_arr.borrow();
 
                 // MEMORY SEMANTICS

@@ -44,7 +44,6 @@ impl<F: RichField + Extendable<D>, const D: usize> Default for Tree5Stark<F, D> 
 // Padding unnecessary since we're doing always 2^n - 1 hashes for some n, and we have 1 row per hash + 1 for output
 
 impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Tree5Stark<F, D> {
-
     fn num_columns(&self) -> usize {
         NUM_COLS
     }
@@ -112,9 +111,7 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Tree5Stark<F,
 
         let is_flag_transition_i = |i| level_selectors[i] * next_level_selectors[i + 1];
         let flag_transition_i = |i| level_selectors[i] - next_level_selectors[i + 1];
-        let is_transition: P = (0..TREE_DEPTH - 1)
-            .map(is_flag_transition_i)
-            .sum();
+        let is_transition: P = (0..TREE_DEPTH - 1).map(is_flag_transition_i).sum();
         yield_constr.constraint_transition(curr_row[LEVEL_DONE_FLAG] - is_transition);
 
         // abvance level flags at correct indices

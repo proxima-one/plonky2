@@ -1,7 +1,4 @@
-use plonky2::field::{
-    extension::Extendable,
-    packed::PackedField,
-};
+use plonky2::field::{extension::Extendable, packed::PackedField};
 use plonky2::hash::hash_types::RichField;
 use plonky2::iop::ext_target::ExtensionTarget;
 use plonky2::plonk::circuit_builder::CircuitBuilder;

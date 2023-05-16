@@ -7,7 +7,8 @@ use std::{
 use memoffset::{offset_of, span_of};
 
 use crate::{
-    util::transmute_no_compile_time_size_checks, cross_table_lookup::{CtlColSet, TableID},
+    cross_table_lookup::{CtlColSet, TableID},
+    util::transmute_no_compile_time_size_checks,
 };
 
 #[repr(C)]

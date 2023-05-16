@@ -557,35 +557,33 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for KeccakStark<F
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
+    #[cfg(release)]
+    use env_logger::{try_init_from_env, Env, DEFAULT_FILTER_ENV};
+    #[cfg(release)]
+    use plonky2::field::polynomial::PolynomialValues;
+    #[cfg(release)]
+    use plonky2::field::types::Field;
     use plonky2::field::types::PrimeField64;
-    use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
-    use tiny_keccak::keccakf;
-
-    use crate::stark_testing::{test_stark_circuit_constraints, test_stark_low_degree};
-    use crate::starky2lib::keccak_f::keccak_stark::{KeccakStark, NUM_INPUTS, NUM_ROUNDS};
-    use crate::starky2lib::keccak_f::layout::reg_output_limb;
-
     #[cfg(release)]
     use plonky2::fri::oracle::PolynomialBatch;
     #[cfg(release)]
     use plonky2::iop::challenger::Challenger;
+    use plonky2::plonk::config::{GenericConfig, PoseidonGoldilocksConfig};
     #[cfg(release)]
     use plonky2::timed;
     #[cfg(release)]
     use plonky2::util::timing::TimingTree;
-    #[cfg(release)]
-    use crate::verifier::verify_stark_proof_no_ctl;
-    #[cfg(release)]
-    use plonky2::field::polynomial::PolynomialValues;
-    #[cfg(release)]
-    use env_logger::{try_init_from_env, Env, DEFAULT_FILTER_ENV};
-    #[cfg(release)]
-    use crate::prover::prove_no_ctl;
+    use tiny_keccak::keccakf;
+
     #[cfg(release)]
     use crate::config::StarkConfig;
     #[cfg(release)]
-    use plonky2::field::types::Field;
-
+    use crate::prover::prove_no_ctl;
+    use crate::stark_testing::{test_stark_circuit_constraints, test_stark_low_degree};
+    use crate::starky2lib::keccak_f::keccak_stark::{KeccakStark, NUM_INPUTS, NUM_ROUNDS};
+    use crate::starky2lib::keccak_f::layout::reg_output_limb;
+    #[cfg(release)]
+    use crate::verifier::verify_stark_proof_no_ctl;
 
     #[test]
     fn test_stark_degree() -> Result<()> {

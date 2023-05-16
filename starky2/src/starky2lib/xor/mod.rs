@@ -118,7 +118,8 @@ macro_rules! impl_xor_stark_n {
                 vars: StarkEvaluationTargets<D>,
                 yield_constr: &mut RecursiveConstraintConsumer<F, D>,
             ) {
-                let as_arr: &[ExtensionTarget<D>; 3 + 2 * $n + $channels] = vars.local_values.try_into().unwrap();
+                let as_arr: &[ExtensionTarget<D>; 3 + 2 * $n + $channels] =
+                    vars.local_values.try_into().unwrap();
                 let row: &XorLayout<ExtensionTarget<D>, $n, $channels> = as_arr.borrow();
 
                 let addends = (0..$n)

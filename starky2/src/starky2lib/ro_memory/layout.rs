@@ -5,7 +5,10 @@ use std::{
 
 use memoffset::offset_of;
 
-use crate::{util::transmute_no_compile_time_size_checks, cross_table_lookup::{CtlColSet, TableID}};
+use crate::{
+    cross_table_lookup::{CtlColSet, TableID},
+    util::transmute_no_compile_time_size_checks,
+};
 
 #[repr(C)]
 #[derive(Eq, PartialEq, Debug)]
@@ -25,10 +28,7 @@ pub fn ctl_cols<const NUM_CHANNELS: usize>(tid: TableID) -> impl Iterator<Item =
     (0..NUM_CHANNELS).map(move |i| {
         CtlColSet::new(
             tid,
-            vec![
-                offset_of!(R, addr),
-                offset_of!(R, value),
-            ],
+            vec![offset_of!(R, addr), offset_of!(R, value)],
             Some(offset_of!(R, filter_cols) + i),
         )
     })
@@ -45,8 +45,7 @@ where
     }
 }
 
-impl<T: Copy + Default, const NUM_CHANNELS: usize> Default
-    for RoMemoryRow<T, NUM_CHANNELS>
+impl<T: Copy + Default, const NUM_CHANNELS: usize> Default for RoMemoryRow<T, NUM_CHANNELS>
 where
     [(); RO_MEMORY_NUM_COLS_BASE + NUM_CHANNELS]:,
 {

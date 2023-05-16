@@ -44,7 +44,7 @@ enum RlpOpcode {
 
 impl<F: PrimeField64> Default for RlpStarkGenerator<F> {
     fn default() -> Self {
-        Self::new() 
+        Self::new()
     }
 }
 
@@ -526,11 +526,7 @@ impl<F: PrimeField64> RlpStarkGenerator<F> {
                             0,
                         );
                         // push op_id to the output stack
-                        self.push_output_stack(
-                            F::from_canonical_u64(self.op_id),
-                            &mut row,
-                            1,
-                        );
+                        self.push_output_stack(F::from_canonical_u64(self.op_id), &mut row, 1);
 
                         self.op_id += 1;
                         if self.is_last {

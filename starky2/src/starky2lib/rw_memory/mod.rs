@@ -1,6 +1,5 @@
 /// STARK that checks the access trace of a read-write memory
 /// this can be thought of as a form of "offline memory checking"
-
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 
@@ -47,7 +46,6 @@ macro_rules! impl_stack_stark_for_n_channels {
         impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D>
             for StackStark<F, D, $channels>
         {
-
             fn num_columns(&self) -> usize {
                 RW_MEMORY_NUM_COLS_BASE + $channels
             }
@@ -64,13 +62,13 @@ macro_rules! impl_stack_stark_for_n_channels {
                 FE: FieldExtension<D2, BaseField = F>,
                 P: PackedField<Scalar = FE>,
             {
-
-                let as_arr: &[P; RW_MEMORY_NUM_COLS_BASE + $channels] = vars.local_values.try_into().unwrap();
+                let as_arr: &[P; RW_MEMORY_NUM_COLS_BASE + $channels] =
+                    vars.local_values.try_into().unwrap();
                 let curr_row: &RwMemoryRow<P, $channels> = as_arr.borrow();
 
-                let as_arr: &[P; RW_MEMORY_NUM_COLS_BASE + $channels] = vars.next_values.try_into().unwrap();
+                let as_arr: &[P; RW_MEMORY_NUM_COLS_BASE + $channels] =
+                    vars.next_values.try_into().unwrap();
                 let next_row: &RwMemoryRow<P, $channels> = as_arr.borrow();
-
 
                 // check sorted addresses are monotonic, continuous, and start at 0
                 // we do this by ensuring either the sorted address increases by 0 or 1 at each curr_row and at the first curr_row, the sorted addr is 0

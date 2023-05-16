@@ -1,7 +1,4 @@
-use plonky2::field::{
-    polynomial::PolynomialValues,
-    types::PrimeField64
-};
+use plonky2::field::{polynomial::PolynomialValues, types::PrimeField64};
 use plonky2_util::log2_ceil;
 
 use super::layout::XorLayout;
