@@ -293,18 +293,19 @@ fn main() -> Result<()> {
     let messages = vec![
         // a few single-block ones
         b"i realize the screaming pain".to_vec(),
-        b"hearing loud in my brain".to_vec(),
-        b"but i'm going straight ahead, with the scar".to_vec(),
-        // one multi-block one
-        b"Wasurete shimaeba ii yo kanji-naku nacchae-ba ii
-			Surimuita kokoro ni futa o shitanda
-			Kizutsuitatte heikidayo mou itami wa nai kara ne
-			Sono ashi o hikizuri nagara mo
-			Miushinatta, jibun jishin ga
-			Oto o tatete, kuzureteitta
-			Kizukeba kaze no oto dake ga"
-            .to_vec(),
+        // b"hearing loud in my brain".to_vec(),
+        // b"but i'm going straight ahead, with the scar".to_vec(),
+        // // one multi-block one
+        // b"Wasurete shimaeba ii yo kanji-naku nacchae-ba ii
+		// 	Surimuita kokoro ni futa o shitanda
+		// 	Kizutsuitatte heikidayo mou itami wa nai kara ne
+		// 	Sono ashi o hikizuri nagara mo
+		// 	Miushinatta, jibun jishin ga
+		// 	Oto o tatete, kuzureteitta
+		// 	Kizukeba kaze no oto dake ga"
+        //     .to_vec(),
     ];
+
 
     // make all stark
     let all_stark = Keccak256Stark::<F, C, D>::new();
@@ -313,8 +314,11 @@ fn main() -> Result<()> {
     let KeccakAllStarkWitness { traces } = generate::<F, D>(messages)?;
 
     // make PI input vector
-    // we have 3 starks and none of them have PIs, so it's just a vector of 3 empty vectors
-    let public_inputs = vec![vec![], vec![], vec![]];
+    // we have 3 starks: sponge, permutation, and XOR
+    // sponge has 8 public inputs
+    // TODO: compute hash of message encoded as 8 32-bit chunks
+    let hash: [F; 8] = todo!();
+    let public_inputs = vec![hash.to_vec(), vec![], vec![]];
 
     // make config and timing tree
     let config = StarkConfig::standard_fast_config();

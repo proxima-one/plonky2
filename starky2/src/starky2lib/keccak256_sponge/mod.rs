@@ -199,6 +199,15 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Keccak256Spon
         yield_constr.constraint(
             (P::ONES - curr_is_padding_row) * (P::ONES - curr_row.invoke_permutation_filter),
         );
+
+        // when curr_row is absorb, and next_row is squeeze, we want to assert that curr_state_rate[i] == PI[i]
+
+        yield_constr.constraint(curr_row.is_absorb - curr_row.mode_bits[0] * (P::ONES - curr_row.mode_bits[1]));
+        yield_constr.constraint(curr_row.is_squeeze - (P::ONES - next_row.mode_bits[0]) * curr_row.mode_bits[1]);
+
+        for i in 0..KECCAK_256_NUM_PIS {
+            yield_constr.constraint(curr_row.is_absorb * next_row.is_squeeze * (next_row.curr_state_rate[i] - vars.public_inputs[i]));
+        }
     }
 
     fn eval_ext_circuit(
@@ -210,6 +219,11 @@ impl<F: RichField + Extendable<D>, const D: usize> Stark<F, D> for Keccak256Spon
         todo!()
     }
 
+
+    // 1/2 => 2
+    // 1/8 => 8
+    // let rate_bits = log2(blowup_factor)
+    // max allowed constraint degree = (2^rate_bits) + 1
     fn constraint_degree(&self) -> usize {
         3
     }

@@ -25,6 +25,9 @@ pub struct Keccak256SpongeRow<T: Copy> {
     /// we start a new sponge whenever we go from squeeze to absorb mode
     pub(crate) mode_bits: [T; 2],
 
+    pub(crate) is_absorb: T,
+    pub(crate) is_squeeze: T,
+
     /// set to 1 when absorbing, 0 when squeezing
     pub(crate) input_filter: T,
     /// set to 0 when absorbing, 1 when squeezing
@@ -232,7 +235,7 @@ impl<T: Copy + Default> Default for Keccak256SpongeRow<T> {
 
 // `u8` is guaranteed to have a `size_of` of 1.
 pub const KECCAK_256_NUM_COLS: usize = size_of::<Keccak256SpongeRow<u8>>();
-pub const KECCAK_256_NUM_PIS: usize = 0;
+pub const KECCAK_256_NUM_PIS: usize = 8;
 
 impl<T: Copy> From<[T; KECCAK_256_NUM_COLS]> for Keccak256SpongeRow<T> {
     fn from(value: [T; KECCAK_256_NUM_COLS]) -> Self {
